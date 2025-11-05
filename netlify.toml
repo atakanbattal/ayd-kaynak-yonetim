@@ -1,0 +1,38 @@
+# Netlify Build Configuration
+[build]
+  # Build komutunu belirt
+  command = "npm run build"
+  
+  # Build output klasörü
+  publish = "dist"
+  
+  # Node.js versiyonu
+  [build.environment]
+    NODE_VERSION = "18"
+
+# Redirect kuralları - SPA için önemli!
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
+
+# Headers - Güvenlik için
+[[headers]]
+  for = "/*"
+  [headers.values]
+    X-Frame-Options = "DENY"
+    X-Content-Type-Options = "nosniff"
+    Referrer-Policy = "strict-origin-when-cross-origin"
+    Permissions-Policy = "camera=(), microphone=(), geolocation=()"
+
+# Cache stratejisi
+[[headers]]
+  for = "/assets/*"
+  [headers.values]
+    Cache-Control = "public, max-age=31536000, immutable"
+
+# Production ortam değişkenleri
+# Not: Bu değerler Netlify dashboard'dan girilecek
+# VITE_SUPABASE_URL
+# VITE_SUPABASE_ANON_KEY
+
