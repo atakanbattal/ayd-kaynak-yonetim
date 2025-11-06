@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, Plus, Save } from 'lucide-react';
+import { BookOpen, Plus, Save, Edit, Upload } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -20,6 +20,7 @@ const TrainingPlan = () => {
   const [showFormDialog, setShowFormDialog] = useState(false);
   const [editingTraining, setEditingTraining] = useState(null);
   const [formState, setFormState] = useState(getInitialFormState());
+  const [uploadingFile, setUploadingFile] = useState(false);
   const { toast } = useToast();
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -112,6 +113,116 @@ const TrainingPlan = () => {
     navigate(`/trainings/${trainingId}`);
   };
 
+  const handleEditClick = (e, training) => {
+    e.stopPropagation();
+    openForm(training);
+  };
+
+  const handleFileUpload = async (e, trainingId) => {
+    e.stopPropagation();
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    // Dosya tipini kontrol et
+    const allowedTypes = [
+      'application/pdf',
+      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet', // .xlsx
+      'application/vnd.ms-excel', // .xls
+      'application/msword', // .doc
+      'application/vnd.openxmlformats-officedocument.wordprocessingml.document', // .docx
+      'image/jpeg',
+      'image/jpg',
+      'image/png',
+      'image/gif'
+    ];
+
+    if (!allowedTypes.includes(file.type)) {
+      toast({ 
+        title: "Geçersiz Dosya Tipi", 
+        description: "Sadece PDF, Excel, Word ve resim dosyaları (JPEG, PNG, GIF) yüklenebilir.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    // Dosya boyutunu kontrol et (max 10MB)
+    if (file.size > 10 * 1024 * 1024) {
+      toast({ 
+        title: "Dosya Çok Büyük", 
+        description: "Dosya boyutu 10MB'dan küçük olmalıdır.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+
+    setUploadingFile(true);
+    try {
+      const fileExt = file.name.split('.').pop();
+      const fileName = `${trainingId}/${Date.now()}.${fileExt}`;
+      
+      const { error: uploadError } = await supabase.storage
+        .from('training-documents')
+        .upload(fileName, file);
+
+      if (uploadError) {
+        // Bucket yoksa oluşturmayı dene (bu genellikle Supabase Dashboard'dan yapılır)
+        if (uploadError.message.includes('Bucket') || uploadError.message.includes('not found')) {
+          toast({ 
+            title: "Bucket Bulunamadı", 
+            description: "Lütfen Supabase Dashboard'dan 'training-documents' adında public bir bucket oluşturun.", 
+            variant: "destructive" 
+          });
+          return;
+        }
+        throw uploadError;
+      }
+
+      // Dosya URL'ini al
+      const { data: { publicUrl } } = supabase.storage
+        .from('training-documents')
+        .getPublicUrl(fileName);
+
+      // Eğitim kaydına doküman URL'ini ekle
+      const { data: trainingData, error: fetchError } = await supabase
+        .from('trainings')
+        .select('documents')
+        .eq('id', trainingId)
+        .single();
+
+      if (fetchError) throw fetchError;
+
+      const documents = trainingData?.documents || [];
+      documents.push({
+        name: file.name,
+        url: publicUrl,
+        uploaded_at: new Date().toISOString(),
+        uploaded_by: user?.id
+      });
+
+      const { error: updateError } = await supabase
+        .from('trainings')
+        .update({ documents })
+        .eq('id', trainingId);
+
+      if (updateError) {
+        throw updateError;
+      }
+
+      toast({ title: "Başarılı", description: "Doküman başarıyla yüklendi." });
+      logAction('UPLOAD_TRAINING_DOCUMENT', `Eğitim: ${trainingId} - Dosya: ${file.name}`, user);
+      fetchData();
+    } catch (error) {
+      toast({ 
+        title: "Yükleme Başarısız", 
+        description: error.message, 
+        variant: "destructive" 
+      });
+    } finally {
+      setUploadingFile(false);
+      e.target.value = ''; // Input'u temizle
+    }
+  };
+
   return (
     <div className="space-y-6">
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
@@ -135,6 +246,7 @@ const TrainingPlan = () => {
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Gerçekleşen Tarih</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
                     <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Eğitmen</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">İşlemler</th>
                   </tr>
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
@@ -147,6 +259,35 @@ const TrainingPlan = () => {
                       </td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm"><span className={`inline-flex px-2 py-1 font-semibold rounded-full ${getStatusColor(training.status)}`}>{training.status}</span></td>
                       <td className="px-4 py-4 whitespace-nowrap text-sm text-gray-700">{training.trainer_name}</td>
+                      <td className="px-4 py-4 whitespace-nowrap text-sm" onClick={(e) => e.stopPropagation()}>
+                        <div className="flex items-center space-x-2">
+                          <Button 
+                            variant="outline" 
+                            size="sm" 
+                            onClick={(e) => handleEditClick(e, training)}
+                            className="h-8 w-8 p-0"
+                          >
+                            <Edit className="h-4 w-4" />
+                          </Button>
+                          <label className="cursor-pointer">
+                            <input
+                              type="file"
+                              className="hidden"
+                              accept=".pdf,.xlsx,.xls,.doc,.docx,.jpg,.jpeg,.png,.gif"
+                              onChange={(e) => handleFileUpload(e, training.id)}
+                              disabled={uploadingFile}
+                            />
+                            <Button 
+                              variant="outline" 
+                              size="sm" 
+                              className="h-8 w-8 p-0"
+                              disabled={uploadingFile}
+                            >
+                              <Upload className="h-4 w-4" />
+                            </Button>
+                          </label>
+                        </div>
+                      </td>
                     </tr>
                   ))}
                 </tbody>

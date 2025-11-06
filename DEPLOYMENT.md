@@ -135,11 +135,26 @@ CREATE TABLE IF NOT EXISTS daily_production_totals (
     updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
 );
 
+-- 5. Fikstür iyileştirme kayıtları
+CREATE TABLE IF NOT EXISTS fixture_improvements (
+    id UUID PRIMARY KEY DEFAULT gen_random_uuid(),
+    improvement_date DATE NOT NULL,
+    created_at TIMESTAMP WITH TIME ZONE DEFAULT NOW(),
+    part_code TEXT NOT NULL,
+    before_image TEXT,
+    after_image TEXT,
+    improvement_reason TEXT NOT NULL,
+    result TEXT,
+    responsible TEXT,
+    updated_at TIMESTAMP WITH TIME ZONE DEFAULT NOW()
+);
+
 -- RLS (Row Level Security) Politikaları
 ALTER TABLE manual_production_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE repair_records ENABLE ROW LEVEL SECURITY;
 ALTER TABLE monthly_production_totals ENABLE ROW LEVEL SECURITY;
 ALTER TABLE daily_production_totals ENABLE ROW LEVEL SECURITY;
+ALTER TABLE fixture_improvements ENABLE ROW LEVEL SECURITY;
 
 -- Authenticated kullanıcılar için tam erişim
 CREATE POLICY "Enable all for authenticated users" ON manual_production_records
@@ -153,6 +168,24 @@ CREATE POLICY "Enable all for authenticated users" ON monthly_production_totals
 
 CREATE POLICY "Enable all for authenticated users" ON daily_production_totals
     FOR ALL USING (auth.role() = 'authenticated');
+
+CREATE POLICY "Enable all for authenticated users" ON fixture_improvements
+    FOR ALL USING (auth.role() = 'authenticated');
+
+-- Updated_at için trigger fonksiyonu
+CREATE OR REPLACE FUNCTION update_updated_at_column()
+RETURNS TRIGGER AS $$
+BEGIN
+    NEW.updated_at = NOW();
+    RETURN NEW;
+END;
+$$ LANGUAGE plpgsql;
+
+-- Fikstür iyileştirme tablosu için updated_at trigger
+CREATE TRIGGER update_fixture_improvements_updated_at
+    BEFORE UPDATE ON fixture_improvements
+    FOR EACH ROW
+    EXECUTE FUNCTION update_updated_at_column();
 ```
 
 ## 📱 Custom Domain (İsteğe Bağlı)

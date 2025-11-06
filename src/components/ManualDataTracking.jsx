@@ -442,6 +442,78 @@ const ManualDataTracking = () => {
             toast({ title: "Başarılı", description: "Kayıt güncellendi." });
             logAction('UPDATE_MANUAL_RECORD', `Kayıt ${dataToSave.id} güncellendi.`, user);
             setEditingRecord(null);
+            
+            // viewingDetails açıksa ve düzenlenen kayıt o tarihe aitse, viewingDetails'i güncelle
+            if (viewingDetails && viewingDetails.date === dataToSave.record_date) {
+                // operator_name ve line_name'leri ekle
+                const employee = employees.find(emp => emp.id === dataToSave.operator_id);
+                const operator_name = employee ? `${employee.first_name} ${employee.last_name}` : 'N/A';
+                
+                if (recordType === 'manual') {
+                    const line = lines.find(l => l.id === dataToSave.line_id);
+                    const line_name = line ? line.name : 'N/A';
+                    const updatedRecordWithNames = { 
+                        ...dataToSave, 
+                        operator_name,
+                        line_name
+                    };
+                    setViewingDetails({
+                        ...viewingDetails,
+                        manuals: viewingDetails.manuals.map(rec => 
+                            rec.id === dataToSave.id ? updatedRecordWithNames : rec
+                        )
+                    });
+                } else {
+                    const repairLine = lines.find(l => l.id === dataToSave.repair_line_id);
+                    const sourceLine = lines.find(l => l.id === dataToSave.source_line_id);
+                    const repair_line_name = repairLine ? repairLine.name : 'N/A';
+                    const source_line_name = sourceLine ? sourceLine.name : 'N/A';
+                    const updatedRecordWithNames = { 
+                        ...dataToSave, 
+                        operator_name,
+                        repair_line_name,
+                        source_line_name
+                    };
+                    setViewingDetails({
+                        ...viewingDetails,
+                        repairs: viewingDetails.repairs.map(rec => 
+                            rec.id === dataToSave.id ? updatedRecordWithNames : rec
+                        )
+                    });
+                }
+            }
+            
+            // State'leri güncelle - operator_name ve line_name'leri ekle
+            const employee = employees.find(emp => emp.id === dataToSave.operator_id);
+            const operator_name = employee ? `${employee.first_name} ${employee.last_name}` : 'N/A';
+            
+            if (recordType === 'manual') {
+                const line = lines.find(l => l.id === dataToSave.line_id);
+                const line_name = line ? line.name : 'N/A';
+                const updatedRecordWithNames = { 
+                    ...dataToSave, 
+                    operator_name,
+                    line_name
+                };
+                setManualRecords(prev => prev.map(rec => 
+                    rec.id === dataToSave.id ? updatedRecordWithNames : rec
+                ));
+            } else {
+                const repairLine = lines.find(l => l.id === dataToSave.repair_line_id);
+                const sourceLine = lines.find(l => l.id === dataToSave.source_line_id);
+                const repair_line_name = repairLine ? repairLine.name : 'N/A';
+                const source_line_name = sourceLine ? sourceLine.name : 'N/A';
+                const updatedRecordWithNames = { 
+                    ...dataToSave, 
+                    operator_name,
+                    repair_line_name,
+                    source_line_name
+                };
+                setRepairRecords(prev => prev.map(rec => 
+                    rec.id === dataToSave.id ? updatedRecordWithNames : rec
+                ));
+            }
+            
             fetchData();
         }
     };
