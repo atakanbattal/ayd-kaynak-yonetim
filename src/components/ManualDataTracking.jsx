@@ -413,7 +413,16 @@ const ManualDataTracking = () => {
         delete dataToSave.source_line_name;
         delete dataToSave.repair_line_name;
         delete dataToSave.total_cost;
-        delete dataToSave.duration_seconds;
+        // duration_seconds alanını koruyoruz - düzenlenebilir olmalı
+        // duration_seconds değerini sayıya dönüştür (null/undefined ise 0)
+        if (dataToSave.duration_seconds !== undefined && dataToSave.duration_seconds !== null) {
+            dataToSave.duration_seconds = Number(dataToSave.duration_seconds) || 0;
+        } else {
+            dataToSave.duration_seconds = 0;
+        }
+        
+        // updated_at alanını güncelle
+        dataToSave.updated_at = new Date().toISOString();
         
         const { error } = await supabase
             .from(tableName)

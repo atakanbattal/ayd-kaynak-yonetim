@@ -24,8 +24,8 @@ git push -u origin main
 
 1. **Supabase Dashboard'a Git**: https://supabase.com
 2. **Project Settings > API** bölümünden al:
-   - `Project URL` → `VITE_SUPABASE_URL`
-   - `anon/public key` → `VITE_SUPABASE_ANON_KEY`
+   - `Project URL` → `https://wowvecfviptpfkovblhv.supabase.co`
+   - `anon/public key` → `eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Indvd3ZlY2Z2aXB0cGZrb3ZibGh2Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3NTg4Njc4MTEsImV4cCI6MjA3NDQ0MzgxMX0.60yCUJY28aDttmhuYhDUvhHzNk_bmC9IWmo--h00qUM`
 
 ### 3. Netlify Hesabı ve Proje Kurulumu
 
