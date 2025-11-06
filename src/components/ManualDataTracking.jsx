@@ -123,6 +123,13 @@ const EditRecordForm = ({ record, recordType, onSave, lines, employees }) => {
         label: `${emp.registration_number} - ${emp.first_name} ${emp.last_name}`
     })), [employees]);
 
+    // record prop'u değiştiğinde form state'ini güncelle
+    useEffect(() => {
+        if (record) {
+            setFormData({ ...record });
+        }
+    }, [record]);
+
     const handleChange = (field, value) => {
         setFormData(prev => ({ ...prev, [field]: value }));
     };
@@ -1090,6 +1097,7 @@ const ManualDataTracking = () => {
                     </DialogHeader>
                     {editingRecord && (
                         <EditRecordForm 
+                            key={editingRecord.id}
                             record={editingRecord}
                             recordType={editingRecord.recordType}
                             onSave={handleEditSave}
