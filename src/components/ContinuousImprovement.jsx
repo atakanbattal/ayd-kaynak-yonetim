@@ -305,47 +305,113 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
       }, [formState.part_code, improvements, editingItem]);
 
       const handleSave = async () => {
-          // Aynı parça kodu kontrolü
-          if (!editingItem && formState.part_code) {
-              const existingImprovements = improvements.filter(i => i.part_code === formState.part_code);
-              if (existingImprovements.length > 0) {
-                  const confirmed = window.confirm(
-                      `Bu parça kodu (${formState.part_code}) için daha önce ${existingImprovements.length} adet iyileştirme kaydı yapılmış.\n\nYine de kaydetmek istiyor musunuz?`
-                  );
-                  if (!confirmed) {
-                      return;
+          try {
+              // Zorunlu alan kontrolü
+              if (!formState.improvement_date) {
+                  toast({ title: "Hata", description: "İyileştirme tarihi zorunludur.", variant: "destructive" });
+                  return;
+              }
+              
+              if (!formState.description || formState.description.trim() === '') {
+                  toast({ title: "Hata", description: "Açıklama zorunludur.", variant: "destructive" });
+                  return;
+              }
+              
+              if (!formState.line_id) {
+                  toast({ title: "Hata", description: "Hat seçimi zorunludur.", variant: "destructive" });
+                  return;
+              }
+
+              // Aynı parça kodu kontrolü
+              if (!editingItem && formState.part_code) {
+                  const existingImprovements = improvements.filter(i => i.part_code === formState.part_code);
+                  if (existingImprovements.length > 0) {
+                      const confirmed = window.confirm(
+                          `Bu parça kodu (${formState.part_code}) için daha önce ${existingImprovements.length} adet iyileştirme kaydı yapılmış.\n\nYine de kaydetmek istiyor musunuz?`
+                      );
+                      if (!confirmed) {
+                          return;
+                      }
                   }
               }
-          }
 
-          const activeCost = getActiveCost(formState.line_id, formState.improvement_date);
-          const dataWithCost = { 
-              ...formState, 
-              cost_snapshot: activeCost,
-              created_at: editingItem ? formState.created_at : new Date().toISOString()
-          };
-          const impact = calculateImpact(dataWithCost);
-          
-          const { id, ...dataToSave } = { 
-              ...dataWithCost,
-              impact,
-          };
+              const activeCost = getActiveCost(formState.line_id, formState.improvement_date);
+              const impact = calculateImpact({ 
+                  ...formState, 
+                  cost_snapshot: activeCost 
+              });
+              
+              // Veritabanına gönderilecek veriyi hazırla
+              const dataToSave = {
+                  improvement_date: formState.improvement_date,
+                  type: formState.type || 'cycle_time',
+                  description: formState.description.trim(),
+                  line_id: formState.line_id || null,
+                  robot_id: formState.robot_id || null,
+                  part_code: formState.part_code || null,
+                  responsible_id: formState.responsible_id || null,
+                  prev_time: formState.prev_time ? parseFloat(formState.prev_time) : null,
+                  new_time: formState.new_time ? parseFloat(formState.new_time) : null,
+                  annual_quantity: formState.annual_quantity ? parseFloat(formState.annual_quantity) : null,
+                  status: formState.status || 'Tamamlandı',
+                  attachments: formState.attachments && formState.attachments.length > 0 ? formState.attachments : null,
+                  before_image: formState.before_image || null,
+                  after_image: formState.after_image || null,
+                  cost_snapshot: activeCost,
+              };
+              
+              // Yeni kayıt için created_at ekle, güncelleme için mevcut değeri koru
+              if (!editingItem) {
+                  dataToSave.created_at = new Date().toISOString();
+              } else {
+                  // Güncelleme için id'yi ekle
+                  dataToSave.id = editingItem.id;
+              }
       
-          let response;
-          if (editingItem) {
-              response = await supabase.from('improvements').update(dataToSave).eq('id', editingItem.id).select();
-          } else {
-              response = await supabase.from('improvements').insert(dataToSave).select();
-          }
+              let response;
+              if (editingItem) {
+                  const { id, ...updateData } = dataToSave;
+                  response = await supabase
+                      .from('improvements')
+                      .update(updateData)
+                      .eq('id', editingItem.id)
+                      .select();
+              } else {
+                  const { id, ...insertData } = dataToSave;
+                  response = await supabase
+                      .from('improvements')
+                      .insert(insertData)
+                      .select();
+              }
       
-          if (response.error) {
-              toast({ title: "Kayıt Başarısız", description: response.error.message, variant: "destructive" });
-          } else {
-              toast({ title: "Başarılı", description: "İyileştirme başarıyla kaydedildi." });
-              logAction(editingItem ? 'UPDATE' : 'CREATE', `Improvement: ${response.data[0].id}`, user);
-              setShowDialog(false);
-              setEditingItem(null);
-              fetchData();
+              if (response.error) {
+                  console.error('Supabase Error:', response.error);
+                  toast({ 
+                      title: "Kayıt Başarısız", 
+                      description: response.error.message || "Kayıt sırasında bir hata oluştu.", 
+                      variant: "destructive" 
+                  });
+              } else if (response.data && response.data.length > 0) {
+                  toast({ title: "Başarılı", description: "İyileştirme başarıyla kaydedildi." });
+                  logAction(editingItem ? 'UPDATE' : 'CREATE', `Improvement: ${response.data[0].id}`, user);
+                  setShowDialog(false);
+                  setEditingItem(null);
+                  setFormState(initialFormState);
+                  fetchData();
+              } else {
+                  toast({ 
+                      title: "Kayıt Başarısız", 
+                      description: "Kayıt yapıldı ancak veri döndürülmedi.", 
+                      variant: "destructive" 
+                  });
+              }
+          } catch (error) {
+              console.error('Save Error:', error);
+              toast({ 
+                  title: "Kayıt Başarısız", 
+                  description: error.message || "Beklenmeyen bir hata oluştu.", 
+                  variant: "destructive" 
+              });
           }
       };
 
