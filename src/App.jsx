@@ -21,6 +21,42 @@ import React from 'react';
     import ProjectImprovement from '@/components/ProjectImprovement';
     import ManualDataTracking from '@/components/ManualDataTracking';
     import FixtureImprovement from '@/components/FixtureImprovement';
+
+    class ErrorBoundary extends React.Component {
+        constructor(props) {
+            super(props);
+            this.state = { hasError: false, error: null };
+        }
+
+        static getDerivedStateFromError(error) {
+            return { hasError: true, error };
+        }
+
+        componentDidCatch(error, errorInfo) {
+            console.error('Error caught by boundary:', error, errorInfo);
+        }
+
+        render() {
+            if (this.state.hasError) {
+                return (
+                    <div className="min-h-screen flex items-center justify-center bg-gray-100">
+                        <div className="text-center">
+                            <h1 className="text-2xl font-bold text-red-600 mb-4">Bir Hata Oluştu</h1>
+                            <p className="text-gray-600 mb-4">{this.state.error?.message || 'Beklenmeyen bir hata oluştu'}</p>
+                            <button 
+                                onClick={() => window.location.reload()} 
+                                className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700"
+                            >
+                                Sayfayı Yenile
+                            </button>
+                        </div>
+                    </div>
+                );
+            }
+
+            return this.props.children;
+        }
+    }
     
     const ProtectedRoute = () => {
       const { user, loading } = useAuth();
@@ -88,7 +124,7 @@ import React from 'react';
       };
     
       return (
-        <>
+        <ErrorBoundary>
           <Helmet>
             <title>AYD Kaynak Teknolojileri - Üretim Yönetim Sistemi</title>
             <meta name="description" content="WPS, Maliyet Analizi ve Üretim İzlenebilirlik için entegre kurumsal çözüm" />
@@ -111,7 +147,7 @@ import React from 'react';
                       {getAccessibleRoutes().map(route => (
                         <Route key={route.path} path={route.path} element={route.element} />
                       ))}
-                      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+                      <Route path="" element={<Navigate to="/dashboard" replace />} />
                       <Route path="*" element={<Navigate to="/dashboard" replace />} />
                     </Routes>
                   </MainLayout>
@@ -121,7 +157,7 @@ import React from 'react';
           </Routes>
           
           <Toaster />
-        </>
+        </ErrorBoundary>
       );
     }
     

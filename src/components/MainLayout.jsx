@@ -6,18 +6,18 @@ import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 
 const navItems = [
-    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['admin', 'quality', 'operator'] },
-    { icon: Wrench, label: 'WPS', path: '/wps-creator', roles: ['admin', 'quality'] },
-    { icon: DollarSign, label: 'Parça Maliyet', path: '/part-cost', roles: ['admin', 'quality', 'operator'] },
-    { icon: BookUser, label: 'Manuel Veri', path: '/manual-tracking', roles: ['admin', 'quality', 'operator'] },
-    { icon: GitCompare, label: 'Operasyon Azaltma', path: '/comparative', roles: ['admin', 'quality'] },
-    { icon: TrendingUp, label: 'Sürekli İyileştirme', path: '/improvement', roles: ['admin', 'quality'] },
-    { icon: Zap, label: 'Proje Bazlı İyileştirme', path: '/project-improvement', roles: ['admin', 'quality'] },
-    { icon: Settings, label: 'Fikstür İyileştirme', path: '/fixture-improvement', roles: ['admin', 'quality'] },
-    { icon: ListTodo, label: 'Aksiyon Takibi', path: '/tasks', roles: ['admin', 'quality', 'operator'] },
-    { icon: FileText, label: 'Eğitim Planı', path: '/trainings', roles: ['admin', 'quality', 'operator'] },
-    { icon: ShieldCheck, label: 'Denetim', path: '/audit', roles: ['admin'] },
-    { icon: Database, label: 'Ana Veri', path: '/master-data', roles: ['admin'] },
+    { icon: LayoutDashboard, label: 'Dashboard', path: '/dashboard', roles: ['admin', 'quality', 'operator'], order: 1 },
+    { icon: Wrench, label: 'WPS', path: '/wps-creator', roles: ['admin', 'quality'], order: 2 },
+    { icon: DollarSign, label: 'Parça Maliyet', path: '/part-cost', roles: ['admin', 'quality', 'operator'], order: 3 },
+    { icon: BookUser, label: 'Manuel Veri', path: '/manual-tracking', roles: ['admin', 'quality', 'operator'], order: 4 },
+    { icon: GitCompare, label: 'Operasyon Azaltma', path: '/comparative', roles: ['admin', 'quality'], order: 5 },
+    { icon: TrendingUp, label: 'Sürekli İyileştirme', path: '/improvement', roles: ['admin', 'quality'], order: 6 },
+    { icon: Zap, label: 'Proje Bazlı İyileştirme', path: '/project-improvement', roles: ['admin', 'quality'], order: 7 },
+    { icon: Settings, label: 'Fikstür İyileştirme', path: '/fixture-improvement', roles: ['admin', 'quality'], order: 8 },
+    { icon: ListTodo, label: 'Aksiyon Takibi', path: '/tasks', roles: ['admin', 'quality', 'operator'], order: 9 },
+    { icon: FileText, label: 'Eğitim Planı', path: '/trainings', roles: ['admin', 'quality', 'operator'], order: 10 },
+    { icon: ShieldCheck, label: 'Denetim', path: '/audit', roles: ['admin'], order: 11 },
+    { icon: Database, label: 'Ana Veri', path: '/master-data', roles: ['admin'], order: 12 },
 ];
 
 const MainLayout = ({ children }) => {
@@ -34,7 +34,9 @@ const MainLayout = ({ children }) => {
         navigate('/login');
     };
 
-    const filteredNavItems = navItems.filter(item => item.roles.includes(userRole));
+    const filteredNavItems = navItems
+        .filter(item => item.roles.includes(userRole))
+        .sort((a, b) => (a.order || 999) - (b.order || 999));
 
     const sidebarVariants = {
         open: { width: '280px', transition: { type: 'spring', stiffness: 300, damping: 30 } },
