@@ -317,17 +317,20 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                   return;
               }
               
-              if (!formState.line_id) {
+              // line_id kontrolü - boş string de kontrol edilmeli
+              const lineId = formState.line_id && formState.line_id !== '' ? formState.line_id : null;
+              if (!lineId) {
                   toast({ title: "Hata", description: "Hat seçimi zorunludur.", variant: "destructive" });
                   return;
               }
 
               // Aynı parça kodu kontrolü
-              if (!editingItem && formState.part_code) {
-                  const existingImprovements = improvements.filter(i => i.part_code === formState.part_code);
+              const partCode = formState.part_code && formState.part_code.trim() !== '' ? formState.part_code.trim() : null;
+              if (!editingItem && partCode) {
+                  const existingImprovements = improvements.filter(i => i.part_code === partCode);
                   if (existingImprovements.length > 0) {
                       const confirmed = window.confirm(
-                          `Bu parça kodu (${formState.part_code}) için daha önce ${existingImprovements.length} adet iyileştirme kaydı yapılmış.\n\nYine de kaydetmek istiyor musunuz?`
+                          `Bu parça kodu (${partCode}) için daha önce ${existingImprovements.length} adet iyileştirme kaydı yapılmış.\n\nYine de kaydetmek istiyor musunuz?`
                       );
                       if (!confirmed) {
                           return;
@@ -335,48 +338,55 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                   }
               }
 
-              const activeCost = getActiveCost(formState.line_id, formState.improvement_date);
+              const activeCost = getActiveCost(lineId, formState.improvement_date);
               const impact = calculateImpact({ 
                   ...formState, 
+                  line_id: lineId,
                   cost_snapshot: activeCost 
               });
+              
+              // Helper function: boş string'leri null'a çevir
+              const cleanValue = (value) => {
+                  if (value === '' || value === undefined) return null;
+                  if (typeof value === 'string' && value.trim() === '') return null;
+                  return value;
+              };
               
               // Veritabanına gönderilecek veriyi hazırla
               const dataToSave = {
                   improvement_date: formState.improvement_date,
                   type: formState.type || 'cycle_time',
                   description: formState.description.trim(),
-                  line_id: formState.line_id || null,
-                  robot_id: formState.robot_id || null,
-                  part_code: formState.part_code || null,
-                  responsible_id: formState.responsible_id || null,
-                  prev_time: formState.prev_time ? parseFloat(formState.prev_time) : null,
-                  new_time: formState.new_time ? parseFloat(formState.new_time) : null,
-                  annual_quantity: formState.annual_quantity ? parseFloat(formState.annual_quantity) : null,
+                  line_id: lineId,
+                  robot_id: cleanValue(formState.robot_id),
+                  part_code: partCode,
+                  responsible_id: cleanValue(formState.responsible_id),
+                  prev_time: formState.prev_time && formState.prev_time !== '' ? parseFloat(formState.prev_time) : null,
+                  new_time: formState.new_time && formState.new_time !== '' ? parseFloat(formState.new_time) : null,
+                  annual_quantity: formState.annual_quantity && formState.annual_quantity !== '' ? parseFloat(formState.annual_quantity) : null,
                   status: formState.status || 'Tamamlandı',
-                  attachments: formState.attachments && formState.attachments.length > 0 ? formState.attachments : null,
-                  before_image: formState.before_image || null,
-                  after_image: formState.after_image || null,
+                  attachments: formState.attachments && Array.isArray(formState.attachments) && formState.attachments.length > 0 ? formState.attachments : null,
+                  before_image: cleanValue(formState.before_image),
+                  after_image: cleanValue(formState.after_image),
                   cost_snapshot: activeCost,
               };
               
-              // Yeni kayıt için created_at ekle, güncelleme için mevcut değeri koru
+              // Yeni kayıt için created_at ekle
               if (!editingItem) {
                   dataToSave.created_at = new Date().toISOString();
-              } else {
-                  // Güncelleme için id'yi ekle
-                  dataToSave.id = editingItem.id;
               }
       
               let response;
               if (editingItem) {
-                  const { id, ...updateData } = dataToSave;
+                  // Güncelleme işlemi
+                  const { id, created_at, ...updateData } = dataToSave;
                   response = await supabase
                       .from('improvements')
                       .update(updateData)
                       .eq('id', editingItem.id)
                       .select();
               } else {
+                  // Yeni kayıt işlemi
                   const { id, ...insertData } = dataToSave;
                   response = await supabase
                       .from('improvements')
@@ -386,6 +396,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
       
               if (response.error) {
                   console.error('Supabase Error:', response.error);
+                  console.error('Data being sent:', dataToSave);
                   toast({ 
                       title: "Kayıt Başarısız", 
                       description: response.error.message || "Kayıt sırasında bir hata oluştu.", 
