@@ -436,6 +436,11 @@ const ManualDataTracking = () => {
             const totalRepairCost = repairRecords.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
             const totalDuration = manualRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0) + repairRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
 
+            // Gün sayısı hesaplama
+            const daysDiff = Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1;
+            const avgDailyManual = Math.round(totalManualQuantity / Math.max(1, daysDiff));
+            const avgDailyRepair = Math.round(totalRepairQuantity / Math.max(1, daysDiff));
+
             // Hat bazlı analiz - Manuel
             const manualByLine = manualRecords.reduce((acc, r) => {
                 const lineName = r.line?.name || 'Belirtilmemiş';
@@ -587,7 +592,7 @@ const ManualDataTracking = () => {
                 filters: {
                     'Rapor Dönemi': `${format(filters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
                     'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-                    'Toplam Gün': Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
+                    'Toplam Gün': daysDiff + ' gün'
                 },
                 kpiCards: [
                     { title: 'Toplam Manuel Üretim', value: totalManualQuantity.toLocaleString('tr-TR') + ' adet' },
@@ -596,8 +601,8 @@ const ManualDataTracking = () => {
                     { title: 'Toplam Tamir Maliyeti', value: formatCurrency(totalRepairCost) },
                     { title: 'Toplam Süre', value: `${Math.floor(totalDuration / 3600)} saat ${Math.floor((totalDuration % 3600) / 60)} dakika` },
                     { title: 'Toplam Kayıt', value: (manualRecords.length + repairRecords.length).toString() },
-                    { title: 'Ortalama Günlük Manuel', value: Math.round(totalManualQuantity / Math.max(1, Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1)).toLocaleString('tr-TR') + ' adet' },
-                    { title: 'Ortalama Günlük Tamir', value: Math.round(totalRepairQuantity / Math.max(1, Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1))).toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Ortalama Günlük Manuel', value: avgDailyManual.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Ortalama Günlük Tamir', value: avgDailyRepair.toLocaleString('tr-TR') + ' adet' },
                     { title: 'Toplam Personel Sayısı', value: Object.keys(employeeStats).length.toString() },
                     { title: 'Farklı Parça Sayısı', value: Object.keys(partStats).length.toString() }
                 ],
