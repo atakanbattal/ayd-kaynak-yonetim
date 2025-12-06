@@ -293,16 +293,51 @@ const ComparativeCost = () => {
       const byPart = filteredData.reduce((acc, s) => {
         const partCode = s.scope?.part_code || 'Belirtilmemiş';
         if (!acc[partCode]) {
-          acc[partCode] = { count: 0, impact: 0 };
+          acc[partCode] = { count: 0, impact: 0, avgImpact: 0 };
         }
         acc[partCode].count++;
         acc[partCode].impact += s.summary?.annualImprovement || 0;
         return acc;
       }, {});
 
+      // Robot bazlı analiz
+      const byRobot = filteredData.reduce((acc, s) => {
+        const robotName = getRobotName(s.scope?.robot_id) || 'Belirtilmemiş';
+        if (!acc[robotName]) {
+          acc[robotName] = { count: 0, impact: 0, savings: 0 };
+        }
+        acc[robotName].count++;
+        acc[robotName].impact += s.summary?.annualImprovement || 0;
+        acc[robotName].savings += s.summary?.timeDiff || 0;
+        return acc;
+      }, {});
+
+      // Top 10 en etkili senaryolar
+      const top10Scenarios = [...filteredData]
+        .sort((a, b) => (b.summary?.annualImprovement || 0) - (a.summary?.annualImprovement || 0))
+        .slice(0, 10);
+
+      // Top 10 en etkili hatlar
+      const top10Lines = Object.entries(byLine)
+        .map(([name, data]) => ({ name, ...data, avgImpact: data.count > 0 ? data.impact / data.count : 0 }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
+      // Top 10 en etkili parçalar
+      const top10Parts = Object.entries(byPart)
+        .map(([code, data]) => ({ code, ...data, avgImpact: data.count > 0 ? data.impact / data.count : 0 }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
+      // Top 10 en etkili robotlar
+      const top10Robots = Object.entries(byRobot)
+        .map(([name, data]) => ({ name, ...data, avgImpact: data.count > 0 ? data.impact / data.count : 0 }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
       const reportId = `RPR-OA-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
       const reportData = {
-        title: 'Operasyon Azaltma - Detaylı Rapor',
+        title: 'Operasyon Azaltma - Detaylı Yönetici Raporu',
         reportId,
         filters: {
           'Rapor Dönemi': filters.quickSelect === 'allTime' 
@@ -311,15 +346,18 @@ const ComparativeCost = () => {
               ? `${format(new Date(dateFrom), 'dd.MM.yyyy', { locale: tr })} - ${format(new Date(dateTo), 'dd.MM.yyyy', { locale: tr })}`
               : 'Belirtilmemiş',
           'Filtreler': `Hat: ${filters.lines.length > 0 ? filters.lines.map(getLineName).join(', ') : 'Tümü'}, Robot: ${filters.robots.length > 0 ? filters.robots.map(getRobotName).join(', ') : 'Tümü'}, Parça: ${filters.partCode || 'Yok'}`,
-          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+          'Toplam Gün': dateFrom && dateTo ? Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün' : 'Tüm Zamanlar'
         },
         kpiCards: [
           { title: 'Toplam Yıllık İyileştirme', value: formatCurrency(totalAnnualImprovement) },
           { title: 'Toplam İyileştirme Kaydı', value: filteredData.length.toString() },
           { title: 'Toplam Süre Kazancı', value: `${totalSavingSeconds.toFixed(2)} sn` },
           { title: 'Ortalama Kazanç/Kayıt', value: `${(filteredData.length > 0 ? totalSavingSeconds / filteredData.length : 0).toFixed(2)} sn` },
+          { title: 'Ortalama Etki/Kayıt', value: formatCurrency(filteredData.length > 0 ? totalAnnualImprovement / filteredData.length : 0) },
           { title: 'Farklı Hat Sayısı', value: Object.keys(byLine).length.toString() },
-          { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() }
+          { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() },
+          { title: 'Farklı Robot Sayısı', value: Object.keys(byRobot).length.toString() }
         ],
         tableData: {
           headers: ['Kayıt Adı', 'Tarih', 'Hat', 'Robot', 'Parça Kodu', 'Önce (sn)', 'Sonra (sn)', 'Kazanç (sn)', 'Yıllık Etki (₺)', 'Durum'],
@@ -343,21 +381,69 @@ const ComparativeCost = () => {
         ]
       };
 
-      // Hat bazlı özet ekle
-      if (Object.keys(byLine).length > 0) {
+      // Top 10 En Etkili Senaryolar
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['TOP 10 EN ETKİLİ SENARYOLAR', '', '', '', '', '', '', '', '', ''],
+        ['Sıra', 'Kayıt Adı', 'Tarih', 'Hat', 'Parça Kodu', 'Yıllık Etki', 'Süre Kazancı', 'Önce/Sonra', '', ''],
+        ...top10Scenarios.map((s, index) => [
+          (index + 1).toString(),
+          s.name || '-',
+          new Date(s.scenario_date).toLocaleDateString('tr-TR'),
+          getLineName(s.scope?.line_id),
+          s.scope?.part_code || 'N/A',
+          formatCurrency(s.summary?.annualImprovement || 0),
+          `${s.summary?.timeDiff.toFixed(2)} sn`,
+          `${s.summary?.beforeTotalTime.toFixed(2)}s → ${s.summary?.afterTotalTime.toFixed(2)}s`,
+          '', ''
+        ])
+      );
+
+      // Top 10 En Etkili Hatlar
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['TOP 10 EN ETKİLİ HATLAR', '', '', '', '', '', '', '', '', ''],
+        ['Sıra', 'Hat Adı', 'Toplam Etki', 'Senaryo Sayısı', 'Ortalama Etki', 'Toplam Süre Kazancı', '', '', '', ''],
+        ...top10Lines.map((line, index) => [
+          (index + 1).toString(),
+          line.name,
+          formatCurrency(line.impact),
+          line.count.toString(),
+          formatCurrency(line.avgImpact),
+          `${line.savings.toFixed(2)} sn`,
+          '', '', '', ''
+        ])
+      );
+
+      // Top 10 En Etkili Parçalar
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['TOP 10 EN ETKİLİ PARÇALAR', '', '', '', '', '', '', '', '', ''],
+        ['Sıra', 'Parça Kodu', 'Toplam Etki', 'Senaryo Sayısı', 'Ortalama Etki', '', '', '', '', ''],
+        ...top10Parts.map((part, index) => [
+          (index + 1).toString(),
+          part.code,
+          formatCurrency(part.impact),
+          part.count.toString(),
+          formatCurrency(part.avgImpact),
+          '', '', '', '', ''
+        ])
+      );
+
+      // Top 10 En Etkili Robotlar
+      if (top10Robots.length > 0) {
         reportData.tableData.rows.push(
-          ['---', '---', '---', '---', '---', '---', '---', '---', '---', '---'],
-          ...Object.entries(byLine).map(([lineName, data]) => [
-            'ÖZET',
-            `${lineName} - Hat Özeti`,
-            lineName,
-            '-',
-            '-',
-            '-',
-            '-',
-            data.savings.toFixed(2),
-            formatCurrency(data.impact),
-            `${data.count} kayıt`
+          ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+          ['TOP 10 EN ETKİLİ ROBOTLAR', '', '', '', '', '', '', '', '', ''],
+          ['Sıra', 'Robot Adı', 'Toplam Etki', 'Senaryo Sayısı', 'Ortalama Etki', 'Toplam Süre Kazancı', '', '', '', ''],
+          ...top10Robots.map((robot, index) => [
+            (index + 1).toString(),
+            robot.name,
+            formatCurrency(robot.impact),
+            robot.count.toString(),
+            formatCurrency(robot.avgImpact),
+            `${robot.savings.toFixed(2)} sn`,
+            '', '', '', ''
           ])
         );
       }
