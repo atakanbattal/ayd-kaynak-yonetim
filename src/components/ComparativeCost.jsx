@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, GitCompare, Save, Trash2, Info, FileText, AlertTriangle, Calendar as CalendarIcon, Plus, Edit, Factory, Bot, Paperclip, Upload, X } from 'lucide-react';
+import { TrendingUp, GitCompare, Save, Trash2, Info, FileText, AlertTriangle, Calendar as CalendarIcon, Plus, Edit, Factory, Bot, Paperclip, Upload, X, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';

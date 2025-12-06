@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
     import { motion } from 'framer-motion';
-    import { Calculator, Save, Trash2, Plus, Eye, Search, Calendar as CalendarIcon, Filter, X, Edit, TrendingUp, AlertCircle, Package, FileText } from 'lucide-react';
+    import { Calculator, Save, Trash2, Plus, Eye, Search, Calendar as CalendarIcon, Filter, X, Edit, TrendingUp, AlertCircle, Package, FileText, Download } from 'lucide-react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
