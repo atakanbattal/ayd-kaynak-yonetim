@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { BookOpen, Plus, Save, Edit, Upload } from 'lucide-react';
+import { BookOpen, Plus, Save, Edit, Upload, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -11,7 +11,9 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { logAction } from '@/lib/utils';
+import { logAction, openPrintWindow, formatCurrency } from '@/lib/utils';
+import { format } from 'date-fns';
+import { tr } from 'date-fns/locale';
 import { Combobox } from '@/components/ui/combobox';
 
 const TrainingPlan = () => {
@@ -106,6 +108,114 @@ const TrainingPlan = () => {
       case 'Tamamlandı': return 'bg-green-100 text-green-800';
       case 'İptal Edildi': return 'bg-red-100 text-red-800';
       default: return 'bg-gray-100 text-gray-800';
+    }
+  };
+
+  const handleGenerateDetailedReport = async () => {
+    try {
+      toast({ title: "Detaylı eğitim raporu hazırlanıyor...", description: "Tüm eğitim verileri toplanıyor." });
+
+      const { data: allTrainings, error: trainingsError } = await supabase
+        .from('trainings')
+        .select('*, trainer:employees(first_name, last_name)')
+        .order('planned_date', { ascending: false });
+
+      if (trainingsError) throw trainingsError;
+
+      const { data: allParticipants, error: participantsError } = await supabase
+        .from('training_participants')
+        .select('*, employee:employees(first_name, last_name, registration_number)');
+
+      if (participantsError) throw participantsError;
+
+      const { data: allCertificates, error: certificatesError } = await supabase
+        .from('training_certificates')
+        .select('*, participant:training_participants(employee:employees(first_name, last_name))');
+
+      if (certificatesError) throw certificatesError;
+
+      const filteredData = trainings.filter(t => {
+        const searchMatch = !searchTerm || 
+          (t.name && t.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        const statusMatch = filterStatus === 'all' || t.status === filterStatus;
+        return searchMatch && statusMatch;
+      });
+
+      const trainingsByStatus = filteredData.reduce((acc, t) => {
+        const status = t.status || 'Belirtilmemiş';
+        if (!acc[status]) acc[status] = 0;
+        acc[status]++;
+        return acc;
+      }, {});
+
+      const participantsByTraining = filteredData.reduce((acc, t) => {
+        const participants = allParticipants.filter(p => p.training_id === t.id);
+        acc[t.id] = {
+          total: participants.length,
+          attended: participants.filter(p => p.participation_status === 'Katıldı').length,
+          certificates: allCertificates.filter(c => {
+            const participant = allParticipants.find(p => p.id === c.participant_id);
+            return participant && participant.training_id === t.id;
+          }).length
+        };
+        return acc;
+      }, {});
+
+      const totalParticipants = allParticipants.length;
+      const totalAttended = allParticipants.filter(p => p.participation_status === 'Katıldı').length;
+      const totalCertificates = allCertificates.length;
+
+      const reportId = `RPR-TRAINING-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const reportData = {
+        title: 'Eğitim Planlama - Detaylı Rapor',
+        reportId,
+        filters: {
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+          'Arama Terimi': searchTerm || 'Yok',
+          'Durum Filtresi': filterStatus === 'all' ? 'Tümü' : filterStatus
+        },
+        kpiCards: [
+          { title: 'Toplam Eğitim', value: filteredData.length.toString() },
+          { title: 'Planlanan Eğitimler', value: (trainingsByStatus['Planlandı'] || 0).toString() },
+          { title: 'Devam Eden Eğitimler', value: (trainingsByStatus['Devam Ediyor'] || 0).toString() },
+          { title: 'Tamamlanan Eğitimler', value: (trainingsByStatus['Tamamlandı'] || 0).toString() },
+          { title: 'Toplam Katılımcı', value: totalParticipants.toString() },
+          { title: 'Katılan Katılımcı', value: totalAttended.toString() },
+          { title: 'Verilen Sertifika', value: totalCertificates.toString() },
+          { title: 'Katılım Oranı', value: totalParticipants > 0 ? `${Math.round((totalAttended / totalParticipants) * 100)}%` : '0%' }
+        ],
+        tableData: {
+          headers: ['Eğitim Adı', 'Eğitmen', 'Planlanan Tarih', 'Gerçekleşen Tarih', 'Durum', 'Katılımcı Sayısı', 'Katılan', 'Sertifika'],
+          rows: filteredData.map(t => {
+            const participants = participantsByTraining[t.id] || { total: 0, attended: 0, certificates: 0 };
+            return [
+              t.name || '-',
+              t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'N/A',
+              t.planned_date ? format(new Date(t.planned_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+              t.actual_date ? format(new Date(t.actual_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+              t.status || 'Belirtilmemiş',
+              participants.total.toString(),
+              participants.attended.toString(),
+              participants.certificates.toString()
+            ];
+          })
+        },
+        signatureFields: [
+          { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+          { title: 'Kontrol Eden', name: '', role: '..................' },
+          { title: 'Onaylayan', name: '', role: '..................' }
+        ]
+      };
+
+      await openPrintWindow(reportData, toast);
+    } catch (error) {
+      console.error('Detaylı rapor hatası:', error);
+      toast({
+        title: "Rapor Oluşturulamadı",
+        description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+        variant: "destructive"
+      });
     }
   };
 
@@ -233,7 +343,10 @@ const TrainingPlan = () => {
                 <CardTitle className="flex items-center space-x-2"><BookOpen className="h-5 w-5" /><span>Personel Eğitim Yönetimi</span></CardTitle>
                 <CardDescription>Planlanan ve tamamlanan personel eğitimlerini, dokümanlarını ve sınavlarını yönetin.</CardDescription>
               </div>
-              <Button onClick={() => openForm()}><Plus className="h-4 w-4 mr-2" />Yeni Eğitim Planla</Button>
+              <div className="flex space-x-2">
+                <Button onClick={() => openForm()}><Plus className="h-4 w-4 mr-2" />Yeni Eğitim Planla</Button>
+                <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>

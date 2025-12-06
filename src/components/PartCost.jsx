@@ -301,6 +301,145 @@ import React, { useState, useEffect, useMemo } from 'react';
         await openPrintWindow(reportData, toast);
       };
 
+      const handleGenerateDetailedReport = async () => {
+        try {
+          toast({ title: "Detaylı üretim raporu hazırlanıyor...", description: "Tüm veriler toplanıyor." });
+
+          const dateFrom = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+          const dateTo = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+          // Tüm detaylı verileri çek
+          const [dailyRecordsData, linesData, partCostsData] = await Promise.all([
+            supabase.from('daily_production_summary')
+              .select('*')
+              .gte('production_date', dateFrom)
+              .lte('production_date', dateTo)
+              .order('production_date', { ascending: false }),
+            supabase.from('lines').select('*').eq('deleted', false),
+            supabase.from('v_part_costs')
+              .select('*')
+              .gte('production_date', dateFrom)
+              .lte('production_date', dateTo)
+          ]);
+
+          const allDailyRecords = dailyRecordsData.data || [];
+          const allLines = linesData.data || [];
+          const allPartCosts = partCostsData.data || [];
+
+          // Filtrelenmiş veriler
+          const filteredDaily = allDailyRecords.filter(record => {
+            const lineNames = Array.from(record.lines || []).join(', ').toLowerCase();
+            return filters.searchTerm === '' || lineNames.includes(filters.searchTerm.toLowerCase());
+          });
+
+          const totalProduction = filteredDaily.reduce((acc, p) => acc + (p.total_quantity || 0), 0);
+          const totalScrap = filteredDaily.reduce((acc, p) => acc + (p.total_scrap || 0), 0);
+          const totalProductionCost = filteredDaily.reduce((acc, p) => acc + (p.total_production_cost || 0), 0);
+          const totalScrapCost = filteredDaily.reduce((acc, p) => acc + (p.total_scrap_cost || 0), 0);
+          const avgPPM = filteredDaily.length > 0 
+            ? filteredDaily.reduce((acc, p) => acc + (p.ppm || 0), 0) / filteredDaily.length 
+            : 0;
+
+          // Parça bazlı analiz
+          const byPart = allPartCosts.reduce((acc, p) => {
+            const partCode = p.part_code || 'Bilinmeyen';
+            if (!acc[partCode]) {
+              acc[partCode] = { quantity: 0, scrap: 0, cost: 0, scrapCost: 0, days: new Set() };
+            }
+            acc[partCode].quantity += p.quantity || 0;
+            acc[partCode].scrap += p.scrap_count || 0;
+            acc[partCode].cost += p.production_cost || 0;
+            acc[partCode].scrapCost += p.scrap_cost || 0;
+            acc[partCode].days.add(p.production_date);
+            return acc;
+          }, {});
+
+          // Hat bazlı analiz
+          const byLine = allPartCosts.reduce((acc, p) => {
+            const lineName = p.line_name || 'Bilinmeyen';
+            if (!acc[lineName]) {
+              acc[lineName] = { quantity: 0, scrap: 0, cost: 0, scrapCost: 0, parts: new Set() };
+            }
+            acc[lineName].quantity += p.quantity || 0;
+            acc[lineName].scrap += p.scrap_count || 0;
+            acc[lineName].cost += p.production_cost || 0;
+            acc[lineName].scrapCost += p.scrap_cost || 0;
+            acc[lineName].parts.add(p.part_code);
+            return acc;
+          }, {});
+
+          const reportId = `RPR-PC-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const reportData = {
+            title: 'Günlük Üretim ve Maliyet - Detaylı Rapor',
+            reportId,
+            filters: {
+              'Rapor Dönemi': `${format(filters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
+              'Arama Terimi': filters.searchTerm || 'Yok',
+              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+            },
+            kpiCards: [
+              { title: 'Toplam Üretim', value: totalProduction.toLocaleString('tr-TR') + ' adet' },
+              { title: 'Toplam Hurda', value: totalScrap.toLocaleString('tr-TR') + ' adet' },
+              { title: 'Ortalama PPM', value: Math.round(avgPPM).toString() },
+              { title: 'Toplam Üretim Maliyeti', value: formatCurrency(totalProductionCost) },
+              { title: 'Toplam Hurda Maliyeti', value: formatCurrency(totalScrapCost) },
+              { title: 'Çalışılan Gün Sayısı', value: filteredDaily.length.toString() },
+              { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() },
+              { title: 'Çalışılan Hat Sayısı', value: Object.keys(byLine).length.toString() }
+            ],
+            tableData: {
+              headers: ['Tarih', 'Parça Kodu', 'Hat', 'Kaynak Süresi (sn)', 'Üretilen Adet', 'Hurda Adedi', 'Üretim Maliyeti', 'Hurda Maliyeti', 'PPM'],
+              rows: allPartCosts.map(d => [
+                new Date(d.production_date).toLocaleDateString('tr-TR'),
+                d.part_code || 'N/A',
+                d.line_name || 'N/A',
+                d.welding_time || '0',
+                (d.quantity || 0).toString(),
+                (d.scrap_count || 0).toString(),
+                formatCurrency(d.production_cost || 0),
+                formatCurrency(d.scrap_cost || 0),
+                d.ppm ? Math.round(d.ppm).toString() : '0'
+              ])
+            },
+            signatureFields: [
+              { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+              { title: 'Kontrol Eden', name: '', role: '..................' },
+              { title: 'Onaylayan', name: '', role: '..................' }
+            ]
+          };
+
+          // Parça bazlı özet ekle
+          if (Object.keys(byPart).length > 0) {
+            reportData.tableData.rows.push(
+              ['---', '---', '---', '---', '---', '---', '---', '---', '---'],
+              ...Object.entries(byPart)
+                .sort((a, b) => b[1].quantity - a[1].quantity)
+                .slice(0, 20)
+                .map(([partCode, data]) => [
+                  'ÖZET',
+                  partCode,
+                  'Parça Özeti',
+                  '-',
+                  data.quantity.toLocaleString('tr-TR'),
+                  data.scrap.toLocaleString('tr-TR'),
+                  formatCurrency(data.cost),
+                  formatCurrency(data.scrapCost),
+                  data.quantity > 0 ? Math.round((data.scrap * 1000000) / (data.quantity + data.scrap)).toString() : '0'
+                ])
+            );
+          }
+
+          await openPrintWindow(reportData, toast);
+        } catch (error) {
+          console.error('Detaylı rapor hatası:', error);
+          toast({
+            title: "Rapor Oluşturulamadı",
+            description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+            variant: "destructive"
+          });
+        }
+      };
+
       const aggregatedDailyRecords = useMemo(() => {
         const dailyAggregates = dailyRecords.reduce((acc, record) => {
             const date = record.production_date;
@@ -352,6 +491,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                   <div className="flex items-center space-x-2">
                     <Button onClick={() => { setEditingRecord(null); setIsFormOpen(true); }}><Plus className="h-4 w-4 mr-2" />Yeni Günlük Kayıt Ekle</Button>
                     <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Raporla</Button>
+                    <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
                   </div>
                 </div>
               </CardHeader>

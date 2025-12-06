@@ -14,12 +14,13 @@ import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/components/ui/use-toast';
-import { cn, logAction } from '@/lib/utils';
+import { cn, logAction, openPrintWindow, formatCurrency } from '@/lib/utils';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Combobox } from '@/components/ui/combobox';
+import { Download } from 'lucide-react';
 
 const priorityMap = {
   low: { label: 'Düşük', icon: <CheckCircle className="h-4 w-4 text-gray-500" />, color: 'text-gray-500' },
@@ -200,6 +201,115 @@ const TaskManager = ({ user }) => {
     }
   };
 
+  const handleGenerateDetailedReport = async () => {
+    try {
+      toast({ title: "Detaylı görev raporu hazırlanıyor...", description: "Tüm görev verileri toplanıyor." });
+
+      const { data: allTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*, assignee:employees(first_name, last_name, registration_number)')
+        .order('created_at', { ascending: false });
+
+      if (tasksError) throw tasksError;
+
+      const filteredData = allTasks.filter(task => {
+        const searchMatch = searchTerm === '' || task.title.toLowerCase().includes(searchTerm.toLowerCase()) || (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()));
+        const assigneeMatch = filterAssignee === '' || (task.assignee_name && task.assignee_name.toLowerCase().includes(filterAssignee.toLowerCase()));
+        const tagMatch = filterTag === '' || (task.tags && task.tags.toLowerCase().includes(filterTag.toLowerCase()));
+        return searchMatch && assigneeMatch && tagMatch;
+      });
+
+      const tasksByStatus = {
+        todo: filteredData.filter(t => t.status === 'todo'),
+        inProgress: filteredData.filter(t => t.status === 'in-progress'),
+        done: filteredData.filter(t => t.status === 'done')
+      };
+
+      const tasksByPriority = filteredData.reduce((acc, t) => {
+        const priority = t.priority || 'medium';
+        if (!acc[priority]) acc[priority] = 0;
+        acc[priority]++;
+        return acc;
+      }, {});
+
+      const tasksByAssignee = filteredData.reduce((acc, t) => {
+        const assignee = t.assignee_name || 'Atanmamış';
+        if (!acc[assignee]) acc[assignee] = 0;
+        acc[assignee]++;
+        return acc;
+      }, {});
+
+      const overdueTasks = filteredData.filter(t => {
+        if (!t.due_date) return false;
+        return new Date(t.due_date) < new Date() && t.status !== 'done';
+      });
+
+      const reportId = `RPR-TASK-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const reportData = {
+        title: 'Aksiyon Takibi - Detaylı Rapor',
+        reportId,
+        filters: {
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+          'Arama Terimi': searchTerm || 'Yok',
+          'Atanan Filtresi': filterAssignee || 'Yok',
+          'Etiket Filtresi': filterTag || 'Yok'
+        },
+        kpiCards: [
+          { title: 'Toplam Görev', value: filteredData.length.toString() },
+          { title: 'Bekleyen Görevler', value: tasksByStatus.todo.length.toString() },
+          { title: 'Devam Eden Görevler', value: tasksByStatus.inProgress.length.toString() },
+          { title: 'Tamamlanan Görevler', value: tasksByStatus.done.length.toString() },
+          { title: 'Geciken Görevler', value: overdueTasks.length.toString() },
+          { title: 'Farklı Atanan', value: Object.keys(tasksByAssignee).length.toString() }
+        ],
+        tableData: {
+          headers: ['Başlık', 'Açıklama', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi', 'Etiketler', 'Oluşturulma'],
+          rows: filteredData.map(t => [
+            t.title || '-',
+            t.description ? (t.description.length > 50 ? t.description.substring(0, 50) + '...' : t.description) : '-',
+            statusMap[t.status] || t.status,
+            priorityMap[t.priority]?.label || t.priority,
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+            t.tags || '-',
+            t.created_at ? format(new Date(t.created_at), 'dd.MM.yyyy', { locale: tr }) : '-'
+          ])
+        },
+        signatureFields: [
+          { title: 'Hazırlayan', name: authUser?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+          { title: 'Kontrol Eden', name: '', role: '..................' },
+          { title: 'Onaylayan', name: '', role: '..................' }
+        ]
+      };
+
+      // Öncelik bazlı özet ekle
+      if (Object.keys(tasksByPriority).length > 0) {
+        reportData.tableData.rows.push(
+          ['---', '---', '---', '---', '---', '---', '---', '---'],
+          ...Object.entries(tasksByPriority).map(([priority, count]) => [
+            'ÖZET',
+            `${priorityMap[priority]?.label || priority} Öncelik Özeti`,
+            '-',
+            priorityMap[priority]?.label || priority,
+            '-',
+            '-',
+            '-',
+            `${count} görev`
+          ])
+        );
+      }
+
+      await openPrintWindow(reportData, toast);
+    } catch (error) {
+      console.error('Detaylı rapor hatası:', error);
+      toast({
+        title: "Rapor Oluşturulamadı",
+        description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const TaskForm = ({ task, onSave }) => {
     const [formData, setFormData] = useState(task || initialFormState);
     return (
@@ -220,7 +330,7 @@ const TaskManager = ({ user }) => {
   return (
     <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
       <Card>
-        <CardHeader><div className="flex justify-between items-center"><CardTitle>Aksiyon Takibi</CardTitle><Button onClick={() => { setEditingTask(null); setIsFormOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Yeni Görev</Button></div></CardHeader>
+        <CardHeader><div className="flex justify-between items-center"><CardTitle>Aksiyon Takibi</CardTitle><div className="flex space-x-2"><Button onClick={() => { setEditingTask(null); setIsFormOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Yeni Görev</Button><Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button></div></div></CardHeader>
         <CardContent>
           <div className="flex flex-col sm:flex-row gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
             <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Görev ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div>

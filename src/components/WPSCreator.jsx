@@ -327,6 +327,96 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
         }
         await openPrintWindow({ wpsData: data }, toast);
       };
+
+      const handleGenerateDetailedReport = async () => {
+        try {
+          toast({ title: "WPS detaylı rapor hazırlanıyor...", description: "Tüm WPS verileri toplanıyor." });
+
+          const { data: allWps, error } = await supabase
+            .from('wps')
+            .select('*')
+            .order('created_at', { ascending: false });
+
+          if (error) throw error;
+
+          const filteredWps = searchTerm 
+            ? allWps.filter(item =>
+                Object.values(item).some(val =>
+                  String(val).toLowerCase().includes(searchTerm.toLowerCase())
+                )
+              )
+            : allWps;
+
+          // Proses bazlı analiz
+          const byProcess = filteredWps.reduce((acc, w) => {
+            const process = w.welding_process || 'Belirtilmemiş';
+            if (!acc[process]) acc[process] = 0;
+            acc[process]++;
+            return acc;
+          }, {});
+
+          // Pozisyon bazlı analiz
+          const byPosition = filteredWps.reduce((acc, w) => {
+            const pos = w.position || 'Belirtilmemiş';
+            if (!acc[pos]) acc[pos] = 0;
+            acc[pos]++;
+            return acc;
+          }, {});
+
+          // Malzeme bazlı analiz
+          const byMaterial = filteredWps.reduce((acc, w) => {
+            const material = w.part1?.material_type || 'Belirtilmemiş';
+            if (!acc[material]) acc[material] = 0;
+            acc[material]++;
+            return acc;
+          }, {});
+
+          const reportId = `RPR-WPS-DET-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const reportData = {
+            title: 'WPS Yönetimi - Detaylı Rapor',
+            reportId,
+            filters: {
+              'Rapor Tarihi': new Date().toLocaleDateString('tr-TR'),
+              'Toplam WPS': filteredWps.length.toString(),
+              'Arama Terimi': searchTerm || 'Yok'
+            },
+            kpiCards: [
+              { title: 'Toplam WPS', value: filteredWps.length.toString() },
+              { title: 'Farklı Proses', value: Object.keys(byProcess).length.toString() },
+              { title: 'Farklı Pozisyon', value: Object.keys(byPosition).length.toString() },
+              { title: 'Farklı Malzeme', value: Object.keys(byMaterial).length.toString() }
+            ],
+            tableData: {
+              headers: ['WPS Kodu', 'Parça Kodu', 'Malzeme', 'Kalınlık', 'Proses', 'Pozisyon', 'Birleştirme Tipi', 'Kaynak Ağzı', 'Oluşturulma Tarihi'],
+              rows: filteredWps.map(w => [
+                w.wps_code || '-',
+                w.part_code || 'N/A',
+                w.part1?.material_type || 'N/A',
+                `${w.part1?.thickness || w.part1?.pipe_wt || 'N/A'} mm`,
+                w.welding_process || 'N/A',
+                w.position || 'N/A',
+                w.joint_type || 'N/A',
+                w.joint_design || 'N/A',
+                new Date(w.created_at).toLocaleDateString('tr-TR')
+              ])
+            },
+            signatureFields: [
+              { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+              { title: 'Kontrol Eden', name: '', role: '..................' },
+              { title: 'Onaylayan', name: '', role: '..................' }
+            ]
+          };
+
+          await openPrintWindow(reportData, toast);
+        } catch (error) {
+          console.error('WPS detaylı rapor hatası:', error);
+          toast({
+            title: "Rapor Oluşturulamadı",
+            description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+            variant: "destructive"
+          });
+        }
+      };
     
       const renderRow = (label, value) => (
         <div className="flex justify-between py-1 border-b-2"><span className="text-sm text-gray-500">{label}</span><span className="text-sm font-medium">{value || 'N/A'}</span></div>
@@ -341,7 +431,10 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                   <CardTitle className="flex items-center space-x-2"><FileText className="h-5 w-5" /><span>WPS Yönetimi</span></CardTitle>
                   <CardDescription>Mevcut Kaynak Prosedürü Spesifikasyonlarını (WPS) yönetin ve yenilerini oluşturun.</CardDescription>
                 </div>
-                <Button onClick={() => openFormDialog()}><Plus className="h-4 w-4 mr-2" />Yeni WPS Oluştur</Button>
+                <div className="flex space-x-2">
+                  <Button onClick={() => openFormDialog()}><Plus className="h-4 w-4 mr-2" />Yeni WPS Oluştur</Button>
+                  <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent>

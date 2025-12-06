@@ -246,6 +246,133 @@ const ComparativeCost = () => {
     await openPrintWindow(reportData, toast);
   };
 
+  const handleGenerateDetailedReport = async () => {
+    try {
+      toast({ title: "Detaylı operasyon azaltma raporu hazırlanıyor...", description: "Tüm veriler toplanıyor." });
+
+      const dateFrom = filters.quickSelect === 'allTime' 
+        ? null 
+        : filters.date?.from 
+          ? format(startOfDay(filters.date.from), 'yyyy-MM-dd')
+          : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+      const dateTo = filters.quickSelect === 'allTime'
+        ? null
+        : filters.date?.to
+          ? format(endOfDay(filters.date.to), 'yyyy-MM-dd')
+          : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+      let query = supabase.from('scenarios').select('*').eq('deleted', false);
+      if (dateFrom && dateTo) {
+        query = query.gte('scenario_date', dateFrom).lte('scenario_date', dateTo);
+      }
+      const { data: allScenarios } = await query;
+
+      const filteredData = (allScenarios || []).filter(s => {
+        const lineMatch = filters.lines.length === 0 || (s.scope && filters.lines.includes(s.scope.line_id));
+        const robotMatch = filters.robots.length === 0 || (s.scope && s.scope.robot_id && filters.robots.includes(s.scope.robot_id));
+        const partMatch = !filters.partCode || (s.scope && s.scope.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
+        return lineMatch && robotMatch && partMatch;
+      });
+
+      const totalAnnualImprovement = filteredData.reduce((sum, s) => sum + (s.summary?.annualImprovement || 0), 0);
+      const totalSavingSeconds = filteredData.reduce((sum, s) => sum + (s.summary?.timeDiff || 0), 0);
+
+      // Hat bazlı analiz
+      const byLine = filteredData.reduce((acc, s) => {
+        const lineName = getLineName(s.scope?.line_id);
+        if (!acc[lineName]) {
+          acc[lineName] = { count: 0, impact: 0, savings: 0 };
+        }
+        acc[lineName].count++;
+        acc[lineName].impact += s.summary?.annualImprovement || 0;
+        acc[lineName].savings += s.summary?.timeDiff || 0;
+        return acc;
+      }, {});
+
+      // Parça bazlı analiz
+      const byPart = filteredData.reduce((acc, s) => {
+        const partCode = s.scope?.part_code || 'Belirtilmemiş';
+        if (!acc[partCode]) {
+          acc[partCode] = { count: 0, impact: 0 };
+        }
+        acc[partCode].count++;
+        acc[partCode].impact += s.summary?.annualImprovement || 0;
+        return acc;
+      }, {});
+
+      const reportId = `RPR-OA-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const reportData = {
+        title: 'Operasyon Azaltma - Detaylı Rapor',
+        reportId,
+        filters: {
+          'Rapor Dönemi': filters.quickSelect === 'allTime' 
+            ? 'Tüm Zamanlar'
+            : dateFrom && dateTo
+              ? `${format(new Date(dateFrom), 'dd.MM.yyyy', { locale: tr })} - ${format(new Date(dateTo), 'dd.MM.yyyy', { locale: tr })}`
+              : 'Belirtilmemiş',
+          'Filtreler': `Hat: ${filters.lines.length > 0 ? filters.lines.map(getLineName).join(', ') : 'Tümü'}, Robot: ${filters.robots.length > 0 ? filters.robots.map(getRobotName).join(', ') : 'Tümü'}, Parça: ${filters.partCode || 'Yok'}`,
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+        },
+        kpiCards: [
+          { title: 'Toplam Yıllık İyileştirme', value: formatCurrency(totalAnnualImprovement) },
+          { title: 'Toplam İyileştirme Kaydı', value: filteredData.length.toString() },
+          { title: 'Toplam Süre Kazancı', value: `${totalSavingSeconds.toFixed(2)} sn` },
+          { title: 'Ortalama Kazanç/Kayıt', value: `${(filteredData.length > 0 ? totalSavingSeconds / filteredData.length : 0).toFixed(2)} sn` },
+          { title: 'Farklı Hat Sayısı', value: Object.keys(byLine).length.toString() },
+          { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() }
+        ],
+        tableData: {
+          headers: ['Kayıt Adı', 'Tarih', 'Hat', 'Robot', 'Parça Kodu', 'Önce (sn)', 'Sonra (sn)', 'Kazanç (sn)', 'Yıllık Etki (₺)', 'Durum'],
+          rows: filteredData.map(s => [
+            s.name || '-',
+            new Date(s.scenario_date).toLocaleDateString('tr-TR'),
+            getLineName(s.scope?.line_id),
+            getRobotName(s.scope?.robot_id) || 'N/A',
+            s.scope?.part_code || 'N/A',
+            s.summary?.beforeTotalTime.toFixed(2) || '0',
+            s.summary?.afterTotalTime.toFixed(2) || '0',
+            s.summary?.timeDiff.toFixed(2) || '0',
+            formatCurrency(s.summary?.annualImprovement || 0),
+            s.deleted ? 'Silinmiş' : 'Aktif'
+          ])
+        },
+        signatureFields: [
+          { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+          { title: 'Kontrol Eden', name: '', role: '..................' },
+          { title: 'Onaylayan', name: '', role: '..................' }
+        ]
+      };
+
+      // Hat bazlı özet ekle
+      if (Object.keys(byLine).length > 0) {
+        reportData.tableData.rows.push(
+          ['---', '---', '---', '---', '---', '---', '---', '---', '---', '---'],
+          ...Object.entries(byLine).map(([lineName, data]) => [
+            'ÖZET',
+            `${lineName} - Hat Özeti`,
+            lineName,
+            '-',
+            '-',
+            '-',
+            '-',
+            data.savings.toFixed(2),
+            formatCurrency(data.impact),
+            `${data.count} kayıt`
+          ])
+        );
+      }
+
+      await openPrintWindow(reportData, toast);
+    } catch (error) {
+      console.error('Detaylı rapor hatası:', error);
+      toast({
+        title: "Rapor Oluşturulamadı",
+        description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const getLineName = (lineId) => lines.find(l => l.id.toString() === lineId)?.name || 'N/A';
   const getRobotName = (robotId) => robots.find(r => r.id.toString() === robotId)?.name || 'N/A';
 
@@ -390,7 +517,7 @@ const ComparativeCost = () => {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader><div className="flex justify-between items-center"><div><CardTitle className="flex items-center space-x-2"><TrendingUp className="h-5 w-5" /><span>Operasyon Azaltma Dashboard</span></CardTitle><CardDescription>Operasyonel iyileştirmeleri ve maliyet etkilerini takip edin.</CardDescription></div><div className="flex space-x-2"><Button onClick={() => { setEditingScenario(null); setFormState(initialFormState); setAnalysisResult(null); setShowFormDialog(true); setIsDirty(false); }}><Plus className="h-4 w-4 mr-2" />Yeni Kayıt</Button><Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button></div></div></CardHeader>
+        <CardHeader><div className="flex justify-between items-center"><div><CardTitle className="flex items-center space-x-2"><TrendingUp className="h-5 w-5" /><span>Operasyon Azaltma Dashboard</span></CardTitle><CardDescription>Operasyonel iyileştirmeleri ve maliyet etkilerini takip edin.</CardDescription></div><div className="flex space-x-2"><Button onClick={() => { setEditingScenario(null); setFormState(initialFormState); setAnalysisResult(null); setShowFormDialog(true); setIsDirty(false); }}><Plus className="h-4 w-4 mr-2" />Yeni Kayıt</Button><Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button><Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button></div></div></CardHeader>
         <CardContent>
           <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-4 no-print">
             <div className="space-y-2">

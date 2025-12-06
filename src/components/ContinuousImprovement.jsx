@@ -529,6 +529,141 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
         await openPrintWindow(reportData, toast);
       };
 
+      const handleGenerateDetailedReport = async () => {
+        try {
+          toast({ title: "Detaylı rapor hazırlanıyor...", description: "Tüm veriler toplanıyor, lütfen bekleyin." });
+
+          const dateFrom = filters.dateRange?.from ? format(startOfDay(filters.dateRange.from), 'yyyy-MM-dd') : format(startOfDay(new Date('2020-01-01')), 'yyyy-MM-dd');
+          const dateTo = filters.dateRange?.to ? format(endOfDay(filters.dateRange.to), 'yyyy-MM-dd') : format(endOfDay(new Date()), 'yyyy-MM-dd');
+
+          // Tüm detaylı verileri çek
+          const [improvementsData, linesData, robotsData, employeesData] = await Promise.all([
+            supabase.from('improvements')
+              .select('*, line:lines(name), robot:robots(name), responsible:employees(first_name, last_name)')
+              .eq('deleted', false)
+              .gte('improvement_date', dateFrom)
+              .lte('improvement_date', dateTo)
+              .order('improvement_date', { ascending: false }),
+            supabase.from('lines').select('*').eq('deleted', false),
+            supabase.from('robots').select('*').eq('deleted', false),
+            supabase.from('employees').select('*').eq('is_active', true)
+          ]);
+
+          const allImprovements = improvementsData.data || [];
+          const allLines = linesData.data || [];
+          const allRobots = robotsData.data || [];
+          const allEmployees = employeesData.data || [];
+
+          // Filtrelenmiş veriler
+          const filteredData = allImprovements.filter(item => {
+            const typeMatch = filters.type === 'all' || item.type === filters.type;
+            const lineMatch = filters.line === 'all' || item.line_id === filters.line;
+            const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
+            return typeMatch && lineMatch && partCodeMatch;
+          });
+
+          const totalAnnualImpact = filteredData.reduce((sum, item) => sum + calculateImpact(item), 0);
+          const completedCount = filteredData.filter(i => i.status === 'Tamamlandı').length;
+          const inProgressCount = filteredData.filter(i => i.status === 'Devam Ediyor').length;
+          const plannedCount = filteredData.filter(i => i.status === 'Planlandı').length;
+
+          // Hat bazlı analiz
+          const byLine = filteredData.reduce((acc, i) => {
+            const lineName = i.line?.name || 'Belirtilmemiş';
+            if (!acc[lineName]) {
+              acc[lineName] = { count: 0, impact: 0, completed: 0 };
+            }
+            acc[lineName].count++;
+            acc[lineName].impact += calculateImpact(i);
+            if (i.status === 'Tamamlandı') acc[lineName].completed++;
+            return acc;
+          }, {});
+
+          // Tip bazlı analiz
+          const byType = filteredData.reduce((acc, i) => {
+            const type = i.type || 'Diğer';
+            if (!acc[type]) {
+              acc[type] = { count: 0, impact: 0 };
+            }
+            acc[type].count++;
+            acc[type].impact += calculateImpact(i);
+            return acc;
+          }, {});
+
+          const reportId = `RPR-SI-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const reportData = {
+            title: 'Sürekli İyileştirme - Detaylı Rapor',
+            reportId,
+            filters: {
+              'Rapor Dönemi': `${format(filters.dateRange?.from || new Date('2020-01-01'), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`,
+              'Filtreler': `Tip: ${filters.type === 'all' ? 'Tümü' : filters.type}, Hat: ${filters.line === 'all' ? 'Tümü' : getLineName(filters.line)}, Parça Kodu: ${filters.partCode || 'Yok'}`,
+              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+            },
+            kpiCards: [
+              { title: 'Toplam Yıllık Etki', value: formatCurrency(totalAnnualImpact) },
+              { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
+              { title: 'Tamamlanan', value: completedCount.toString() },
+              { title: 'Devam Eden', value: inProgressCount.toString() },
+              { title: 'Planlanan', value: plannedCount.toString() },
+              { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredData.length || 1)) },
+              { title: 'Aktif Hat Sayısı', value: Object.keys(byLine).length.toString() },
+              { title: 'İyileştirme Tipleri', value: Object.keys(byType).length.toString() }
+            ],
+            tableData: {
+              headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Robot', 'Sorumlu', 'Tip', 'Önceki Süre', 'Yeni Süre', 'Kazanç', 'Yıllık Etki', 'Durum'],
+              rows: filteredData.map(s => [
+                format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
+                s.description || '-',
+                s.part_code || 'N/A',
+                s.line?.name || 'N/A',
+                s.robot?.name || 'N/A',
+                s.responsible ? `${s.responsible.first_name} ${s.responsible.last_name}` : 'N/A',
+                s.type || 'Diğer',
+                `${s.prev_time || 0} sn`,
+                `${s.new_time || 0} sn`,
+                `${((s.prev_time || 0) - (s.new_time || 0)).toFixed(2)} sn`,
+                formatCurrency(calculateImpact(s)),
+                s.status || 'Belirtilmemiş'
+              ])
+            },
+            signatureFields: [
+              { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+              { title: 'Kontrol Eden', name: '', role: '..................' },
+              { title: 'Onaylayan', name: '', role: '..................' }
+            ]
+          };
+
+          // Hat bazlı özet tablosu ekle
+          if (Object.keys(byLine).length > 0) {
+            reportData.tableData.rows.push(
+              ['---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---', '---'],
+              ...Object.entries(byLine).map(([lineName, data]) => [
+                'ÖZET',
+                `${lineName} - Hat Özeti`,
+                '-',
+                lineName,
+                '-',
+                '-',
+                '-',
+                '-',
+                '-',
+                '-',
+                formatCurrency(data.impact),
+                `${data.completed}/${data.count} tamamlandı`
+              ])
+            );
+          }
+
+          await openPrintWindow(reportData, toast);
+        } catch (error) {
+          console.error('Detaylı rapor hatası:', error);
+          toast({
+            title: "Rapor Oluşturulamadı",
+            description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+            variant: "destructive"
+          });
+        }
+      };
 
       const openDialog = (item = null) => {
         if (item) {
@@ -725,6 +860,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                 <div className="flex space-x-2">
                     <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2"/>Yeni İyileştirme</Button>
                     <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2"/>Yazdır</Button>
+                    <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2"/>Detaylı Rapor</Button>
                 </div>
               </div>
             </CardHeader>

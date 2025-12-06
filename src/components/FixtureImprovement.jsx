@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Wrench, Plus, Edit, Trash2, Save, FileText, Search, Upload, X, Image as ImageIcon } from 'lucide-react';
+import { Wrench, Plus, Edit, Trash2, Save, FileText, Search, Upload, X, Image as ImageIcon, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -121,6 +121,97 @@ const FixtureImprovement = () => {
     }
     setDeleteConfirm(null);
     setViewingItem(null);
+  };
+
+  const handleGenerateDetailedReport = async () => {
+    try {
+      toast({ title: "Detaylı fikstür iyileştirme raporu hazırlanıyor...", description: "Tüm fikstür verileri toplanıyor." });
+
+      const { data: allImprovements, error } = await supabase
+        .from('fixture_improvements')
+        .select('*')
+        .order('improvement_date', { ascending: false });
+
+      if (error) throw error;
+
+      const filteredData = allImprovements.filter(f => {
+        const searchMatch = !searchTerm || 
+          (f.part_code && f.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (f.improvement_reason && f.improvement_reason.toLowerCase().includes(searchTerm.toLowerCase())) ||
+          (f.result && f.result.toLowerCase().includes(searchTerm.toLowerCase()));
+        return searchMatch;
+      });
+
+      const byPartCode = filteredData.reduce((acc, f) => {
+        const partCode = f.part_code || 'Belirtilmemiş';
+        if (!acc[partCode]) acc[partCode] = 0;
+        acc[partCode]++;
+        return acc;
+      }, {});
+
+      const withImages = filteredData.filter(f => f.before_image || f.after_image).length;
+      const withoutImages = filteredData.length - withImages;
+
+      const reportId = `RPR-FIXTURE-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const reportData = {
+        title: 'Fikstür İyileştirme - Detaylı Rapor',
+        reportId,
+        filters: {
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+          'Arama Terimi': searchTerm || 'Yok'
+        },
+        kpiCards: [
+          { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
+          { title: 'Farklı Parça Kodu', value: Object.keys(byPartCode).length.toString() },
+          { title: 'Resimli Kayıt', value: withImages.toString() },
+          { title: 'Resimsiz Kayıt', value: withoutImages.toString() }
+        ],
+        tableData: {
+          headers: ['Kayıt Tarihi', 'İyileştirme Tarihi', 'Parça Kodu', 'İyileştirme Sebebi', 'Sonuç', 'Önce Resim', 'Sonra Resim'],
+          rows: filteredData.map(f => [
+            f.created_at ? format(new Date(f.created_at), 'dd.MM.yyyy HH:mm', { locale: tr }) : '-',
+            format(new Date(f.improvement_date), 'dd.MM.yyyy', { locale: tr }),
+            f.part_code || 'N/A',
+            f.improvement_reason ? (f.improvement_reason.length > 50 ? f.improvement_reason.substring(0, 50) + '...' : f.improvement_reason) : '-',
+            f.result ? (f.result.length > 50 ? f.result.substring(0, 50) + '...' : f.result) : '-',
+            f.before_image ? 'Var' : 'Yok',
+            f.after_image ? 'Var' : 'Yok'
+          ])
+        },
+        signatureFields: [
+          { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+          { title: 'Kontrol Eden', name: '', role: '..................' },
+          { title: 'Onaylayan', name: '', role: '..................' }
+        ]
+      };
+
+      // Parça bazlı özet ekle
+      if (Object.keys(byPartCode).length > 0) {
+        reportData.tableData.rows.push(
+          ['---', '---', '---', '---', '---', '---', '---'],
+          ...Object.entries(byPartCode)
+            .sort((a, b) => b[1] - a[1])
+            .map(([partCode, count]) => [
+              'ÖZET',
+              '-',
+              partCode,
+              `${count} iyileştirme`,
+              '-',
+              '-',
+              '-'
+            ])
+        );
+      }
+
+      await openPrintWindow(reportData, toast);
+    } catch (error) {
+      console.error('Detaylı rapor hatası:', error);
+      toast({
+        title: "Rapor Oluşturulamadı",
+        description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+        variant: "destructive"
+      });
+    }
   };
 
   const handlePrint = async (item) => {
@@ -272,6 +363,7 @@ const FixtureImprovement = () => {
             </div>
              <div className="flex space-x-2">
                 <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2"/>Yeni İyileştirme</Button>
+                <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
                 <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2"/>Yazdır</Button>
             </div>
           </div>

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Lightbulb, Plus, Edit, Trash2, Save, FileText, Search, Upload, X, Paperclip } from 'lucide-react';
+import { Lightbulb, Plus, Edit, Trash2, Save, FileText, Search, Upload, X, Paperclip, Download } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -270,6 +270,7 @@ const ProjectImprovement = () => {
             </div>
              <div className="flex space-x-2">
                 <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2"/>Yeni Proje</Button>
+                <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
                 <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2"/>Yazdır</Button>
             </div>
           </div>
