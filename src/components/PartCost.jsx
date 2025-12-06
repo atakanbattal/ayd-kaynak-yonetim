@@ -368,24 +368,60 @@ import React, { useState, useEffect, useMemo } from 'react';
             return acc;
           }, {});
 
+          // Top/Bottom analizler
+          const top10PartsByQuantity = Object.entries(byPart)
+            .map(([code, data]) => ({ code, ...data }))
+            .sort((a, b) => b.quantity - a.quantity)
+            .slice(0, 10);
+
+          const top10PartsByCost = Object.entries(byPart)
+            .map(([code, data]) => ({ code, ...data }))
+            .sort((a, b) => b.cost - a.cost)
+            .slice(0, 10);
+
+          const top10PartsByScrap = Object.entries(byPart)
+            .map(([code, data]) => ({ code, ...data, ppm: data.quantity > 0 ? (data.scrap * 1000000) / (data.quantity + data.scrap) : 0 }))
+            .sort((a, b) => b.scrap - a.scrap)
+            .slice(0, 10);
+
+          const top10LinesByQuantity = Object.entries(byLine)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.quantity - a.quantity)
+            .slice(0, 10);
+
+          const top10LinesByCost = Object.entries(byLine)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.cost - a.cost)
+            .slice(0, 10);
+
+          const top10LinesByScrapCost = Object.entries(byLine)
+            .map(([name, data]) => ({ name, ...data }))
+            .sort((a, b) => b.scrapCost - a.scrapCost)
+            .slice(0, 10);
+
           const reportId = `RPR-PC-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
           const reportData = {
-            title: 'Günlük Üretim ve Maliyet - Detaylı Rapor',
+            title: 'Günlük Üretim ve Maliyet - Detaylı Yönetici Raporu',
             reportId,
             filters: {
               'Rapor Dönemi': `${format(filters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
               'Arama Terimi': filters.searchTerm || 'Yok',
-              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+              'Toplam Gün': Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
             },
             kpiCards: [
               { title: 'Toplam Üretim', value: totalProduction.toLocaleString('tr-TR') + ' adet' },
               { title: 'Toplam Hurda', value: totalScrap.toLocaleString('tr-TR') + ' adet' },
+              { title: 'Hurda Oranı', value: totalProduction > 0 ? `${((totalScrap / (totalProduction + totalScrap)) * 100).toFixed(2)}%` : '0%' },
               { title: 'Ortalama PPM', value: Math.round(avgPPM).toString() },
               { title: 'Toplam Üretim Maliyeti', value: formatCurrency(totalProductionCost) },
               { title: 'Toplam Hurda Maliyeti', value: formatCurrency(totalScrapCost) },
+              { title: 'Ortalama Günlük Üretim', value: Math.round(totalProduction / Math.max(1, filteredDaily.length)).toLocaleString('tr-TR') + ' adet' },
+              { title: 'Ortalama Günlük Hurda', value: Math.round(totalScrap / Math.max(1, filteredDaily.length)).toLocaleString('tr-TR') + ' adet' },
               { title: 'Çalışılan Gün Sayısı', value: filteredDaily.length.toString() },
               { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() },
-              { title: 'Çalışılan Hat Sayısı', value: Object.keys(byLine).length.toString() }
+              { title: 'Çalışılan Hat Sayısı', value: Object.keys(byLine).length.toString() },
+              { title: 'Ortalama Günlük Maliyet', value: formatCurrency(totalProductionCost / Math.max(1, filteredDaily.length)) }
             ],
             tableData: {
               headers: ['Tarih', 'Parça Kodu', 'Hat', 'Kaynak Süresi (sn)', 'Üretilen Adet', 'Hurda Adedi', 'Üretim Maliyeti', 'Hurda Maliyeti', 'PPM'],
@@ -408,26 +444,107 @@ import React, { useState, useEffect, useMemo } from 'react';
             ]
           };
 
-          // Parça bazlı özet ekle
-          if (Object.keys(byPart).length > 0) {
-            reportData.tableData.rows.push(
-              ['---', '---', '---', '---', '---', '---', '---', '---', '---'],
-              ...Object.entries(byPart)
-                .sort((a, b) => b[1].quantity - a[1].quantity)
-                .slice(0, 20)
-                .map(([partCode, data]) => [
-                  'ÖZET',
-                  partCode,
-                  'Parça Özeti',
-                  '-',
-                  data.quantity.toLocaleString('tr-TR'),
-                  data.scrap.toLocaleString('tr-TR'),
-                  formatCurrency(data.cost),
-                  formatCurrency(data.scrapCost),
-                  data.quantity > 0 ? Math.round((data.scrap * 1000000) / (data.quantity + data.scrap)).toString() : '0'
-                ])
-            );
-          }
+          // Top 10 Parçalar (Adet)
+          reportData.tableData.rows.push(
+            ['===', '===', '===', '===', '===', '===', '===', '===', '==='],
+            ['TOP 10 PARÇA (EN ÇOK ÜRETİLEN)', '', '', '', '', '', '', '', ''],
+            ['Sıra', 'Parça Kodu', 'Toplam Adet', 'Hurda Adedi', 'Üretim Maliyeti', 'Hurda Maliyeti', 'PPM', 'Çalışılan Gün', ''],
+            ...top10PartsByQuantity.map((part, index) => [
+              (index + 1).toString(),
+              part.code,
+              part.quantity.toLocaleString('tr-TR'),
+              part.scrap.toLocaleString('tr-TR'),
+              formatCurrency(part.cost),
+              formatCurrency(part.scrapCost),
+              part.quantity > 0 ? Math.round((part.scrap * 1000000) / (part.quantity + part.scrap)).toString() : '0',
+              part.days.size.toString(),
+              ''
+            ])
+          );
+
+          // Top 10 Parçalar (Maliyet)
+          reportData.tableData.rows.push(
+            ['===', '===', '===', '===', '===', '===', '===', '===', '==='],
+            ['TOP 10 PARÇA (EN YÜKSEK MALİYET)', '', '', '', '', '', '', '', ''],
+            ['Sıra', 'Parça Kodu', 'Toplam Maliyet', 'Toplam Adet', 'Hurda Maliyeti', 'Hurda Adedi', 'PPM', '', ''],
+            ...top10PartsByCost.map((part, index) => [
+              (index + 1).toString(),
+              part.code,
+              formatCurrency(part.cost),
+              part.quantity.toLocaleString('tr-TR'),
+              formatCurrency(part.scrapCost),
+              part.scrap.toLocaleString('tr-TR'),
+              part.quantity > 0 ? Math.round((part.scrap * 1000000) / (part.quantity + part.scrap)).toString() : '0',
+              '', ''
+            ])
+          );
+
+          // Top 10 Parçalar (Hurda)
+          reportData.tableData.rows.push(
+            ['===', '===', '===', '===', '===', '===', '===', '===', '==='],
+            ['TOP 10 PARÇA (EN ÇOK HURDA)', '', '', '', '', '', '', '', ''],
+            ['Sıra', 'Parça Kodu', 'Hurda Adedi', 'Toplam Adet', 'Hurda Maliyeti', 'PPM', 'Hurda Oranı', '', ''],
+            ...top10PartsByScrap.map((part, index) => [
+              (index + 1).toString(),
+              part.code,
+              part.scrap.toLocaleString('tr-TR'),
+              part.quantity.toLocaleString('tr-TR'),
+              formatCurrency(part.scrapCost),
+              Math.round(part.ppm).toString(),
+              part.quantity > 0 ? `${((part.scrap / (part.quantity + part.scrap)) * 100).toFixed(2)}%` : '0%',
+              '', ''
+            ])
+          );
+
+          // Top 10 Hatlar (Adet)
+          reportData.tableData.rows.push(
+            ['===', '===', '===', '===', '===', '===', '===', '===', '==='],
+            ['TOP 10 HAT (EN ÇOK ÜRETİM)', '', '', '', '', '', '', '', ''],
+            ['Sıra', 'Hat Adı', 'Toplam Adet', 'Hurda Adedi', 'Üretim Maliyeti', 'Hurda Maliyeti', 'Farklı Parça', 'PPM', ''],
+            ...top10LinesByQuantity.map((line, index) => [
+              (index + 1).toString(),
+              line.name,
+              line.quantity.toLocaleString('tr-TR'),
+              line.scrap.toLocaleString('tr-TR'),
+              formatCurrency(line.cost),
+              formatCurrency(line.scrapCost),
+              line.parts.size.toString(),
+              line.quantity > 0 ? Math.round((line.scrap * 1000000) / (line.quantity + line.scrap)).toString() : '0',
+              ''
+            ])
+          );
+
+          // Top 10 Hatlar (Maliyet)
+          reportData.tableData.rows.push(
+            ['===', '===', '===', '===', '===', '===', '===', '===', '==='],
+            ['TOP 10 HAT (EN YÜKSEK MALİYET)', '', '', '', '', '', '', '', ''],
+            ['Sıra', 'Hat Adı', 'Toplam Maliyet', 'Toplam Adet', 'Hurda Maliyeti', 'Farklı Parça', '', '', ''],
+            ...top10LinesByCost.map((line, index) => [
+              (index + 1).toString(),
+              line.name,
+              formatCurrency(line.cost),
+              line.quantity.toLocaleString('tr-TR'),
+              formatCurrency(line.scrapCost),
+              line.parts.size.toString(),
+              '', '', ''
+            ])
+          );
+
+          // Top 10 Hatlar (Hurda Maliyeti)
+          reportData.tableData.rows.push(
+            ['===', '===', '===', '===', '===', '===', '===', '===', '==='],
+            ['TOP 10 HAT (EN YÜKSEK HURDA MALİYETİ)', '', '', '', '', '', '', '', ''],
+            ['Sıra', 'Hat Adı', 'Hurda Maliyeti', 'Hurda Adedi', 'Toplam Adet', 'Hurda Oranı', '', '', ''],
+            ...top10LinesByScrapCost.map((line, index) => [
+              (index + 1).toString(),
+              line.name,
+              formatCurrency(line.scrapCost),
+              line.scrap.toLocaleString('tr-TR'),
+              line.quantity.toLocaleString('tr-TR'),
+              line.quantity > 0 ? `${((line.scrap / (line.quantity + line.scrap)) * 100).toFixed(2)}%` : '0%',
+              '', '', ''
+            ])
+          );
 
           await openPrintWindow(reportData, toast);
         } catch (error) {

@@ -413,7 +413,7 @@ const ManualDataTracking = () => {
 
     const handleGenerateReport = async () => {
         try {
-            toast({ title: "Manuel veri raporu hazırlanıyor...", description: "Tüm veriler toplanıyor." });
+            toast({ title: "Detaylı manuel veri raporu hazırlanıyor...", description: "Tüm veriler ve analizler toplanıyor, lütfen bekleyin." });
 
             const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
             const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
@@ -436,36 +436,158 @@ const ManualDataTracking = () => {
             const totalRepairCost = repairRecords.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
             const totalDuration = manualRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0) + repairRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
 
-            // Hat bazlı analiz
+            // Hat bazlı analiz - Manuel
             const manualByLine = manualRecords.reduce((acc, r) => {
                 const lineName = r.line?.name || 'Belirtilmemiş';
                 if (!acc[lineName]) {
-                    acc[lineName] = { quantity: 0, cost: 0, records: 0 };
+                    acc[lineName] = { quantity: 0, cost: 0, records: 0, duration: 0 };
                 }
                 acc[lineName].quantity += r.quantity || 0;
                 acc[lineName].cost += r.manual_cost || 0;
                 acc[lineName].records++;
+                acc[lineName].duration += r.duration_seconds || 0;
                 return acc;
             }, {});
 
-            const repairByLine = repairRecords.reduce((acc, r) => {
-                const lineName = r.repair_line?.name || 'Belirtilmemiş';
+            // Hat bazlı analiz - Tamir (kaynak hat)
+            const repairBySourceLine = repairRecords.reduce((acc, r) => {
+                const lineName = r.source_line?.name || 'Belirtilmemiş';
                 if (!acc[lineName]) {
-                    acc[lineName] = { quantity: 0, cost: 0, records: 0 };
+                    acc[lineName] = { quantity: 0, cost: 0, records: 0, duration: 0 };
                 }
                 acc[lineName].quantity += r.quantity || 0;
                 acc[lineName].cost += r.repair_cost || 0;
                 acc[lineName].records++;
+                acc[lineName].duration += r.duration_seconds || 0;
                 return acc;
             }, {});
 
+            // Hat bazlı analiz - Tamir (tamir hat)
+            const repairByRepairLine = repairRecords.reduce((acc, r) => {
+                const lineName = r.repair_line?.name || 'Belirtilmemiş';
+                if (!acc[lineName]) {
+                    acc[lineName] = { quantity: 0, cost: 0, records: 0, duration: 0 };
+                }
+                acc[lineName].quantity += r.quantity || 0;
+                acc[lineName].cost += r.repair_cost || 0;
+                acc[lineName].records++;
+                acc[lineName].duration += r.duration_seconds || 0;
+                return acc;
+            }, {});
+
+            // Personel bazlı analiz
+            const employeeStats = {};
+            [...manualRecords, ...repairRecords].forEach(r => {
+                const empId = r.operator_id;
+                if (!empId) return;
+                const emp = allEmployees.find(e => e.id === empId);
+                const empName = emp ? `${emp.registration_number} - ${emp.first_name} ${emp.last_name}` : 'Bilinmeyen';
+                
+                if (!employeeStats[empId]) {
+                    employeeStats[empId] = {
+                        name: empName,
+                        registrationNumber: emp?.registration_number || '',
+                        quantity: 0,
+                        cost: 0,
+                        records: 0,
+                        duration: 0,
+                        manualQuantity: 0,
+                        repairQuantity: 0,
+                        parts: {}
+                    };
+                }
+                employeeStats[empId].quantity += r.quantity || 0;
+                employeeStats[empId].cost += (r.manual_cost || 0) + (r.repair_cost || 0);
+                employeeStats[empId].records++;
+                employeeStats[empId].duration += r.duration_seconds || 0;
+                
+                if (r.part_code) {
+                    if (!employeeStats[empId].parts[r.part_code]) {
+                        employeeStats[empId].parts[r.part_code] = 0;
+                    }
+                    employeeStats[empId].parts[r.part_code] += r.quantity || 0;
+                }
+                
+                if (r.line_id) {
+                    employeeStats[empId].manualQuantity += r.quantity || 0;
+                } else if (r.repair_line_id) {
+                    employeeStats[empId].repairQuantity += r.quantity || 0;
+                }
+            });
+
+            // Vardiya bazlı analiz
+            const shiftStats = {
+                '1': { manual: { quantity: 0, cost: 0, records: 0 }, repair: { quantity: 0, cost: 0, records: 0 } },
+                '2': { manual: { quantity: 0, cost: 0, records: 0 }, repair: { quantity: 0, cost: 0, records: 0 } },
+                '3': { manual: { quantity: 0, cost: 0, records: 0 }, repair: { quantity: 0, cost: 0, records: 0 } }
+            };
+
+            manualRecords.forEach(r => {
+                const shift = r.shift || '1';
+                if (shiftStats[shift]) {
+                    shiftStats[shift].manual.quantity += r.quantity || 0;
+                    shiftStats[shift].manual.cost += r.manual_cost || 0;
+                    shiftStats[shift].manual.records++;
+                }
+            });
+
+            repairRecords.forEach(r => {
+                const shift = r.shift || '1';
+                if (shiftStats[shift]) {
+                    shiftStats[shift].repair.quantity += r.quantity || 0;
+                    shiftStats[shift].repair.cost += r.repair_cost || 0;
+                    shiftStats[shift].repair.records++;
+                }
+            });
+
+            // Parça bazlı analiz
+            const partStats = {};
+            manualRecords.forEach(r => {
+                const partCode = r.part_code || 'Belirtilmemiş';
+                if (!partStats[partCode]) {
+                    partStats[partCode] = { quantity: 0, cost: 0, records: 0, employees: new Set() };
+                }
+                partStats[partCode].quantity += r.quantity || 0;
+                partStats[partCode].cost += r.manual_cost || 0;
+                partStats[partCode].records++;
+                if (r.operator_id) partStats[partCode].employees.add(r.operator_id);
+            });
+
+            // Top 10 ve Bottom 10 personel
+            const employeeArray = Object.entries(employeeStats).map(([id, stats]) => ({ id, ...stats }));
+            const top10Employees = [...employeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
+            const bottom10Employees = [...employeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
+
+            // En çok manuele gönderen hatlar (adet ve maliyet)
+            const topManualLines = Object.entries(manualByLine)
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.quantity - a.quantity)
+                .slice(0, 10);
+
+            const topManualLinesByCost = Object.entries(manualByLine)
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.cost - a.cost)
+                .slice(0, 10);
+
+            // En çok tamire gönderen hatlar (kaynak hat - adet ve maliyet)
+            const topRepairSourceLines = Object.entries(repairBySourceLine)
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.quantity - a.quantity)
+                .slice(0, 10);
+
+            const topRepairSourceLinesByCost = Object.entries(repairBySourceLine)
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.cost - a.cost)
+                .slice(0, 10);
+
             const reportId = `RPR-MANUAL-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
             const reportData = {
-                title: 'Manuel Veri Takibi - Detaylı Rapor',
+                title: 'Manuel Veri Takibi - Detaylı Yönetici Raporu',
                 reportId,
                 filters: {
                     'Rapor Dönemi': `${format(filters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
-                    'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+                    'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+                    'Toplam Gün': Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
                 },
                 kpiCards: [
                     { title: 'Toplam Manuel Üretim', value: totalManualQuantity.toLocaleString('tr-TR') + ' adet' },
@@ -473,10 +595,14 @@ const ManualDataTracking = () => {
                     { title: 'Toplam Tamir Adedi', value: totalRepairQuantity.toLocaleString('tr-TR') + ' adet' },
                     { title: 'Toplam Tamir Maliyeti', value: formatCurrency(totalRepairCost) },
                     { title: 'Toplam Süre', value: `${Math.floor(totalDuration / 3600)} saat ${Math.floor((totalDuration % 3600) / 60)} dakika` },
-                    { title: 'Toplam Kayıt', value: (manualRecords.length + repairRecords.length).toString() }
+                    { title: 'Toplam Kayıt', value: (manualRecords.length + repairRecords.length).toString() },
+                    { title: 'Ortalama Günlük Manuel', value: Math.round(totalManualQuantity / Math.max(1, Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1)).toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Ortalama Günlük Tamir', value: Math.round(totalRepairQuantity / Math.max(1, Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1))).toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Toplam Personel Sayısı', value: Object.keys(employeeStats).length.toString() },
+                    { title: 'Farklı Parça Sayısı', value: Object.keys(partStats).length.toString() }
                 ],
                 tableData: {
-                    headers: ['Tarih', 'Vardiya', 'Tip', 'Parça Kodu', 'Hat', 'Operatör', 'Adet', 'Süre (sn)', 'Maliyet'],
+                    headers: ['Tarih', 'Vardiya', 'Tip', 'Parça Kodu', 'Hat', 'Operatör', 'Adet', 'Süre (sn)', 'Maliyet', 'Açıklama'],
                     rows: [
                         ...manualRecords.map(r => [
                             format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr }),
@@ -487,7 +613,8 @@ const ManualDataTracking = () => {
                             r.operator ? `${r.operator.registration_number} - ${r.operator.first_name} ${r.operator.last_name}` : 'N/A',
                             (r.quantity || 0).toString(),
                             (r.duration_seconds || 0).toString(),
-                            formatCurrency(r.manual_cost || 0)
+                            formatCurrency(r.manual_cost || 0),
+                            r.description ? (r.description.length > 30 ? r.description.substring(0, 30) + '...' : r.description) : '-'
                         ]),
                         ...repairRecords.map(r => [
                             format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr }),
@@ -498,7 +625,8 @@ const ManualDataTracking = () => {
                             r.operator ? `${r.operator.registration_number} - ${r.operator.first_name} ${r.operator.last_name}` : 'N/A',
                             (r.quantity || 0).toString(),
                             (r.duration_seconds || 0).toString(),
-                            formatCurrency(r.repair_cost || 0)
+                            formatCurrency(r.repair_cost || 0),
+                            r.description ? (r.description.length > 30 ? r.description.substring(0, 30) + '...' : r.description) : '-'
                         ])
                     ]
                 },
@@ -509,34 +637,170 @@ const ManualDataTracking = () => {
                 ]
             };
 
-            // Hat bazlı özet ekle
-            if (Object.keys(manualByLine).length > 0 || Object.keys(repairByLine).length > 0) {
-                reportData.tableData.rows.push(
-                    ['---', '---', '---', '---', '---', '---', '---', '---', '---'],
-                    ...Object.entries(manualByLine).map(([lineName, data]) => [
-                        'ÖZET',
-                        '-',
-                        'Manuel Üretim',
-                        '-',
-                        lineName,
-                        '-',
-                        data.quantity.toLocaleString('tr-TR'),
-                        '-',
-                        formatCurrency(data.cost)
-                    ]),
-                    ...Object.entries(repairByLine).map(([lineName, data]) => [
-                        'ÖZET',
-                        '-',
-                        'Tamir',
-                        '-',
-                        lineName,
-                        '-',
-                        data.quantity.toLocaleString('tr-TR'),
-                        '-',
-                        formatCurrency(data.cost)
-                    ])
-                );
-            }
+            // En çok manuele gönderen hatlar (adet)
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['EN ÇOK MANUELE GÖNDEREN HATLAR (ADET)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Hat Adı', 'Adet', 'Maliyet', 'Kayıt Sayısı', 'Ortalama Süre (sn)', '', '', '', ''],
+                ...topManualLines.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    line.quantity.toLocaleString('tr-TR'),
+                    formatCurrency(line.cost),
+                    line.records.toString(),
+                    Math.round(line.duration / Math.max(1, line.records)).toString(),
+                    '', '', '', ''
+                ])
+            );
+
+            // En çok manuele gönderen hatlar (maliyet)
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['EN ÇOK MANUELE GÖNDEREN HATLAR (MALİYET)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Hat Adı', 'Maliyet', 'Adet', 'Kayıt Sayısı', 'Ortalama Süre (sn)', '', '', '', ''],
+                ...topManualLinesByCost.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    formatCurrency(line.cost),
+                    line.quantity.toLocaleString('tr-TR'),
+                    line.records.toString(),
+                    Math.round(line.duration / Math.max(1, line.records)).toString(),
+                    '', '', '', ''
+                ])
+            );
+
+            // En çok tamire gönderen hatlar (adet)
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['EN ÇOK TAMİRE GÖNDEREN HATLAR (ADET)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Kaynak Hat', 'Adet', 'Maliyet', 'Kayıt Sayısı', 'Ortalama Süre (sn)', '', '', '', ''],
+                ...topRepairSourceLines.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    line.quantity.toLocaleString('tr-TR'),
+                    formatCurrency(line.cost),
+                    line.records.toString(),
+                    Math.round(line.duration / Math.max(1, line.records)).toString(),
+                    '', '', '', ''
+                ])
+            );
+
+            // En çok tamire gönderen hatlar (maliyet)
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['EN ÇOK TAMİRE GÖNDEREN HATLAR (MALİYET)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Kaynak Hat', 'Maliyet', 'Adet', 'Kayıt Sayısı', 'Ortalama Süre (sn)', '', '', '', ''],
+                ...topRepairSourceLinesByCost.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    formatCurrency(line.cost),
+                    line.quantity.toLocaleString('tr-TR'),
+                    line.records.toString(),
+                    Math.round(line.duration / Math.max(1, line.records)).toString(),
+                    '', '', '', ''
+                ])
+            );
+
+            // Top 10 Personel
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['TOP 10 PERSONEL (EN YÜKSEK ÜRETİM)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Personel', 'Toplam Adet', 'Manuel Adet', 'Tamir Adet', 'Toplam Maliyet', 'Kayıt Sayısı', 'Toplam Süre (sn)', '', ''],
+                ...top10Employees.map((emp, index) => [
+                    (index + 1).toString(),
+                    emp.name,
+                    emp.quantity.toLocaleString('tr-TR'),
+                    emp.manualQuantity.toLocaleString('tr-TR'),
+                    emp.repairQuantity.toLocaleString('tr-TR'),
+                    formatCurrency(emp.cost),
+                    emp.records.toString(),
+                    emp.duration.toString(),
+                    '', ''
+                ])
+            );
+
+            // Bottom 10 Personel
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['BOTTOM 10 PERSONEL (EN DÜŞÜK ÜRETİM)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Personel', 'Toplam Adet', 'Manuel Adet', 'Tamir Adet', 'Toplam Maliyet', 'Kayıt Sayısı', 'Toplam Süre (sn)', '', ''],
+                ...bottom10Employees.map((emp, index) => [
+                    (index + 1).toString(),
+                    emp.name,
+                    emp.quantity.toLocaleString('tr-TR'),
+                    emp.manualQuantity.toLocaleString('tr-TR'),
+                    emp.repairQuantity.toLocaleString('tr-TR'),
+                    formatCurrency(emp.cost),
+                    emp.records.toString(),
+                    emp.duration.toString(),
+                    '', ''
+                ])
+            );
+
+            // Personel bazlı parça detayları
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['PERSONEL BAZLI PARÇA ADETLERİ', '', '', '', '', '', '', '', '', ''],
+                ['Personel', 'Parça Kodu', 'Adet', '', '', '', '', '', '', '']
+            );
+            top10Employees.forEach(emp => {
+                const partEntries = Object.entries(emp.parts).sort((a, b) => b[1] - a[1]);
+                partEntries.forEach(([partCode, qty]) => {
+                    reportData.tableData.rows.push([
+                        emp.name,
+                        partCode,
+                        qty.toLocaleString('tr-TR'),
+                        '', '', '', '', '', '', ''
+                    ]);
+                });
+            });
+
+            // Vardiya bazlı analiz
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['VARDIYA BAZLI ANALİZ', '', '', '', '', '', '', '', '', ''],
+                ['Vardiya', 'Tip', 'Adet', 'Maliyet', 'Kayıt Sayısı', '', '', '', '', '']
+            );
+            Object.entries(shiftStats).forEach(([shift, data]) => {
+                reportData.tableData.rows.push([
+                    getShiftLabel(shift),
+                    'Manuel Üretim',
+                    data.manual.quantity.toLocaleString('tr-TR'),
+                    formatCurrency(data.manual.cost),
+                    data.manual.records.toString(),
+                    '', '', '', '', ''
+                ]);
+                reportData.tableData.rows.push([
+                    getShiftLabel(shift),
+                    'Tamir',
+                    data.repair.quantity.toLocaleString('tr-TR'),
+                    formatCurrency(data.repair.cost),
+                    data.repair.records.toString(),
+                    '', '', '', '', ''
+                ]);
+            });
+
+            // Parça bazlı analiz
+            const topParts = Object.entries(partStats)
+                .map(([code, data]) => ({ code, ...data, employeeCount: data.employees.size }))
+                .sort((a, b) => b.quantity - a.quantity)
+                .slice(0, 20);
+
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['PARÇA BAZLI ANALİZ (TOP 20)', '', '', '', '', '', '', '', '', ''],
+                ['Parça Kodu', 'Toplam Adet', 'Toplam Maliyet', 'Kayıt Sayısı', 'Çalışan Personel Sayısı', '', '', '', '', '']
+            );
+            topParts.forEach(part => {
+                reportData.tableData.rows.push([
+                    part.code,
+                    part.quantity.toLocaleString('tr-TR'),
+                    formatCurrency(part.cost),
+                    part.records.toString(),
+                    part.employeeCount.toString(),
+                    '', '', '', '', ''
+                ]);
+            });
 
             await openPrintWindow(reportData, toast);
         } catch (error) {
