@@ -12,13 +12,17 @@ import React, { useState, useEffect } from 'react';
       DollarSign,
       ShieldCheck,
       BookUser,
-      Award
+      Award,
+      FileText,
+      Download
     } from 'lucide-react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { useToast } from '@/components/ui/use-toast';
-    import { formatCurrency } from '@/lib/utils';
+    import { formatCurrency, openPrintWindow } from '@/lib/utils';
     import { supabase } from '@/lib/customSupabaseClient';
+    import { format, startOfMonth, endOfMonth, subMonths } from 'date-fns';
+    import { tr } from 'date-fns/locale';
 
     const Dashboard = ({ user }) => {
       const [stats, setStats] = useState({
@@ -30,6 +34,7 @@ import React, { useState, useEffect } from 'react';
         totalParticipants: 0,
       });
       const [recentActivities, setRecentActivities] = useState([]);
+      const [generatingReport, setGeneratingReport] = useState(false);
       const { toast } = useToast();
       const navigate = useNavigate();
 
@@ -124,11 +129,177 @@ import React, { useState, useEffect } from 'react';
         navigate(path);
       };
 
+      const handleGenerateExecutiveReport = async () => {
+        setGeneratingReport(true);
+        try {
+          toast({ title: "Rapor hazırlanıyor...", description: "Tüm veriler toplanıyor, lütfen bekleyin." });
+
+          const today = new Date();
+          const startOfCurrentMonth = startOfMonth(today);
+          const endOfCurrentMonth = endOfMonth(today);
+          const startOfLastMonth = startOfMonth(subMonths(today, 1));
+          const endOfLastMonth = endOfMonth(subMonths(today, 1));
+
+          // Tüm verileri paralel olarak çek
+          const [
+            improvementsRes,
+            scenariosRes,
+            projectImprovementsRes,
+            fixtureImprovementsRes,
+            productionRes,
+            wpsRes,
+            trainingsRes,
+            participantsRes,
+            certificatesRes,
+            tasksRes,
+            auditLogsRes,
+            dailyProductionRes
+          ] = await Promise.all([
+            supabase.from('improvements').select('*').eq('deleted', false).gte('improvement_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('improvement_date', format(endOfCurrentMonth, 'yyyy-MM-dd')),
+            supabase.from('scenarios').select('*').eq('deleted', false).gte('scenario_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('scenario_date', format(endOfCurrentMonth, 'yyyy-MM-dd')),
+            supabase.from('project_improvements').select('*').gte('improvement_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('improvement_date', format(endOfCurrentMonth, 'yyyy-MM-dd')),
+            supabase.from('fixture_improvements').select('*').gte('improvement_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('improvement_date', format(endOfCurrentMonth, 'yyyy-MM-dd')),
+            supabase.from('production_records').select('*').gte('record_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('record_date', format(endOfCurrentMonth, 'yyyy-MM-dd')),
+            supabase.from('wps').select('*'),
+            supabase.from('trainings').select('*').gte('planned_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('planned_date', format(endOfCurrentMonth, 'yyyy-MM-dd')),
+            supabase.from('training_participants').select('*'),
+            supabase.from('training_certificates').select('*'),
+            supabase.from('tasks').select('*'),
+            supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(50),
+            supabase.from('daily_production_summary').select('*').gte('production_date', format(startOfCurrentMonth, 'yyyy-MM-dd')).lte('production_date', format(endOfCurrentMonth, 'yyyy-MM-dd'))
+          ]);
+
+          // Verileri işle
+          const improvements = improvementsRes.data || [];
+          const scenarios = scenariosRes.data || [];
+          const projectImprovements = projectImprovementsRes.data || [];
+          const fixtureImprovements = fixtureImprovementsRes.data || [];
+          const productionRecords = productionRes.data || [];
+          const wpsList = wpsRes.data || [];
+          const trainings = trainingsRes.data || [];
+          const participants = participantsRes.data || [];
+          const certificates = certificatesRes.data || [];
+          const tasks = tasksRes.data || [];
+          const auditLogs = auditLogsRes.data || [];
+          const dailyProduction = dailyProductionRes.data || [];
+
+          // İyileştirme hesaplamaları
+          const improvementSavings = improvements.reduce((acc, i) => {
+            const prevTime = Number(i.prev_time) || 0;
+            const newTime = Number(i.new_time) || 0;
+            const annualQuantity = Number(i.annual_quantity) || 0;
+            const costPerSecond = Number(i.cost_snapshot?.totalCostPerSecond) || 0;
+            const timeSaving = prevTime - newTime;
+            return acc + (timeSaving > 0 ? timeSaving * annualQuantity * costPerSecond : 0);
+          }, 0);
+
+          const scenarioSavings = scenarios.reduce((acc, s) => acc + (s.summary?.annualImprovement || 0), 0);
+          const projectImprovementSavings = projectImprovements.reduce((acc, p) => acc + (p.annual_impact || 0), 0);
+          const totalGrossProfit = improvementSavings + scenarioSavings + projectImprovementSavings;
+
+          // Üretim hesaplamaları
+          const totalProduction = dailyProduction.reduce((acc, p) => acc + (p.total_quantity || 0), 0);
+          const totalScrap = dailyProduction.reduce((acc, p) => acc + (p.total_scrap || 0), 0);
+          const totalProductionCost = dailyProduction.reduce((acc, p) => acc + (p.total_production_cost || 0), 0);
+          const totalScrapCost = dailyProduction.reduce((acc, p) => acc + (p.total_scrap_cost || 0), 0);
+
+          // Görev durumları
+          const tasksByStatus = {
+            todo: tasks.filter(t => t.status === 'todo').length,
+            inProgress: tasks.filter(t => t.status === 'in-progress').length,
+            done: tasks.filter(t => t.status === 'done').length
+          };
+
+          // Eğitim istatistikleri
+          const completedTrainings = trainings.filter(t => t.status === 'Tamamlandı').length;
+          const activeParticipants = participants.filter(p => p.participation_status === 'Katıldı').length;
+
+          // Rapor verisini hazırla
+          const reportId = `RPR-EXEC-${format(today, 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const reportData = {
+            title: 'Genel Yönetici Raporu',
+            reportId,
+            filters: {
+              'Rapor Dönemi': `${format(startOfCurrentMonth, 'dd.MM.yyyy', { locale: tr })} - ${format(endOfCurrentMonth, 'dd.MM.yyyy', { locale: tr })}`,
+              'Rapor Tarihi': format(today, 'dd.MM.yyyy HH:mm', { locale: tr }),
+              'Hazırlayan': user?.user_metadata?.name || user?.email || 'Sistem'
+            },
+            kpiCards: [
+              { title: 'Toplam Yıllık İyileştirme', value: formatCurrency(totalGrossProfit) },
+              { title: 'Toplam Üretim', value: totalProduction.toLocaleString('tr-TR') + ' adet' },
+              { title: 'Aktif WPS', value: wpsList.length + ' adet' },
+              { title: 'Toplam İyileştirme Kaydı', value: (improvements.length + scenarios.length + projectImprovements.length + fixtureImprovements.length) + ' adet' },
+              { title: 'Tamamlanan Eğitim', value: completedTrainings + ' adet' },
+              { title: 'Toplam Katılımcı', value: participants.length + ' kişi' },
+              { title: 'Verilen Sertifika', value: certificates.length + ' adet' },
+              { title: 'Aktif Görevler', value: (tasksByStatus.todo + tasksByStatus.inProgress) + ' adet' }
+            ],
+            tableData: {
+              headers: ['Kategori', 'Alt Kategori', 'Adet', 'Toplam Etki (₺)', 'Durum'],
+              rows: [
+                ['Sürekli İyileştirme', 'Çevrim Süresi İyileştirmeleri', improvements.length.toString(), formatCurrency(improvementSavings), 'Tamamlandı'],
+                ['Operasyon Azaltma', 'Senaryo Bazlı İyileştirmeler', scenarios.length.toString(), formatCurrency(scenarioSavings), 'Tamamlandı'],
+                ['Proje Bazlı İyileştirme', 'Büyük Ölçekli Projeler', projectImprovements.length.toString(), formatCurrency(projectImprovementSavings), 'Tamamlandı'],
+                ['Fikstür İyileştirme', 'Fikstür Optimizasyonları', fixtureImprovements.length.toString(), '-', 'Tamamlandı'],
+                ['Üretim', 'Günlük Üretim Kayıtları', dailyProduction.length.toString(), formatCurrency(totalProductionCost), 'Devam Ediyor'],
+                ['Üretim', 'Hurda Maliyeti', totalScrap.toString(), formatCurrency(totalScrapCost), 'İzleniyor'],
+                ['Eğitim', 'Planlanan Eğitimler', trainings.length.toString(), '-', 'Planlandı'],
+                ['Eğitim', 'Aktif Katılımcılar', activeParticipants.toString(), '-', 'Devam Ediyor'],
+                ['Eğitim', 'Verilen Sertifikalar', certificates.length.toString(), '-', 'Tamamlandı'],
+                ['Görevler', 'Bekleyen Görevler', tasksByStatus.todo.toString(), '-', 'Beklemede'],
+                ['Görevler', 'Devam Eden Görevler', tasksByStatus.inProgress.toString(), '-', 'Devam Ediyor'],
+                ['Görevler', 'Tamamlanan Görevler', tasksByStatus.done.toString(), '-', 'Tamamlandı'],
+                ['WPS', 'Aktif WPS Kayıtları', wpsList.length.toString(), '-', 'Aktif'],
+                ['Sistem', 'Sistem Aktiviteleri', auditLogs.length.toString(), '-', 'İzleniyor']
+              ]
+            },
+            signatureFields: [
+              { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+              { title: 'Kontrol Eden', name: '', role: '..................' },
+              { title: 'Onaylayan', name: '', role: '..................' }
+            ]
+          };
+
+          await openPrintWindow(reportData, toast);
+        } catch (error) {
+          console.error('Rapor oluşturma hatası:', error);
+          toast({
+            title: "Rapor Oluşturulamadı",
+            description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+            variant: "destructive"
+          });
+        } finally {
+          setGeneratingReport(false);
+        }
+      };
+
       return (
         <div className="space-y-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
-            <h1 className="text-2xl font-bold mb-2">Hoş geldiniz, {user?.name || 'Kullanıcı'}!</h1>
-            <p className="text-blue-100">AYD Kaynak Teknolojileri Üretim Yönetim Sistemi'ne hoş geldiniz. Bugünkü üretim verilerinizi ve sistem durumunu aşağıda görebilirsiniz.</p>
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-2xl font-bold mb-2">Hoş geldiniz, {user?.name || 'Kullanıcı'}!</h1>
+                <p className="text-blue-100">AYD Kaynak Teknolojileri Üretim Yönetim Sistemi'ne hoş geldiniz. Bugünkü üretim verilerinizi ve sistem durumunu aşağıda görebilirsiniz.</p>
+              </div>
+              <Button 
+                onClick={handleGenerateExecutiveReport} 
+                disabled={generatingReport}
+                className="bg-white text-blue-600 hover:bg-blue-50 shadow-lg"
+                size="lg"
+              >
+                {generatingReport ? (
+                  <>
+                    <Clock className="mr-2 h-5 w-5 animate-spin" />
+                    Rapor Hazırlanıyor...
+                  </>
+                ) : (
+                  <>
+                    <FileText className="mr-2 h-5 w-5" />
+                    Genel Yönetici Raporu
+                  </>
+                )}
+              </Button>
+            </div>
           </motion.div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
