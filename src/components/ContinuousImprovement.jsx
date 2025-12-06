@@ -13,7 +13,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
     import { supabase } from '@/lib/customSupabaseClient';
     import { useAuth } from '@/contexts/SupabaseAuthContext';
     import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
-    import { format, startOfMonth, endOfMonth, subDays, startOfQuarter, endOfQuarter, parseISO } from 'date-fns';
+    import { format, startOfMonth, endOfMonth, subDays, startOfQuarter, endOfQuarter, parseISO, startOfDay, endOfDay } from 'date-fns';
     import { tr } from 'date-fns/locale';
     import { Combobox } from '@/components/ui/combobox';
 

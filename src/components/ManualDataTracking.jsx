@@ -13,7 +13,7 @@ import { Calendar } from '@/components/ui/calendar';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { formatCurrency, logAction } from '@/lib/utils';
+import { formatCurrency, logAction, openPrintWindow } from '@/lib/utils';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Combobox } from '@/components/ui/combobox';
@@ -409,6 +409,144 @@ const ManualDataTracking = () => {
         }
         
         fetchData();
+    };
+
+    const handleGenerateReport = async () => {
+        try {
+            toast({ title: "Manuel veri raporu hazırlanıyor...", description: "Tüm veriler toplanıyor." });
+
+            const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+            const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+            const [manualData, repairData, linesData, employeesData] = await Promise.all([
+                supabase.from('manual_production_records').select('*, line:lines(name), operator:employees(first_name, last_name, registration_number)').gte('record_date', from).lte('record_date', to),
+                supabase.from('repair_records').select('*, repair_line:lines!repair_records_repair_line_id_fkey(name), source_line:lines!repair_records_source_line_id_fkey(name), operator:employees(first_name, last_name, registration_number)').gte('record_date', from).lte('record_date', to),
+                supabase.from('lines').select('*').eq('deleted', false),
+                supabase.from('employees').select('*').eq('is_active', true)
+            ]);
+
+            const manualRecords = manualData.data || [];
+            const repairRecords = repairData.data || [];
+            const allLines = linesData.data || [];
+            const allEmployees = employeesData.data || [];
+
+            const totalManualQuantity = manualRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const totalManualCost = manualRecords.reduce((sum, r) => sum + (r.manual_cost || 0), 0);
+            const totalRepairQuantity = repairRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const totalRepairCost = repairRecords.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
+            const totalDuration = manualRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0) + repairRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+
+            // Hat bazlı analiz
+            const manualByLine = manualRecords.reduce((acc, r) => {
+                const lineName = r.line?.name || 'Belirtilmemiş';
+                if (!acc[lineName]) {
+                    acc[lineName] = { quantity: 0, cost: 0, records: 0 };
+                }
+                acc[lineName].quantity += r.quantity || 0;
+                acc[lineName].cost += r.manual_cost || 0;
+                acc[lineName].records++;
+                return acc;
+            }, {});
+
+            const repairByLine = repairRecords.reduce((acc, r) => {
+                const lineName = r.repair_line?.name || 'Belirtilmemiş';
+                if (!acc[lineName]) {
+                    acc[lineName] = { quantity: 0, cost: 0, records: 0 };
+                }
+                acc[lineName].quantity += r.quantity || 0;
+                acc[lineName].cost += r.repair_cost || 0;
+                acc[lineName].records++;
+                return acc;
+            }, {});
+
+            const reportId = `RPR-MANUAL-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+            const reportData = {
+                title: 'Manuel Veri Takibi - Detaylı Rapor',
+                reportId,
+                filters: {
+                    'Rapor Dönemi': `${format(filters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
+                    'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+                },
+                kpiCards: [
+                    { title: 'Toplam Manuel Üretim', value: totalManualQuantity.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Toplam Manuel Maliyet', value: formatCurrency(totalManualCost) },
+                    { title: 'Toplam Tamir Adedi', value: totalRepairQuantity.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Toplam Tamir Maliyeti', value: formatCurrency(totalRepairCost) },
+                    { title: 'Toplam Süre', value: `${Math.floor(totalDuration / 3600)} saat ${Math.floor((totalDuration % 3600) / 60)} dakika` },
+                    { title: 'Toplam Kayıt', value: (manualRecords.length + repairRecords.length).toString() }
+                ],
+                tableData: {
+                    headers: ['Tarih', 'Vardiya', 'Tip', 'Parça Kodu', 'Hat', 'Operatör', 'Adet', 'Süre (sn)', 'Maliyet'],
+                    rows: [
+                        ...manualRecords.map(r => [
+                            format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr }),
+                            getShiftLabel(r.shift),
+                            'Manuel Üretim',
+                            r.part_code || 'N/A',
+                            r.line?.name || 'N/A',
+                            r.operator ? `${r.operator.registration_number} - ${r.operator.first_name} ${r.operator.last_name}` : 'N/A',
+                            (r.quantity || 0).toString(),
+                            (r.duration_seconds || 0).toString(),
+                            formatCurrency(r.manual_cost || 0)
+                        ]),
+                        ...repairRecords.map(r => [
+                            format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr }),
+                            getShiftLabel(r.shift),
+                            'Tamir',
+                            '-',
+                            `${r.source_line?.name || 'N/A'} → ${r.repair_line?.name || 'N/A'}`,
+                            r.operator ? `${r.operator.registration_number} - ${r.operator.first_name} ${r.operator.last_name}` : 'N/A',
+                            (r.quantity || 0).toString(),
+                            (r.duration_seconds || 0).toString(),
+                            formatCurrency(r.repair_cost || 0)
+                        ])
+                    ]
+                },
+                signatureFields: [
+                    { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+                    { title: 'Kontrol Eden', name: '', role: '..................' },
+                    { title: 'Onaylayan', name: '', role: '..................' }
+                ]
+            };
+
+            // Hat bazlı özet ekle
+            if (Object.keys(manualByLine).length > 0 || Object.keys(repairByLine).length > 0) {
+                reportData.tableData.rows.push(
+                    ['---', '---', '---', '---', '---', '---', '---', '---', '---'],
+                    ...Object.entries(manualByLine).map(([lineName, data]) => [
+                        'ÖZET',
+                        '-',
+                        'Manuel Üretim',
+                        '-',
+                        lineName,
+                        '-',
+                        data.quantity.toLocaleString('tr-TR'),
+                        '-',
+                        formatCurrency(data.cost)
+                    ]),
+                    ...Object.entries(repairByLine).map(([lineName, data]) => [
+                        'ÖZET',
+                        '-',
+                        'Tamir',
+                        '-',
+                        lineName,
+                        '-',
+                        data.quantity.toLocaleString('tr-TR'),
+                        '-',
+                        formatCurrency(data.cost)
+                    ])
+                );
+            }
+
+            await openPrintWindow(reportData, toast);
+        } catch (error) {
+            console.error('Detaylı rapor hatası:', error);
+            toast({
+                title: "Rapor Oluşturulamadı",
+                description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+                variant: "destructive"
+            });
+        }
     };
 
     const handleEditSave = async (updatedRecord) => {
@@ -858,7 +996,7 @@ const ManualDataTracking = () => {
                                 });
                                 setShowMonthlyDialog(true);
                             }}><CalendarIcon className="mr-2 h-4 w-4"/>Aylık Toplam Gir</Button>
-                            <Button variant="outline"><FileText className="h-4 w-4 mr-2" />Raporla</Button>
+                            <Button variant="outline" onClick={handleGenerateReport}><FileText className="h-4 w-4 mr-2" />Raporla</Button>
                         </div>
                     </div>
                 </CardHeader>
