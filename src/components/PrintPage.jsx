@@ -257,71 +257,92 @@ import React, { useEffect, useState } from 'react';
     
       return (
         <div className="print-container bg-white text-gray-800 font-sans w-[210mm] min-h-[297mm] p-8">
-          <header className="text-center mb-6">
-            <h1 className="text-2xl font-bold text-gray-900">AYD Kaynak Teknolojileri Yönetim Sistemi</h1>
-            <p className="text-md text-gray-600">Kaynak Yönetim Sistemi</p>
+          {/* Professional Header */}
+          <header className="border-b-2 border-blue-800 pb-4 mb-6">
+            <div className="flex justify-between items-start">
+              <div>
+                <h1 className="text-3xl font-bold text-blue-900 mb-1">AYD Kaynak Teknolojileri</h1>
+                <p className="text-lg text-gray-600">Yönetim Sistemi</p>
+              </div>
+              <div className="text-right text-sm">
+                <p className="font-semibold text-gray-700">{reportData.title || 'Rapor'}</p>
+                <p className="text-gray-500">{reportData.reportId}</p>
+              </div>
+            </div>
           </header>
     
-          <section className="border border-gray-300 rounded-lg p-4 mb-6 grid grid-cols-2 gap-4 items-center">
-            <div>
-              <p><span className="font-semibold">Belge Türü:</span> {reportData.title}</p>
-              <p><span className="font-semibold">Rapor No:</span> {reportData.reportId}</p>
-            </div>
-            <div className="text-right">
-              <p><span className="font-semibold">Yazdırılma:</span> {today} {now}</p>
-              <p><span className="font-semibold">Sistem:</span> AYD Kaynak Teknolojileri Yönetim Sistemi</p>
+          {/* Report Info */}
+          <section className="mb-6 bg-gray-50 p-4 rounded-lg border border-gray-200">
+            <div className="grid grid-cols-2 gap-4 text-sm">
+              <div>
+                <p className="text-gray-600 mb-1">Rapor Tarihi</p>
+                <p className="font-semibold">{today} {now}</p>
+              </div>
+              {reportData.filters && Object.entries(reportData.filters).slice(0, 1).map(([key, value]) => (
+                <div key={key}>
+                  <p className="text-gray-600 mb-1">{key}</p>
+                  <p className="font-semibold">{value}</p>
+                </div>
+              ))}
             </div>
           </section>
     
-          {reportData.filters && (
+          {/* Filters */}
+          {reportData.filters && Object.keys(reportData.filters).length > 1 && (
             <section className="mb-6">
-              <h2 className="text-lg font-bold text-white bg-gray-700 p-2 rounded-t-md">FİLTRELER</h2>
-              <div className="border border-t-0 p-4 rounded-b-md grid grid-cols-2 md:grid-cols-4 gap-4">
-                {Object.entries(reportData.filters).map(([key, value]) => (
-                  <div key={key}>
-                    <p className="font-semibold text-sm">{key}</p>
-                    <p className="text-gray-600 text-sm">{value}</p>
+              <h2 className="text-sm font-semibold text-gray-700 mb-2 uppercase tracking-wide">Rapor Parametreleri</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3 text-sm">
+                {Object.entries(reportData.filters).slice(1).map(([key, value]) => (
+                  <div key={key} className="flex items-start">
+                    <span className="text-gray-600 mr-2">{key}:</span>
+                    <span className="font-medium">{value}</span>
                   </div>
                 ))}
               </div>
             </section>
           )}
     
-          {reportData.kpiCards && (
-            <section className="mb-6 grid grid-cols-2 md:grid-cols-4 gap-4">
-              {reportData.kpiCards.map((card, index) => (
-                <div key={index} className="p-4 border rounded-lg text-center">
-                  <p className="text-2xl font-bold text-blue-600">{card.value}</p>
-                  <p className="text-sm text-gray-600">{card.title}</p>
-                </div>
-              ))}
+          {/* KPI Cards */}
+          {reportData.kpiCards && reportData.kpiCards.length > 0 && (
+            <section className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Özet Bilgiler</h2>
+              <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+                {reportData.kpiCards.map((card, index) => (
+                  <div key={index} className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200 text-center">
+                    <p className="text-xs text-gray-600 mb-1 font-medium">{card.title}</p>
+                    <p className="text-xl font-bold text-blue-700">{card.value}</p>
+                  </div>
+                ))}
+              </div>
             </section>
           )}
     
           {reportData.singleItemData && (
-            <section className="mb-6">
-              <h2 className="text-lg font-bold text-white bg-blue-800 p-2 rounded-t-md">DETAYLAR</h2>
-              <table className="w-full border-collapse border border-gray-300">
-                <tbody>
-                  {Object.entries(reportData.singleItemData).map(([key, value]) => (
-                    <tr key={key} className="border-b border-gray-200">
-                      <td className="p-2 font-semibold bg-gray-50 w-1/3">{key}</td>
-                      <td className="p-2">{value}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            <section className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detay Bilgiler</h2>
+              <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                <table className="w-full">
+                  <tbody>
+                    {Object.entries(reportData.singleItemData).map(([key, value]) => (
+                      <tr key={key} className="border-b border-gray-200 last:border-0">
+                        <td className="p-2 font-semibold text-gray-700 w-1/3">{key}</td>
+                        <td className="p-2 text-gray-900">{value}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
           
           {reportData.attachments && reportData.attachments.length > 0 && (
-            <section className="mb-6">
-              <h2 className="text-lg font-bold text-white bg-green-700 p-2 rounded-t-md">KANIT DOKÜMANLARI</h2>
-              <div className="border border-t-0 p-4 rounded-b-md">
-                <ul className="list-disc pl-5 space-y-1">
+            <section className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-green-600">Kanıt Dokümanları</h2>
+              <div className="bg-green-50 rounded-lg p-4 border border-green-200">
+                <ul className="list-disc pl-5 space-y-2">
                   {reportData.attachments.map((file, index) => (
-                    <li key={index}>
-                      <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline">{file.name}</a>
+                    <li key={index} className="text-sm">
+                      <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">{file.name}</a>
                     </li>
                   ))}
                 </ul>
@@ -329,47 +350,139 @@ import React, { useEffect, useState } from 'react';
             </section>
           )}
     
-          {reportData.tableData && (
-            <section className="mb-6">
-              <h2 className="text-lg font-bold text-white bg-red-700 p-2 rounded-t-md">VERİ TABLOSU</h2>
-              <table className="w-full border-collapse border border-gray-300 text-sm">
-                <thead>
-                  <tr className="bg-gray-100">
-                    {reportData.tableData.headers.map((header, index) => (
-                      <th key={index} className="p-2 border text-left font-semibold">{header}</th>
-                    ))}
-                  </tr>
-                </thead>
-                <tbody>
-                  {reportData.tableData.rows.map((row, rowIndex) => (
-                    <tr key={rowIndex} className="border-b">
-                      {row.map((cell, cellIndex) => (
-                        <td key={cellIndex} className="p-2 border">{cell}</td>
+          {/* Sections (preferred format) */}
+          {reportData.sections && reportData.sections.length > 0 && (
+            <section className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detaylı Veriler</h2>
+              <div className="space-y-8">
+                {reportData.sections.map((section, sectionIndex) => (
+                  <div key={sectionIndex} className="break-inside-avoid">
+                    <h3 className="text-base font-bold text-blue-900 bg-blue-50 px-4 py-2 border-l-4 border-blue-600 mb-3">
+                      {section.title}
+                    </h3>
+                    {section.type === 'table' && section.headers && (
+                      <div className="overflow-x-auto">
+                        <table className="w-full border-collapse text-xs">
+                          <thead>
+                            <tr className="bg-gray-200">
+                              {section.headers.map((header, headerIndex) => (
+                                <th key={headerIndex} className="p-2 text-left font-semibold text-gray-700 border border-gray-300">
+                                  {header}
+                                </th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {section.rows && section.rows.map((row, rowIndex) => (
+                              <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50">
+                                {row.map((cell, cellIndex) => (
+                                  <td key={cellIndex} className="p-2 border border-gray-200 text-gray-800">
+                                    {cell}
+                                  </td>
+                                ))}
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    )}
+                    {section.type === 'list' && section.items && (
+                      <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
+                        {section.items.map((item, itemIndex) => (
+                          <div key={itemIndex} className="mb-4 last:mb-0">
+                            <p className="font-semibold text-gray-800 mb-2">{item.header}</p>
+                            {item.details && (
+                              <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
+                                {item.details.map((detail, detailIndex) => (
+                                  <li key={detailIndex}>{detail}</li>
+                                ))}
+                              </ul>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
+
+          {/* Table Data (fallback format) */}
+          {reportData.tableData && !reportData.sections && (
+            <section className="mb-8">
+              <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detaylı Veriler</h2>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
+                  <thead>
+                    <tr className="bg-gray-200">
+                      {reportData.tableData.headers.map((header, index) => (
+                        <th key={index} className="p-2 text-left font-semibold text-gray-700 border border-gray-300">
+                          {header}
+                        </th>
                       ))}
                     </tr>
-                  ))}
-                </tbody>
-              </table>
+                  </thead>
+                  <tbody>
+                    {reportData.tableData.rows.map((row, rowIndex) => {
+                      // Skip separator rows
+                      const isSeparator = row.every(cell => typeof cell === 'string' && (cell.startsWith('===') || cell.startsWith('---')));
+                      if (isSeparator) return null;
+                      
+                      // Check if this is a section header row
+                      const isSectionHeader = row.length > 0 && typeof row[0] === 'string' && 
+                        (row[0].includes('TOP') || row[0].includes('BOTTOM') || row[0].includes('EN ÇOK') || 
+                         row[0].includes('EN ETKİLİ') || row[0].includes('ÖZET') || row[0].includes('PERSONEL') ||
+                         row[0].includes('HAT') || row[0].includes('PARÇA') || row[0].includes('VARDIYA') ||
+                         row[0].includes('ANALİZ') || row[0].includes('BAZLI') || row[0].includes('SENARYO') ||
+                         row[0].includes('ROBOT') || row[0].includes('İYİLEŞTİRME') || row[0].includes('MANUEL') ||
+                         row[0].includes('TAMİR') || row[0].includes('GÖNDEREN'));
+                      
+                      if (isSectionHeader) {
+                        return (
+                          <tr key={rowIndex} className="bg-blue-100">
+                            <td colSpan={reportData.tableData.headers.length} className="p-3 font-bold text-blue-900 text-center border-t-2 border-b border-blue-300">
+                              {row[0]}
+                            </td>
+                          </tr>
+                        );
+                      }
+                      
+                      return (
+                        <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50">
+                          {row.map((cell, cellIndex) => (
+                            <td key={cellIndex} className="p-2 border border-gray-200 text-gray-800">
+                              {cell}
+                            </td>
+                          ))}
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
             </section>
           )}
     
           {reportData.signatureFields && (
-            <section className="signature-section mt-8">
-              <h2 className="text-lg font-bold text-white bg-gray-700 p-2 rounded-t-md">İMZA VE ONAY</h2>
-              <div className="grid grid-cols-3 gap-8 pt-4 pb-4 border border-t-0 border-gray-300 rounded-b-md text-center">
+            <section className="signature-section mt-12 pt-6 border-t-2 border-gray-300">
+              <h2 className="text-lg font-bold text-gray-800 mb-6 text-center">İmza ve Onay</h2>
+              <div className="grid grid-cols-3 gap-8">
                 {reportData.signatureFields.map((field, index) => (
-                  <div key={index} className="signature-box">
-                    <p className="font-bold mb-12">{field.title.toUpperCase()}</p>
-                    <p className="border-t border-gray-400 mx-4 pt-1">{field.name || 'Ad Soyad'}</p>
-                    <p className="text-sm text-gray-600">{field.role || ' '}</p>
+                  <div key={index} className="text-center">
+                    <p className="font-bold text-gray-700 mb-8 text-sm uppercase">{field.title}</p>
+                    <div className="border-t-2 border-gray-400 pt-2 mt-12">
+                      <p className="font-semibold text-gray-900">{field.name || 'Ad Soyad'}</p>
+                      <p className="text-xs text-gray-600 mt-1">{field.role || ' '}</p>
+                    </div>
                   </div>
                 ))}
               </div>
             </section>
           )}
     
-          <footer className="print-footer text-xs text-gray-500 flex justify-between items-center mt-auto pt-4">
-            <span>AYD Kaynak Yönetimi - Raporlama Sistemi</span>
+          <footer className="print-footer text-xs text-gray-500 flex justify-between items-center mt-12 pt-4 border-t border-gray-200">
+            <span>AYD Kaynak Teknolojileri Yönetim Sistemi</span>
             <span>Yazdırılma: {today} {now}</span>
             <span>Sayfa 1/1</span>
           </footer>
