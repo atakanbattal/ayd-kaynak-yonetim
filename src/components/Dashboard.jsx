@@ -287,13 +287,13 @@ import React, { useState, useEffect, useMemo } from 'react';
         setShowReportDialog(false);
         setGeneratingReport(true);
         try {
-          toast({ title: "Rapor hazırlanıyor...", description: "Tüm veriler toplanıyor, lütfen bekleyin." });
+          toast({ title: "Kapsamlı rapor hazırlanıyor...", description: "Tüm modüllerden veriler toplanıyor, lütfen bekleyin." });
 
           const today = new Date();
           const dateFrom = format(startOfDay(reportDateRange.from), 'yyyy-MM-dd');
           const dateTo = format(endOfDay(reportDateRange.to), 'yyyy-MM-dd');
 
-          // Tüm verileri paralel olarak çek - tarih aralığına göre
+          // TÜM VERİLERİ PARALEL OLARAK ÇEK
           const [
             improvementsRes,
             scenariosRes,
@@ -309,23 +309,35 @@ import React, { useState, useEffect, useMemo } from 'react';
             dailyProductionRes,
             linesRes,
             robotsRes,
-            employeesRes
+            employeesRes,
+            manualRecordsRes,
+            repairRecordsRes,
+            monthlyTotalsRes,
+            examResultsRes,
+            costItemsRes,
+            fixturesRes
           ] = await Promise.all([
-            supabase.from('improvements').select('*, line:lines(name), robot:robots(name), responsible:employees(first_name, last_name)').eq('deleted', false).gte('improvement_date', dateFrom).lte('improvement_date', dateTo),
-            supabase.from('scenarios').select('*, scope').eq('deleted', false).gte('scenario_date', dateFrom).lte('scenario_date', dateTo),
-            supabase.from('project_improvements').select('*').gte('improvement_date', dateFrom).lte('improvement_date', dateTo),
-            supabase.from('fixture_improvements').select('*').gte('improvement_date', dateFrom).lte('improvement_date', dateTo),
-            supabase.from('production_records').select('*, robots(name), employees(first_name, last_name), wps(wps_code)').gte('record_date', dateFrom).lte('record_date', dateTo),
-            supabase.from('wps').select('*').order('created_at', { ascending: false }),
-            supabase.from('trainings').select('*, trainer:employees(first_name, last_name)').gte('planned_date', dateFrom).lte('planned_date', dateTo),
-            supabase.from('training_participants').select('*, employee:employees(first_name, last_name, registration_number)'),
+            supabase.from('improvements').select('*, line:lines(name), robot:robots(name), responsible:employees(first_name, last_name), type').eq('deleted', false),
+            supabase.from('scenarios').select('*, scope, line:lines(name), robot:robots(name)').eq('deleted', false),
+            supabase.from('project_improvements').select('*'),
+            supabase.from('fixture_improvements').select('*, responsible:employees(first_name, last_name)').eq('deleted', false),
+            supabase.from('production_records').select('*, robot:robots(name), employee:employees(first_name, last_name), wps:wps(wps_code), line:lines(name)').gte('record_date', dateFrom).lte('record_date', dateTo),
+            supabase.from('wps').select('*, welding_process, welding_position, joint_type, material_1').order('created_at', { ascending: false }),
+            supabase.from('trainings').select('*, trainer:employees(first_name, last_name), status'),
+            supabase.from('training_participants').select('*, employee:employees(first_name, last_name, registration_number, department), participation_status, score'),
             supabase.from('training_certificates').select('*, participant:training_participants(employee:employees(first_name, last_name))'),
-            supabase.from('tasks').select('*, assignee:employees(first_name, last_name)'),
-            supabase.from('audit_log').select('*').gte('created_at', dateFrom).lte('created_at', dateTo).order('created_at', { ascending: false }).limit(100),
-            supabase.from('daily_production_summary').select('*').gte('production_date', dateFrom).lte('production_date', dateTo),
-            supabase.from('lines').select('*').eq('deleted', false),
-            supabase.from('robots').select('*').eq('deleted', false),
-            supabase.from('employees').select('*').eq('is_active', true)
+            supabase.from('tasks').select('*, assignee:employees(first_name, last_name), priority, status, due_date'),
+            supabase.from('audit_log').select('*, action, user_email, details, module').gte('created_at', dateFrom).lte('created_at', dateTo).order('created_at', { ascending: false }),
+            supabase.from('daily_production_summary').select('*, line:lines(name)').gte('production_date', dateFrom).lte('production_date', dateTo),
+            supabase.from('lines').select('*, type, second_cost').eq('deleted', false),
+            supabase.from('robots').select('*, line:lines(name)').eq('deleted', false),
+            supabase.from('employees').select('*, department, is_active, registration_number'),
+            supabase.from('manual_records').select('*, employee:employees(first_name, last_name), line:lines(name), shift').gte('record_date', dateFrom).lte('record_date', dateTo),
+            supabase.from('repair_records').select('*, employee:employees(first_name, last_name), line:lines(name), shift').gte('record_date', dateFrom).lte('record_date', dateTo),
+            supabase.from('monthly_production_totals').select('*'),
+            supabase.from('exam_results').select('*, participant:training_participants(employee:employees(first_name, last_name))'),
+            supabase.from('cost_items').select('*'),
+            supabase.from('fixtures').select('*, line:lines(name), is_revised').eq('deleted', false)
           ]);
 
           // Verileri işle
@@ -344,22 +356,132 @@ import React, { useState, useEffect, useMemo } from 'react';
           const lines = linesRes.data || [];
           const robots = robotsRes.data || [];
           const employees = employeesRes.data || [];
+          const manualRecords = manualRecordsRes.data || [];
+          const repairRecords = repairRecordsRes.data || [];
+          const monthlyTotals = monthlyTotalsRes.data || [];
+          const examResults = examResultsRes.data || [];
+          const costItems = costItemsRes.data || [];
+          const fixtures = fixturesRes.data || [];
 
-          // İyileştirme hesaplamaları - daha detaylı
-          const improvementSavings = improvements.reduce((acc, i) => {
-            const prevTime = Number(i.prev_time) || 0;
-            const newTime = Number(i.new_time) || 0;
-            const annualQuantity = Number(i.annual_quantity) || 0;
-            const costPerSecond = Number(i.cost_snapshot?.totalCostPerSecond) || 0;
-            const timeSaving = prevTime - newTime;
-            return acc + (timeSaving > 0 ? timeSaving * annualQuantity * costPerSecond : 0);
-          }, 0);
+          // ============= DETAYLI ANALİZLER =============
 
+          // 1. SÜREKLİ İYİLEŞTİRME DETAYLI ANALİZ
+          const improvementSavings = improvements.reduce((acc, i) => acc + (Number(i.impact) || 0), 0);
+          
+          // Tip bazlı iyileştirme analizi
+          const improvementsByType = improvements.reduce((acc, i) => {
+            const typeName = i.type || 'Belirtilmemiş';
+            if (!acc[typeName]) acc[typeName] = { count: 0, impact: 0 };
+            acc[typeName].count++;
+            acc[typeName].impact += Number(i.impact) || 0;
+            return acc;
+          }, {});
+
+          // Hat bazlı iyileştirme analizi
+          const improvementsByLine = improvements.reduce((acc, i) => {
+            const lineName = i.line?.name || 'Belirtilmemiş';
+            if (!acc[lineName]) acc[lineName] = { count: 0, impact: 0, avgTimeSaving: 0 };
+            acc[lineName].count++;
+            acc[lineName].impact += Number(i.impact) || 0;
+            const timeSaving = (Number(i.prev_time) || 0) - (Number(i.new_time) || 0);
+            acc[lineName].avgTimeSaving += timeSaving;
+            return acc;
+          }, {});
+
+          // Robot bazlı iyileştirme
+          const improvementsByRobot = improvements.reduce((acc, i) => {
+            const robotName = i.robot?.name || 'Belirtilmemiş';
+            if (!acc[robotName]) acc[robotName] = { count: 0, impact: 0 };
+            acc[robotName].count++;
+            acc[robotName].impact += Number(i.impact) || 0;
+            return acc;
+          }, {});
+
+          // Top 10 iyileştirme
+          const top10Improvements = [...improvements]
+            .sort((a, b) => (Number(b.impact) || 0) - (Number(a.impact) || 0))
+            .slice(0, 10);
+
+          // 2. OPERASYON AZALTMA DETAYLI ANALİZ
           const scenarioSavings = scenarios.reduce((acc, s) => acc + (s.summary?.annualImprovement || 0), 0);
-          const projectImprovementSavings = projectImprovements.reduce((acc, p) => acc + (p.annual_impact || 0), 0);
-          const totalGrossProfit = improvementSavings + scenarioSavings + projectImprovementSavings;
+          const totalTimeSavingScenarios = scenarios.reduce((acc, s) => acc + (s.summary?.totalTimeSaving || 0), 0);
+          
+          // Senaryo bazlı hat analizi
+          const scenariosByLine = scenarios.reduce((acc, s) => {
+            const lineName = s.line?.name || 'Belirtilmemiş';
+            if (!acc[lineName]) acc[lineName] = { count: 0, impact: 0, timeSaving: 0 };
+            acc[lineName].count++;
+            acc[lineName].impact += s.summary?.annualImprovement || 0;
+            acc[lineName].timeSaving += s.summary?.totalTimeSaving || 0;
+            return acc;
+          }, {});
 
-          // Üretim hesaplamaları - daha detaylı
+          // 3. PROJE BAZLI İYİLEŞTİRME DETAYLI ANALİZ
+          const projectImprovementSavings = projectImprovements.reduce((acc, p) => acc + (Number(p.annual_impact) || 0), 0);
+          const totalProjectCost = projectImprovements.reduce((acc, p) => acc + (Number(p.cost) || 0), 0);
+          const totalProjectROI = projectImprovements.reduce((acc, p) => {
+            const cost = Number(p.cost) || 0;
+            const impact = Number(p.annual_impact) || 0;
+            return acc + (cost > 0 ? ((impact - cost) / cost) * 100 : 0);
+          }, 0);
+          const avgProjectROI = projectImprovements.length > 0 ? totalProjectROI / projectImprovements.length : 0;
+
+          // Top 5 proje
+          const top5Projects = [...projectImprovements]
+            .sort((a, b) => (Number(b.annual_impact) || 0) - (Number(a.annual_impact) || 0))
+            .slice(0, 5);
+
+          // 4. FİKSTÜR İYİLEŞTİRME DETAYLI ANALİZ
+          const fixturesByResponsible = fixtureImprovements.reduce((acc, f) => {
+            const name = f.responsible ? `${f.responsible.first_name} ${f.responsible.last_name}` : 'Belirtilmemiş';
+            if (!acc[name]) acc[name] = 0;
+            acc[name]++;
+            return acc;
+          }, {});
+
+          const fixturesWithImage = fixtureImprovements.filter(f => f.image_url).length;
+
+          // 5. MANUEL VERİ TAKİP DETAYLI ANALİZ
+          const totalManualQuantity = manualRecords.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0);
+          const totalRepairQuantity = repairRecords.reduce((acc, r) => acc + (Number(r.quantity) || 0), 0);
+          const totalManualCost = manualRecords.reduce((acc, r) => acc + (Number(r.cost) || 0), 0);
+          const totalRepairCost = repairRecords.reduce((acc, r) => acc + (Number(r.cost) || 0), 0);
+
+          // Vardiya bazlı analiz
+          const manualByShift = manualRecords.reduce((acc, r) => {
+            const shift = r.shift || 'Belirtilmemiş';
+            if (!acc[shift]) acc[shift] = { count: 0, quantity: 0, cost: 0 };
+            acc[shift].count++;
+            acc[shift].quantity += Number(r.quantity) || 0;
+            acc[shift].cost += Number(r.cost) || 0;
+            return acc;
+          }, {});
+
+          // Personel bazlı manuel analiz
+          const manualByEmployee = manualRecords.reduce((acc, r) => {
+            const name = r.employee ? `${r.employee.first_name} ${r.employee.last_name}` : 'Belirtilmemiş';
+            if (!acc[name]) acc[name] = { count: 0, quantity: 0 };
+            acc[name].count++;
+            acc[name].quantity += Number(r.quantity) || 0;
+            return acc;
+          }, {});
+
+          // Hat bazlı manuel analiz
+          const manualByLine = manualRecords.reduce((acc, r) => {
+            const lineName = r.line?.name || 'Belirtilmemiş';
+            if (!acc[lineName]) acc[lineName] = { count: 0, quantity: 0, cost: 0 };
+            acc[lineName].count++;
+            acc[lineName].quantity += Number(r.quantity) || 0;
+            acc[lineName].cost += Number(r.cost) || 0;
+            return acc;
+          }, {});
+
+          // Top 10 manuel personel
+          const top10ManualEmployees = Object.entries(manualByEmployee)
+            .sort((a, b) => b[1].quantity - a[1].quantity)
+            .slice(0, 10);
+
+          // 6. ÜRETİM VE MALİYET DETAYLI ANALİZ
           const totalProduction = dailyProduction.reduce((acc, p) => acc + (p.total_quantity || 0), 0);
           const totalScrap = dailyProduction.reduce((acc, p) => acc + (p.total_scrap || 0), 0);
           const totalProductionCost = dailyProduction.reduce((acc, p) => acc + (p.total_production_cost || 0), 0);
@@ -368,111 +490,544 @@ import React, { useState, useEffect, useMemo } from 'react';
             ? dailyProduction.reduce((acc, p) => acc + (p.ppm || 0), 0) / dailyProduction.length 
             : 0;
 
-          // Görev durumları
+          // Hat bazlı üretim
+          const productionByLine = dailyProduction.reduce((acc, p) => {
+            const lineName = p.line?.name || lines.find(l => l.id === p.production_line_id)?.name || 'Bilinmeyen Hat';
+            if (!acc[lineName]) {
+              acc[lineName] = { quantity: 0, scrap: 0, cost: 0, scrapCost: 0, ppmSum: 0, days: 0 };
+            }
+            acc[lineName].quantity += p.total_quantity || 0;
+            acc[lineName].scrap += p.total_scrap || 0;
+            acc[lineName].cost += p.total_production_cost || 0;
+            acc[lineName].scrapCost += p.total_scrap_cost || 0;
+            acc[lineName].ppmSum += p.ppm || 0;
+            acc[lineName].days++;
+            return acc;
+          }, {});
+
+          // Top 5 üretim hattı
+          const top5ProductionLines = Object.entries(productionByLine)
+            .sort((a, b) => b[1].quantity - a[1].quantity)
+            .slice(0, 5);
+
+          // En düşük PPM hatları (en iyi kalite)
+          const bestQualityLines = Object.entries(productionByLine)
+            .map(([name, data]) => ({ name, avgPPM: data.days > 0 ? data.ppmSum / data.days : 0, ...data }))
+            .filter(l => l.quantity > 0)
+            .sort((a, b) => a.avgPPM - b.avgPPM)
+            .slice(0, 5);
+
+          // 7. WPS DETAYLI ANALİZ
+          const wpsInRange = wpsList.filter(w => {
+            const createdDate = format(new Date(w.created_at), 'yyyy-MM-dd');
+            return createdDate >= dateFrom && createdDate <= dateTo;
+          }).length;
+
+          // Proses bazlı WPS dağılımı
+          const wpsByProcess = wpsList.reduce((acc, w) => {
+            const process = w.welding_process || 'Belirtilmemiş';
+            if (!acc[process]) acc[process] = 0;
+            acc[process]++;
+            return acc;
+          }, {});
+
+          // Pozisyon bazlı WPS dağılımı
+          const wpsByPosition = wpsList.reduce((acc, w) => {
+            const position = w.welding_position || 'Belirtilmemiş';
+            if (!acc[position]) acc[position] = 0;
+            acc[position]++;
+            return acc;
+          }, {});
+
+          // Malzeme bazlı WPS dağılımı
+          const wpsByMaterial = wpsList.reduce((acc, w) => {
+            const material = w.material_1 || 'Belirtilmemiş';
+            if (!acc[material]) acc[material] = 0;
+            acc[material]++;
+            return acc;
+          }, {});
+
+          // 8. EĞİTİM DETAYLI ANALİZ
+          const completedTrainings = trainings.filter(t => t.status === 'Tamamlandı').length;
+          const plannedTrainings = trainings.filter(t => t.status === 'Planlandı').length;
+          const inProgressTrainings = trainings.filter(t => t.status === 'Devam Ediyor').length;
+          
+          const attendedParticipants = participants.filter(p => p.participation_status === 'Katıldı').length;
+          const participationRate = participants.length > 0 ? (attendedParticipants / participants.length) * 100 : 0;
+
+          // Eğitmen bazlı analiz
+          const trainingsByTrainer = trainings.reduce((acc, t) => {
+            const trainer = t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'Belirtilmemiş';
+            if (!acc[trainer]) acc[trainer] = { total: 0, completed: 0 };
+            acc[trainer].total++;
+            if (t.status === 'Tamamlandı') acc[trainer].completed++;
+            return acc;
+          }, {});
+
+          // Sınav sonuçları analizi
+          const passedExams = examResults.filter(e => e.passed).length;
+          const examSuccessRate = examResults.length > 0 ? (passedExams / examResults.length) * 100 : 0;
+          const avgExamScore = examResults.length > 0 
+            ? examResults.reduce((acc, e) => acc + (Number(e.score) || 0), 0) / examResults.length 
+            : 0;
+
+          // 9. GÖREV DETAYLI ANALİZ
           const tasksByStatus = {
             todo: tasks.filter(t => t.status === 'todo').length,
             inProgress: tasks.filter(t => t.status === 'in-progress').length,
             done: tasks.filter(t => t.status === 'done').length
           };
 
-          // Eğitim istatistikleri - daha detaylı
-          const completedTrainings = trainings.filter(t => t.status === 'Tamamlandı').length;
-          const activeParticipants = participants.filter(p => p.participation_status === 'Katıldı').length;
-          const trainingParticipantsInRange = participants.filter(p => {
-            const training = trainings.find(t => t.id === p.training_id);
-            return training && training.planned_date >= dateFrom && training.planned_date <= dateTo;
+          const tasksByPriority = {
+            high: tasks.filter(t => t.priority === 'high' || t.priority === 'Yüksek').length,
+            medium: tasks.filter(t => t.priority === 'medium' || t.priority === 'Orta').length,
+            low: tasks.filter(t => t.priority === 'low' || t.priority === 'Düşük').length
+          };
+
+          const overdueTasks = tasks.filter(t => {
+            if (!t.due_date || t.status === 'done') return false;
+            return new Date(t.due_date) < new Date();
           }).length;
 
-          // WPS istatistikleri
-          const wpsInRange = wpsList.filter(w => {
-            const createdDate = format(new Date(w.created_at), 'yyyy-MM-dd');
-            return createdDate >= dateFrom && createdDate <= dateTo;
-          }).length;
-
-          // İyileştirme detayları - hat bazlı
-          const improvementsByLine = improvements.reduce((acc, i) => {
-            const lineName = i.line?.name || 'Belirtilmemiş';
-            if (!acc[lineName]) acc[lineName] = 0;
-            const prevTime = Number(i.prev_time) || 0;
-            const newTime = Number(i.new_time) || 0;
-            const annualQuantity = Number(i.annual_quantity) || 0;
-            const costPerSecond = Number(i.cost_snapshot?.totalCostPerSecond) || 0;
-            const timeSaving = prevTime - newTime;
-            acc[lineName] += (timeSaving > 0 ? timeSaving * annualQuantity * costPerSecond : 0);
+          // Kişi bazlı görev dağılımı
+          const tasksByAssignee = tasks.reduce((acc, t) => {
+            const name = t.assignee ? `${t.assignee.first_name} ${t.assignee.last_name}` : 'Atanmamış';
+            if (!acc[name]) acc[name] = { total: 0, done: 0 };
+            acc[name].total++;
+            if (t.status === 'done') acc[name].done++;
             return acc;
           }, {});
 
-          // Üretim detayları - hat bazlı
-          const productionByLine = dailyProduction.reduce((acc, p) => {
-            const lineId = p.production_line_id;
-            const line = lines.find(l => l.id === lineId);
-            const lineName = line?.name || 'Bilinmeyen Hat';
-            if (!acc[lineName]) {
-              acc[lineName] = { quantity: 0, scrap: 0, cost: 0, scrapCost: 0 };
-            }
-            acc[lineName].quantity += p.total_quantity || 0;
-            acc[lineName].scrap += p.total_scrap || 0;
-            acc[lineName].cost += p.total_production_cost || 0;
-            acc[lineName].scrapCost += p.total_scrap_cost || 0;
+          // 10. DENETİM KAYITLARI DETAYLI ANALİZ
+          const auditByAction = auditLogs.reduce((acc, log) => {
+            const action = log.action || 'Belirtilmemiş';
+            if (!acc[action]) acc[action] = 0;
+            acc[action]++;
             return acc;
           }, {});
 
-          // Rapor verisini hazırla - çok daha detaylı
+          const auditByUser = auditLogs.reduce((acc, log) => {
+            const user = log.user_email || 'Belirtilmemiş';
+            if (!acc[user]) acc[user] = 0;
+            acc[user]++;
+            return acc;
+          }, {});
+
+          const auditByModule = auditLogs.reduce((acc, log) => {
+            const module = log.module || 'Belirtilmemiş';
+            if (!acc[module]) acc[module] = 0;
+            acc[module]++;
+            return acc;
+          }, {});
+
+          // 11. ANA VERİ ANALİZİ
+          const activeLines = lines.filter(l => !l.deleted).length;
+          const kayakLines = lines.filter(l => l.type === 'kaynak').length;
+          const montajLines = lines.filter(l => l.type === 'montaj').length;
+          
+          const revisedFixtures = fixtures.filter(f => f.is_revised).length;
+          const totalFixtures = fixtures.length;
+
+          // Departman bazlı personel dağılımı
+          const employeesByDepartment = employees.reduce((acc, e) => {
+            const dept = e.department || 'Belirtilmemiş';
+            if (!acc[dept]) acc[dept] = 0;
+            acc[dept]++;
+            return acc;
+          }, {});
+
+          const activeEmployees = employees.filter(e => e.is_active).length;
+
+          // ============= TOPLAM ETKİ HESAPLAMASI =============
+          const totalGrossProfit = improvementSavings + scenarioSavings + projectImprovementSavings;
+
+          // ============= RAPOR VERİSİNİ HAZIRLA =============
           const reportId = `RPR-EXEC-${format(today, 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const totalDays = Math.ceil((reportDateRange.to - reportDateRange.from) / (1000 * 60 * 60 * 24)) + 1;
+
           const reportData = {
-            title: 'Genel Yönetici Raporu',
+            title: 'KAPSAMLI YÖNETİCİ RAPORU',
             reportId,
             filters: {
               'Rapor Dönemi': `${format(reportDateRange.from, 'dd.MM.yyyy', { locale: tr })} - ${format(reportDateRange.to, 'dd.MM.yyyy', { locale: tr })}`,
               'Rapor Tarihi': format(today, 'dd.MM.yyyy HH:mm', { locale: tr }),
               'Hazırlayan': user?.user_metadata?.name || user?.email || 'Sistem',
-              'Toplam Gün Sayısı': Math.ceil((reportDateRange.to - reportDateRange.from) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
+              'Toplam Gün Sayısı': totalDays + ' gün'
             },
             kpiCards: [
-              { title: 'Toplam Yıllık İyileştirme', value: formatCurrency(totalGrossProfit) },
+              // TOPLAM ETKİ
+              { title: 'TOPLAM YILLIK ETKİ', value: formatCurrency(totalGrossProfit) },
+              { title: 'Net Kazanç (Proje Sonrası)', value: formatCurrency(totalGrossProfit - totalProjectCost) },
+              
+              // İYİLEŞTİRME ÖZETİ
+              { title: 'Sürekli İyileştirme Etkisi', value: formatCurrency(improvementSavings) },
+              { title: 'Operasyon Azaltma Etkisi', value: formatCurrency(scenarioSavings) },
+              { title: 'Proje Bazlı Etki', value: formatCurrency(projectImprovementSavings) },
+              { title: 'Ortalama Proje ROI', value: `%${avgProjectROI.toFixed(1)}` },
+              
+              // ÜRETİM ÖZETİ
               { title: 'Toplam Üretim', value: totalProduction.toLocaleString('tr-TR') + ' adet' },
               { title: 'Toplam Hurda', value: totalScrap.toLocaleString('tr-TR') + ' adet' },
               { title: 'Ortalama PPM', value: Math.round(avgPPM).toString() },
               { title: 'Üretim Maliyeti', value: formatCurrency(totalProductionCost) },
               { title: 'Hurda Maliyeti', value: formatCurrency(totalScrapCost) },
-              { title: 'Aktif WPS', value: wpsList.length + ' adet' },
-              { title: 'Dönem İçinde Oluşturulan WPS', value: wpsInRange + ' adet' },
-              { title: 'Toplam İyileştirme Kaydı', value: (improvements.length + scenarios.length + projectImprovements.length + fixtureImprovements.length) + ' adet' },
-              { title: 'Planlanan Eğitim', value: trainings.length + ' adet' },
+              { title: 'Günlük Ortalama Üretim', value: (totalDays > 0 ? Math.round(totalProduction / totalDays) : 0).toLocaleString('tr-TR') + ' adet' },
+
+              // MANUEL VERİ ÖZETİ
+              { title: 'Manuel Üretim', value: totalManualQuantity.toLocaleString('tr-TR') + ' adet' },
+              { title: 'Tamir Üretim', value: totalRepairQuantity.toLocaleString('tr-TR') + ' adet' },
+              { title: 'Manuel Maliyet', value: formatCurrency(totalManualCost) },
+              { title: 'Tamir Maliyet', value: formatCurrency(totalRepairCost) },
+              { title: 'Manuel+Tamir Toplam', value: (totalManualQuantity + totalRepairQuantity).toLocaleString('tr-TR') + ' adet' },
+
+              // İYİLEŞTİRME SAYILARI
+              { title: 'Sürekli İyileştirme Sayısı', value: improvements.length + ' adet' },
+              { title: 'Operasyon Senaryosu', value: scenarios.length + ' adet' },
+              { title: 'Proje İyileştirmesi', value: projectImprovements.length + ' adet' },
+              { title: 'Fikstür İyileştirmesi', value: fixtureImprovements.length + ' adet' },
+              { title: 'Toplam İyileştirme', value: (improvements.length + scenarios.length + projectImprovements.length + fixtureImprovements.length) + ' adet' },
+              
+              // WPS ÖZETİ
+              { title: 'Toplam WPS', value: wpsList.length + ' adet' },
+              { title: 'Dönemde Oluşturulan WPS', value: wpsInRange + ' adet' },
+              
+              // EĞİTİM ÖZETİ
+              { title: 'Toplam Eğitim', value: trainings.length + ' adet' },
               { title: 'Tamamlanan Eğitim', value: completedTrainings + ' adet' },
-              { title: 'Dönem İçi Katılımcı', value: trainingParticipantsInRange + ' kişi' },
+              { title: 'Devam Eden Eğitim', value: inProgressTrainings + ' adet' },
+              { title: 'Planlanan Eğitim', value: plannedTrainings + ' adet' },
               { title: 'Toplam Katılımcı', value: participants.length + ' kişi' },
+              { title: 'Katılım Oranı', value: `%${participationRate.toFixed(1)}` },
               { title: 'Verilen Sertifika', value: certificates.length + ' adet' },
-              { title: 'Aktif Görevler', value: (tasksByStatus.todo + tasksByStatus.inProgress) + ' adet' },
-              { title: 'Tamamlanan Görevler', value: tasksByStatus.done + ' adet' },
+              { title: 'Sınav Başarı Oranı', value: `%${examSuccessRate.toFixed(1)}` },
+              { title: 'Ortalama Sınav Puanı', value: avgExamScore.toFixed(1) },
+
+              // GÖREV ÖZETİ
+              { title: 'Toplam Görev', value: tasks.length + ' adet' },
+              { title: 'Bekleyen Görev', value: tasksByStatus.todo + ' adet' },
+              { title: 'Devam Eden Görev', value: tasksByStatus.inProgress + ' adet' },
+              { title: 'Tamamlanan Görev', value: tasksByStatus.done + ' adet' },
+              { title: 'Geciken Görev', value: overdueTasks + ' adet' },
+              { title: 'Yüksek Öncelik', value: tasksByPriority.high + ' adet' },
+
+              // SİSTEM ÖZETİ
               { title: 'Sistem Aktiviteleri', value: auditLogs.length + ' kayıt' },
-              { title: 'Aktif Hat Sayısı', value: lines.length + ' hat' },
-              { title: 'Aktif Robot Sayısı', value: robots.length + ' robot' },
-              { title: 'Aktif Personel', value: employees.length + ' kişi' }
+              { title: 'Aktif Hat', value: activeLines + ' adet' },
+              { title: 'Kaynak Hattı', value: kayakLines + ' adet' },
+              { title: 'Montaj Hattı', value: montajLines + ' adet' },
+              { title: 'Aktif Robot', value: robots.length + ' adet' },
+              { title: 'Aktif Personel', value: activeEmployees + ' kişi' },
+              { title: 'Toplam Fikstür', value: totalFixtures + ' adet' },
+              { title: 'Revize Fikstür', value: revisedFixtures + ' adet' },
+              { title: 'Maliyet Kalemi', value: costItems.length + ' adet' }
             ],
+            sections: [
+              // BÖLÜM 1: İYİLEŞTİRME DETAYLARI
+              {
+                title: '📊 SÜREKLİ İYİLEŞTİRME DETAYLI ANALİZ',
             tableData: {
-              headers: ['Kategori', 'Alt Kategori', 'Adet', 'Toplam Etki (₺)', 'Durum', 'Detay'],
-              rows: [
-                ['Sürekli İyileştirme', 'Çevrim Süresi İyileştirmeleri', improvements.length.toString(), formatCurrency(improvementSavings), 'Tamamlandı', `${improvements.filter(i => i.status === 'Tamamlandı').length} tamamlandı`],
-                ['Operasyon Azaltma', 'Senaryo Bazlı İyileştirmeler', scenarios.length.toString(), formatCurrency(scenarioSavings), 'Tamamlandı', `${scenarios.length} senaryo`],
-                ['Proje Bazlı İyileştirme', 'Büyük Ölçekli Projeler', projectImprovements.length.toString(), formatCurrency(projectImprovementSavings), 'Tamamlandı', `${projectImprovements.length} proje`],
-                ['Fikstür İyileştirme', 'Fikstür Optimizasyonları', fixtureImprovements.length.toString(), '-', 'Tamamlandı', `${fixtureImprovements.length} iyileştirme`],
-                ['Üretim', 'Günlük Üretim Kayıtları', dailyProduction.length.toString(), formatCurrency(totalProductionCost), 'Devam Ediyor', `${dailyProduction.length} gün kayıt`],
-                ['Üretim', 'Toplam Üretim Adedi', totalProduction.toLocaleString('tr-TR'), formatCurrency(totalProductionCost), 'Tamamlandı', `${dailyProduction.length} gün`],
-                ['Üretim', 'Toplam Hurda Adedi', totalScrap.toLocaleString('tr-TR'), formatCurrency(totalScrapCost), 'İzleniyor', `PPM: ${Math.round(avgPPM)}`],
-                ['Eğitim', 'Planlanan Eğitimler', trainings.length.toString(), '-', 'Planlandı', `${completedTrainings} tamamlandı`],
-                ['Eğitim', 'Aktif Katılımcılar', activeParticipants.toString(), '-', 'Devam Ediyor', `${trainingParticipantsInRange} dönem içi`],
-                ['Eğitim', 'Verilen Sertifikalar', certificates.length.toString(), '-', 'Tamamlandı', `${certificates.length} sertifika`],
-                ['Görevler', 'Bekleyen Görevler', tasksByStatus.todo.toString(), '-', 'Beklemede', `${tasksByStatus.todo} görev`],
-                ['Görevler', 'Devam Eden Görevler', tasksByStatus.inProgress.toString(), '-', 'Devam Ediyor', `${tasksByStatus.inProgress} görev`],
-                ['Görevler', 'Tamamlanan Görevler', tasksByStatus.done.toString(), '-', 'Tamamlandı', `${tasksByStatus.done} görev`],
-                ['WPS', 'Toplam WPS Kayıtları', wpsList.length.toString(), '-', 'Aktif', `${wpsInRange} dönem içi`],
-                ['Sistem', 'Sistem Aktiviteleri', auditLogs.length.toString(), '-', 'İzleniyor', `${auditLogs.length} kayıt`],
-                ['Master Data', 'Aktif Hatlar', lines.length.toString(), '-', 'Aktif', `${lines.length} hat`],
-                ['Master Data', 'Aktif Robotlar', robots.length.toString(), '-', 'Aktif', `${robots.length} robot`],
-                ['Master Data', 'Aktif Personel', employees.length.toString(), '-', 'Aktif', `${employees.length} personel`]
-              ]
-            },
+                  headers: ['İyileştirme Tipi', 'Kayıt Sayısı', 'Toplam Etki (₺)', 'Ortalama Etki (₺)'],
+                  rows: Object.entries(improvementsByType)
+                    .sort((a, b) => b[1].impact - a[1].impact)
+                    .map(([type, data]) => [
+                      type,
+                      data.count.toString(),
+                      formatCurrency(data.impact),
+                      formatCurrency(data.count > 0 ? data.impact / data.count : 0)
+                    ])
+                }
+              },
+              {
+                title: '🏭 HAT BAZLI İYİLEŞTİRME ANALİZİ',
+                tableData: {
+                  headers: ['Hat Adı', 'İyileştirme Sayısı', 'Toplam Etki (₺)', 'Toplam Süre Kazancı (sn)'],
+                  rows: Object.entries(improvementsByLine)
+                    .sort((a, b) => b[1].impact - a[1].impact)
+                    .map(([line, data]) => [
+                      line,
+                      data.count.toString(),
+                      formatCurrency(data.impact),
+                      data.avgTimeSaving.toFixed(1) + ' sn'
+                    ])
+                }
+              },
+              {
+                title: '🤖 ROBOT BAZLI İYİLEŞTİRME ANALİZİ',
+                tableData: {
+                  headers: ['Robot Adı', 'İyileştirme Sayısı', 'Toplam Etki (₺)'],
+                  rows: Object.entries(improvementsByRobot)
+                    .sort((a, b) => b[1].impact - a[1].impact)
+                    .slice(0, 10)
+                    .map(([robot, data]) => [
+                      robot,
+                      data.count.toString(),
+                      formatCurrency(data.impact)
+                    ])
+                }
+              },
+              {
+                title: '🏆 TOP 10 EN ETKİLİ İYİLEŞTİRMELER',
+                tableData: {
+                  headers: ['#', 'Açıklama', 'Hat', 'Tip', 'Yıllık Etki (₺)'],
+                  rows: top10Improvements.map((imp, idx) => [
+                    (idx + 1).toString(),
+                    (imp.description || '-').substring(0, 50),
+                    imp.line?.name || '-',
+                    imp.type || '-',
+                    formatCurrency(imp.impact || 0)
+                  ])
+                }
+              },
+
+              // BÖLÜM 2: OPERASYON AZALTMA
+              {
+                title: '⚡ OPERASYON AZALTMA HAT BAZLI ANALİZ',
+                tableData: {
+                  headers: ['Hat Adı', 'Senaryo Sayısı', 'Yıllık Etki (₺)', 'Toplam Süre Kazancı (sn)'],
+                  rows: Object.entries(scenariosByLine)
+                    .sort((a, b) => b[1].impact - a[1].impact)
+                    .map(([line, data]) => [
+                      line,
+                      data.count.toString(),
+                      formatCurrency(data.impact),
+                      data.timeSaving.toFixed(1) + ' sn'
+                    ])
+                }
+              },
+
+              // BÖLÜM 3: PROJE BAZLI İYİLEŞTİRME
+              {
+                title: '📈 TOP 5 PROJE BAZLI İYİLEŞTİRME',
+                tableData: {
+                  headers: ['Proje Adı', 'Maliyet (₺)', 'Yıllık Kazanç (₺)', 'Net Kazanç (₺)', 'ROI (%)'],
+                  rows: top5Projects.map(p => {
+                    const cost = Number(p.cost) || 0;
+                    const impact = Number(p.annual_impact) || 0;
+                    const roi = cost > 0 ? ((impact - cost) / cost) * 100 : 0;
+                    return [
+                      (p.name || '-').substring(0, 40),
+                      formatCurrency(cost),
+                formatCurrency(impact),
+                      formatCurrency(impact - cost),
+                      `%${roi.toFixed(1)}`
+                    ];
+                  })
+                }
+              },
+
+              // BÖLÜM 4: MANUEL VERİ ANALİZİ
+              {
+                title: '👷 MANUEL VERİ - VARDİYA BAZLI ANALİZ',
+                tableData: {
+                  headers: ['Vardiya', 'Kayıt Sayısı', 'Toplam Üretim', 'Toplam Maliyet (₺)'],
+                  rows: Object.entries(manualByShift)
+                    .sort((a, b) => b[1].quantity - a[1].quantity)
+                    .map(([shift, data]) => [
+                      shift + '. Vardiya',
+                      data.count.toString(),
+                      data.quantity.toLocaleString('tr-TR') + ' adet',
+                      formatCurrency(data.cost)
+                    ])
+                }
+              },
+              {
+                title: '👥 MANUEL VERİ - TOP 10 PERSONEL PERFORMANSI',
+                tableData: {
+                  headers: ['#', 'Personel', 'Kayıt Sayısı', 'Toplam Üretim'],
+                  rows: top10ManualEmployees.map(([name, data], idx) => [
+                    (idx + 1).toString(),
+                    name,
+                    data.count.toString(),
+                    data.quantity.toLocaleString('tr-TR') + ' adet'
+                  ])
+                }
+              },
+              {
+                title: '🏭 MANUEL VERİ - HAT BAZLI ANALİZ',
+                tableData: {
+                  headers: ['Hat Adı', 'Kayıt Sayısı', 'Toplam Üretim', 'Toplam Maliyet (₺)'],
+                  rows: Object.entries(manualByLine)
+                    .sort((a, b) => b[1].quantity - a[1].quantity)
+                    .map(([line, data]) => [
+                      line,
+                      data.count.toString(),
+                      data.quantity.toLocaleString('tr-TR') + ' adet',
+                      formatCurrency(data.cost)
+                    ])
+                }
+              },
+
+              // BÖLÜM 5: ÜRETİM ANALİZİ
+              {
+                title: '📊 ÜRETİM - TOP 5 HAT PERFORMANSI',
+                tableData: {
+                  headers: ['Hat Adı', 'Toplam Üretim', 'Hurda', 'PPM', 'Üretim Maliyeti (₺)'],
+                  rows: top5ProductionLines.map(([line, data]) => [
+                    line,
+                    data.quantity.toLocaleString('tr-TR') + ' adet',
+                    data.scrap.toLocaleString('tr-TR') + ' adet',
+                    (data.days > 0 ? (data.ppmSum / data.days) : 0).toFixed(0),
+                    formatCurrency(data.cost)
+                  ])
+                }
+              },
+              {
+                title: '✅ EN İYİ KALİTE HATLARI (Düşük PPM)',
+                tableData: {
+                  headers: ['Hat Adı', 'Ortalama PPM', 'Toplam Üretim', 'Hurda', 'Kalite Oranı (%)'],
+                  rows: bestQualityLines.map(line => [
+                    line.name,
+                    line.avgPPM.toFixed(0),
+                    line.quantity.toLocaleString('tr-TR') + ' adet',
+                    line.scrap.toLocaleString('tr-TR') + ' adet',
+                    ((1 - (line.scrap / (line.quantity || 1))) * 100).toFixed(2) + '%'
+                  ])
+                }
+              },
+
+              // BÖLÜM 6: WPS ANALİZİ
+              {
+                title: '🔧 WPS - PROSES DAĞILIMI',
+                tableData: {
+                  headers: ['Kaynak Prosesi', 'WPS Sayısı', 'Oran (%)'],
+                  rows: Object.entries(wpsByProcess)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([process, count]) => [
+                      process,
+                      count.toString(),
+                      `%${((count / wpsList.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+              {
+                title: '📍 WPS - POZİSYON DAĞILIMI',
+                tableData: {
+                  headers: ['Pozisyon', 'WPS Sayısı', 'Oran (%)'],
+                  rows: Object.entries(wpsByPosition)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([position, count]) => [
+                      position,
+                      count.toString(),
+                      `%${((count / wpsList.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+              {
+                title: '🔩 WPS - MALZEME DAĞILIMI',
+                tableData: {
+                  headers: ['Malzeme', 'WPS Sayısı', 'Oran (%)'],
+                  rows: Object.entries(wpsByMaterial)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10)
+                    .map(([material, count]) => [
+                      material,
+                      count.toString(),
+                      `%${((count / wpsList.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+
+              // BÖLÜM 7: EĞİTİM ANALİZİ
+              {
+                title: '📚 EĞİTİM - EĞİTMEN BAZLI ANALİZ',
+                tableData: {
+                  headers: ['Eğitmen', 'Toplam Eğitim', 'Tamamlanan', 'Tamamlanma Oranı (%)'],
+                  rows: Object.entries(trainingsByTrainer)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .map(([trainer, data]) => [
+                      trainer,
+                      data.total.toString(),
+                      data.completed.toString(),
+                      `%${((data.completed / data.total) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+
+              // BÖLÜM 8: GÖREV ANALİZİ
+              {
+                title: '📋 GÖREV - PERSONEL BAZLI ANALİZ',
+                tableData: {
+                  headers: ['Personel', 'Toplam Görev', 'Tamamlanan', 'Tamamlanma Oranı (%)'],
+                  rows: Object.entries(tasksByAssignee)
+                    .sort((a, b) => b[1].total - a[1].total)
+                    .slice(0, 10)
+                    .map(([name, data]) => [
+                      name,
+                      data.total.toString(),
+                      data.done.toString(),
+                      `%${((data.done / data.total) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+
+              // BÖLÜM 9: DENETİM ANALİZİ
+              {
+                title: '🔍 DENETİM - EYLEM TİPİ DAĞILIMI',
+                tableData: {
+                  headers: ['Eylem Tipi', 'Kayıt Sayısı', 'Oran (%)'],
+                  rows: Object.entries(auditByAction)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([action, count]) => [
+                      action,
+                      count.toString(),
+                      `%${((count / auditLogs.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+              {
+                title: '👤 DENETİM - KULLANICI BAZLI AKTİVİTE',
+                tableData: {
+                  headers: ['Kullanıcı', 'Aktivite Sayısı', 'Oran (%)'],
+                  rows: Object.entries(auditByUser)
+                    .sort((a, b) => b[1] - a[1])
+                    .slice(0, 10)
+                    .map(([user, count]) => [
+                      user,
+                      count.toString(),
+                      `%${((count / auditLogs.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+              {
+                title: '📦 DENETİM - MODÜL BAZLI AKTİVİTE',
+                tableData: {
+                  headers: ['Modül', 'Aktivite Sayısı', 'Oran (%)'],
+                  rows: Object.entries(auditByModule)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([module, count]) => [
+                      module,
+                      count.toString(),
+                      `%${((count / auditLogs.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+
+              // BÖLÜM 10: ANA VERİ ANALİZİ
+              {
+                title: '🏢 DEPARTMAN BAZLI PERSONEL DAĞILIMI',
+                tableData: {
+                  headers: ['Departman', 'Personel Sayısı', 'Oran (%)'],
+                  rows: Object.entries(employeesByDepartment)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([dept, count]) => [
+                      dept,
+                      count.toString(),
+                      `%${((count / employees.length) * 100).toFixed(1)}`
+                    ])
+                }
+              },
+
+              // FİKSTÜR ANALİZİ
+              {
+                title: '🔧 FİKSTÜR İYİLEŞTİRME - SORUMLU BAZLI',
+                tableData: {
+                  headers: ['Sorumlu', 'İyileştirme Sayısı'],
+                  rows: Object.entries(fixturesByResponsible)
+                    .sort((a, b) => b[1] - a[1])
+                    .map(([name, count]) => [name, count.toString()])
+                }
+              }
+            ],
             signatureFields: [
               { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
               { title: 'Kontrol Eden', name: '', role: '..................' },
@@ -480,34 +1035,11 @@ import React, { useState, useEffect, useMemo } from 'react';
             ]
           };
 
-          // Hat bazlı detaylar ekle
-          if (Object.keys(improvementsByLine).length > 0) {
-            reportData.tableData.rows.push(
-              ...Object.entries(improvementsByLine).map(([lineName, impact]) => [
-                'İyileştirme Detayı',
-                `${lineName} - Sürekli İyileştirme`,
-                improvements.filter(i => i.line?.name === lineName).length.toString(),
-                formatCurrency(impact),
-                'Tamamlandı',
-                `${lineName} hattı`
-              ])
-            );
-          }
-
-          if (Object.keys(productionByLine).length > 0) {
-            reportData.tableData.rows.push(
-              ...Object.entries(productionByLine).map(([lineName, data]) => [
-                'Üretim Detayı',
-                `${lineName} - Üretim`,
-                data.quantity.toLocaleString('tr-TR'),
-                formatCurrency(data.cost),
-                'Devam Ediyor',
-                `Hurda: ${data.scrap} adet`
-              ])
-            );
-          }
-
           await openPrintWindow(reportData, toast);
+          toast({ 
+            title: "Kapsamlı rapor oluşturuldu!", 
+            description: `${reportData.kpiCards.length} KPI, ${reportData.sections.length} detaylı analiz bölümü içeren rapor hazır.` 
+          });
         } catch (error) {
           console.error('Rapor oluşturma hatası:', error);
           toast({
@@ -588,7 +1120,7 @@ import React, { useState, useEffect, useMemo } from 'react';
           {/* Grafikler Bölümü */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
             {/* Haftalık Üretim Grafiği */}
-            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
               <Card>
                 <CardHeader>
                   <CardTitle className="flex items-center space-x-2">
