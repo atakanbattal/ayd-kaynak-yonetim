@@ -581,8 +581,34 @@ import React, { useEffect, useState } from 'react';
             
             if (data.certificateData) {
               setPageClass('page-landscape');
+              // Sertifika için landscape CSS'i zorla ekle
+              const landscapeStyle = document.createElement('style');
+              landscapeStyle.id = 'certificate-landscape-style';
+              landscapeStyle.textContent = `
+                @page {
+                  size: A4 landscape;
+                  margin: 0;
+                }
+                @media print {
+                  @page {
+                    size: A4 landscape;
+                    margin: 0;
+                  }
+                }
+              `;
+              // Eğer daha önce eklenmişse kaldır
+              const existingStyle = document.getElementById('certificate-landscape-style');
+              if (existingStyle) {
+                existingStyle.remove();
+              }
+              document.head.appendChild(landscapeStyle);
             } else {
               setPageClass('page-portrait');
+              // Portrait için eski landscape style'ı kaldır
+              const existingStyle = document.getElementById('certificate-landscape-style');
+              if (existingStyle) {
+                existingStyle.remove();
+              }
             }
     
             document.title = `Rapor - ${data.wpsData?.wps_code || data.title || 'Detay'}`;
