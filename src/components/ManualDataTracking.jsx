@@ -1553,6 +1553,7 @@ const ManualDataTracking = () => {
         
         // Her ay için tüm yılların verilerini birleştir
         for (let i = 0; i < 12; i++) {
+            const monthIndex = i + 1; // Ay numarası (1-12)
             const monthName = format(new Date(2020, i, 1), 'MMM', { locale: tr });
             
             let manualCost = 0;
@@ -1563,32 +1564,40 @@ const ManualDataTracking = () => {
             
             // Tüm yıllar için bu ayın verilerini topla
             yearsArray.forEach(year => {
-                const yearMonth = `${year}-${String(i + 1).padStart(2, '0')}`;
+                const yearMonth = `${year}-${String(monthIndex).padStart(2, '0')}`;
                 
-                // Manuel kayıtları filtrele
+                // Manuel kayıtları filtrele - tüm kayıtları kontrol et (filtreleme yapmadan)
                 const monthManuals = allManualRecords.filter(r => {
                     if (!r.record_date) return false;
-                    if (r.record_date < from || r.record_date > to) return false;
                     
-                    // yyyy-MM-dd formatında ise
+                    // record_date formatını kontrol et ve ayı çıkar
+                    let recordYearMonth = '';
                     if (r.record_date.length >= 7) {
-                        return r.record_date.substring(0, 7) === yearMonth;
+                        // yyyy-MM-dd veya yyyy-MM formatında
+                        recordYearMonth = r.record_date.substring(0, 7);
+                    } else {
+                        return false;
                     }
-                    // yyyy-MM formatında ise
-                    return r.record_date === yearMonth;
+                    
+                    // Ay eşleşmesi kontrolü
+                    return recordYearMonth === yearMonth;
                 });
                 
                 // Tamir kayıtlarını filtrele
                 const monthRepairs = allRepairRecords.filter(r => {
                     if (!r.record_date) return false;
-                    if (r.record_date < from || r.record_date > to) return false;
                     
-                    // yyyy-MM-dd formatında ise
+                    // record_date formatını kontrol et ve ayı çıkar
+                    let recordYearMonth = '';
                     if (r.record_date.length >= 7) {
-                        return r.record_date.substring(0, 7) === yearMonth;
+                        // yyyy-MM-dd veya yyyy-MM formatında
+                        recordYearMonth = r.record_date.substring(0, 7);
+                    } else {
+                        return false;
                     }
-                    // yyyy-MM formatında ise
-                    return r.record_date === yearMonth;
+                    
+                    // Ay eşleşmesi kontrolü
+                    return recordYearMonth === yearMonth;
                 });
                 
                 // Maliyetleri hesapla
@@ -1615,7 +1624,7 @@ const ManualDataTracking = () => {
             
             months.push({
                 month: monthName,
-                yearMonth: `${yearsArray[0] || format(new Date(), 'yyyy')}-${String(i + 1).padStart(2, '0')}`,
+                yearMonth: `${yearsArray[0] || format(new Date(), 'yyyy')}-${String(monthIndex).padStart(2, '0')}`,
                 year: hasMultipleYears ? `${yearsArray[0]}-${yearsArray[yearsArray.length - 1]}` : (yearsArray[0] || format(new Date(), 'yyyy')),
                 manualCost,
                 repairCost,
