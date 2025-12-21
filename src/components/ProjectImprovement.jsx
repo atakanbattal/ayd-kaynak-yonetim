@@ -75,23 +75,27 @@ const ProjectImprovement = () => {
   const successfulProjectsData = useMemo(() => {
     return filteredImprovements
       .map((item, index) => {
-        const annualGain = parseFloat(item.annual_impact) || 0;
-        const cost = parseFloat(item.improvement_cost) || 0;
+        const annualGain = Math.max(0, parseFloat(item.annual_impact) || 0); // Negatif değerleri 0 yap
+        const cost = Math.max(0, parseFloat(item.improvement_cost) || 0); // Negatif değerleri 0 yap
         let roi = 0;
         if (cost > 0) {
           roi = ((annualGain - cost) / cost) * 100;
         } else if (annualGain > 0) {
-          roi = Infinity; // Sonsuz ROI
+          roi = 0; // Sonsuz ROI yerine 0 göster
         }
         
+        // ROI'yi pozitif olarak sınırla (negatif ROI'leri 0 yap)
+        roi = Math.max(0, roi);
+        
         return {
-          name: item.subject.length > 20 ? item.subject.substring(0, 20) + '...' : item.subject,
+          name: item.subject.length > 25 ? item.subject.substring(0, 25) + '...' : item.subject,
           fullName: item.subject,
           annualGain: annualGain,
           cost: cost,
-          roi: isFinite(roi) ? roi : 0 // Sonsuz ROI'yi 0 olarak göster
+          roi: isFinite(roi) ? roi : 0
         };
       })
+      .filter(item => item.annualGain > 0 || item.cost > 0) // Sadece pozitif değerleri göster
       .sort((a, b) => b.annualGain - a.annualGain)
       .slice(0, 10); // Top 10
   }, [filteredImprovements]);
@@ -421,29 +425,73 @@ const ProjectImprovement = () => {
                 <CardDescription>En başarılıdan başarısıza doğru proje performansı</CardDescription>
               </CardHeader>
               <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={successfulProjectsData} layout="vertical">
+                <ResponsiveContainer width="100%" height={Math.max(400, successfulProjectsData.length * 60)}>
+                  <BarChart data={successfulProjectsData} layout="vertical" margin={{ top: 20, right: 30, left: 200, bottom: 20 }}>
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis type="number" yAxisId="left" />
-                    <XAxis type="number" yAxisId="right" orientation="top" />
-                    <YAxis dataKey="name" type="category" width={150} />
+                    <XAxis 
+                      type="number" 
+                      yAxisId="left"
+                      tickFormatter={(value) => {
+                        if (value < 0) return '';
+                        if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
+                        if (value >= 1000) return `${(value / 1000).toFixed(0)}K`;
+                        return value.toString();
+                      }}
+                    />
+                    <XAxis 
+                      type="number" 
+                      yAxisId="right" 
+                      orientation="top"
+                      tickFormatter={(value) => {
+                        if (value < 0) return '';
+                        return `${value.toFixed(0)}%`;
+                      }}
+                    />
+                    <YAxis 
+                      dataKey="name" 
+                      type="category" 
+                      width={180}
+                      tick={{ fontSize: 12 }}
+                    />
                     <Tooltip 
                       formatter={(value, name) => {
                         if (name === 'annualGain' || name === 'cost') {
-                          return formatCurrency(parseFloat(value) || 0);
+                          const numValue = parseFloat(value) || 0;
+                          if (numValue < 0) return '';
+                          return formatCurrency(numValue);
                         }
                         if (name === 'roi') {
                           const roiValue = parseFloat(value) || 0;
+                          if (roiValue < 0) return '';
                           return `${roiValue.toFixed(2)}%`;
                         }
                         return value;
                       }}
                       labelFormatter={(label) => label}
+                      contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.95)', border: '1px solid #ccc', borderRadius: '4px' }}
                     />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="annualGain" fill="#10b981" name="Yıllık Kazanç (₺)" />
-                    <Bar yAxisId="left" dataKey="cost" fill="#f97316" name="Maliyet (₺)" />
-                    <Bar yAxisId="right" dataKey="roi" fill="#3b82f6" name="ROI (%)" />
+                    <Legend wrapperStyle={{ paddingTop: '20px' }} />
+                    <Bar 
+                      yAxisId="left" 
+                      dataKey="annualGain" 
+                      fill="#10b981" 
+                      name="Yıllık Kazanç (₺)"
+                      radius={[0, 4, 4, 0]}
+                    />
+                    <Bar 
+                      yAxisId="left" 
+                      dataKey="cost" 
+                      fill="#f97316" 
+                      name="Maliyet (₺)"
+                      radius={[0, 4, 4, 0]}
+                    />
+                    <Bar 
+                      yAxisId="right" 
+                      dataKey="roi" 
+                      fill="#3b82f6" 
+                      name="ROI (%)"
+                      radius={[0, 4, 4, 0]}
+                    />
                   </BarChart>
                 </ResponsiveContainer>
               </CardContent>
