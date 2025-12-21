@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { BookUser, Plus, Eye, Trash2, Save, Calendar as CalendarIcon, FileText, Edit } from 'lucide-react';
+import { BookUser, Plus, Eye, Trash2, Save, Calendar as CalendarIcon, FileText, Edit, Search } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -14,9 +14,10 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { formatCurrency, logAction, openPrintWindow } from '@/lib/utils';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Combobox } from '@/components/ui/combobox';
+import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
 
 const shiftOptions = [
     { value: '1', label: '1. Vardiya' },
@@ -246,6 +247,12 @@ const ManualDataTracking = () => {
         shift: 'all',
         employee: 'all'
     });
+    
+    // Yeni state'ler
+    const [partCodeSearch, setPartCodeSearch] = useState('');
+    const [partCodeSearchResults, setPartCodeSearchResults] = useState([]);
+    const [showPartCodeSearch, setShowPartCodeSearch] = useState(false);
+    const [employeeAnalysisPeriod, setEmployeeAnalysisPeriod] = useState('monthly'); // 'monthly' veya 'yearly'
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -1228,6 +1235,160 @@ const ManualDataTracking = () => {
         setViewingDetails(details);
     };
     
+    // Parça kodu ile arama fonksiyonu
+    const handlePartCodeSearch = useCallback(() => {
+        if (!partCodeSearch.trim()) {
+            toast({ title: "Uyarı", description: "Lütfen bir parça kodu girin.", variant: "default" });
+            return;
+        }
+        
+        const searchTerm = partCodeSearch.trim().toUpperCase();
+        const results = [...allManualRecords]
+            .filter(r => r.part_code && r.part_code.toUpperCase().includes(searchTerm))
+            .map(r => ({
+                ...r,
+                recordType: 'manual',
+                line: lines.find(l => l.id === r.line_id),
+                operator: employees.find(e => e.id === r.operator_id)
+            }))
+            .sort((a, b) => new Date(b.record_date) - new Date(a.record_date));
+        
+        setPartCodeSearchResults(results);
+        setShowPartCodeSearch(true);
+    }, [partCodeSearch, allManualRecords, lines, employees, toast]);
+    
+    // Aylık/yıllık personel analizi
+    const employeeAnalysisData = useMemo(() => {
+        const periodStart = employeeAnalysisPeriod === 'monthly' 
+            ? startOfMonth(analysisFilters.dateRange?.from || new Date())
+            : startOfYear(analysisFilters.dateRange?.from || new Date());
+        const periodEnd = employeeAnalysisPeriod === 'monthly'
+            ? endOfMonth(analysisFilters.dateRange?.from || new Date())
+            : endOfYear(analysisFilters.dateRange?.from || new Date());
+        
+        const from = format(periodStart, 'yyyy-MM-dd');
+        const to = format(periodEnd, 'yyyy-MM-dd');
+        
+        const periodRecords = [...allManualRecords, ...allRepairRecords]
+            .filter(r => r.record_date >= from && r.record_date <= to);
+        
+        const employeeStats = {};
+        periodRecords.forEach(record => {
+            const empId = record.operator_id || 'unknown';
+            const emp = employees.find(e => e.id === empId);
+            const empName = emp ? `${emp.registration_number} - ${emp.first_name} ${emp.last_name}` : 'Bilinmeyen';
+            
+            if (!employeeStats[empId]) {
+                employeeStats[empId] = {
+                    id: empId,
+                    name: empName,
+                    quantity: 0,
+                    records: 0,
+                    manualQuantity: 0,
+                    repairQuantity: 0,
+                    cost: 0
+                };
+            }
+            
+            employeeStats[empId].quantity += record.quantity || 0;
+            employeeStats[empId].records += 1;
+            
+            if (allManualRecords.includes(record)) {
+                employeeStats[empId].manualQuantity += record.quantity || 0;
+            } else {
+                employeeStats[empId].repairQuantity += record.quantity || 0;
+            }
+            
+            // Maliyet hesapla
+            const durationSeconds = record.duration_seconds || 0;
+            const lineId = record.line_id || record.repair_line_id;
+            if (lineId) {
+                const cost = calculateCost(record.quantity, lineId, durationSeconds);
+                employeeStats[empId].cost += cost;
+            }
+        });
+        
+        const employeeArray = Object.values(employeeStats);
+        const top10 = [...employeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
+        const bottom10 = [...employeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
+        
+        return { top10, bottom10, period: employeeAnalysisPeriod };
+    }, [employeeAnalysisPeriod, analysisFilters.dateRange, allManualRecords, allRepairRecords, employees, calculateCost]);
+    
+    // BH kodu ile başlayan top10 parça (BT ve YK hariç)
+    const bhTop10Parts = useMemo(() => {
+        const bhParts = allManualRecords
+            .filter(r => {
+                const partCode = (r.part_code || '').toUpperCase();
+                return partCode.startsWith('BH') && !partCode.startsWith('BT') && !partCode.startsWith('YK');
+            })
+            .reduce((acc, r) => {
+                const code = r.part_code || 'N/A';
+                if (!acc[code]) {
+                    acc[code] = {
+                        code,
+                        quantity: 0,
+                        records: 0,
+                        employees: new Set()
+                    };
+                }
+                acc[code].quantity += r.quantity || 0;
+                acc[code].records += 1;
+                if (r.operator_id) acc[code].employees.add(r.operator_id);
+                return acc;
+            }, {});
+        
+        return Object.values(bhParts)
+            .map(p => ({ ...p, employeeCount: p.employees.size }))
+            .sort((a, b) => b.quantity - a.quantity)
+            .slice(0, 10);
+    }, [allManualRecords]);
+    
+    // Aylık bazda tamir ve manuel maliyet grafik verisi
+    const monthlyCostChartData = useMemo(() => {
+        const currentYear = format(new Date(), 'yyyy');
+        const months = [];
+        
+        for (let i = 0; i < 12; i++) {
+            const monthDate = new Date(parseInt(currentYear), i, 1);
+            const yearMonth = format(monthDate, 'yyyy-MM');
+            const monthName = format(monthDate, 'MMM', { locale: tr });
+            
+            const monthManuals = allManualRecords.filter(r => r.record_date && r.record_date.startsWith(yearMonth));
+            const monthRepairs = allRepairRecords.filter(r => r.record_date && r.record_date.startsWith(yearMonth));
+            
+            const manualCost = monthManuals.reduce((sum, r) => {
+                const durationSeconds = r.duration_seconds || 0;
+                return sum + calculateCost(r.quantity, r.line_id, durationSeconds);
+            }, 0);
+            
+            const repairCost = monthRepairs.reduce((sum, r) => {
+                const durationSeconds = r.duration_seconds || 0;
+                return sum + calculateCost(r.quantity, r.repair_line_id, durationSeconds);
+            }, 0);
+            
+            const manualQuantity = monthManuals.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const repairQuantity = monthRepairs.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            
+            const monthlyTotal = monthlyTotals[yearMonth];
+            const totalProduction = monthlyTotal?.total_production || 0;
+            
+            months.push({
+                month: monthName,
+                yearMonth,
+                manualCost,
+                repairCost,
+                manualQuantity,
+                repairQuantity,
+                totalProduction,
+                manualCostRatio: totalProduction > 0 ? (manualCost / totalProduction) * 100 : 0,
+                repairCostRatio: totalProduction > 0 ? (repairCost / totalProduction) * 100 : 0
+            });
+        }
+        
+        return months;
+    }, [allManualRecords, allRepairRecords, monthlyTotals, calculateCost]);
+    
     return (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
             <Card>
@@ -2070,7 +2231,7 @@ const ManualDataTracking = () => {
                         <CardDescription>Her vardiya için üretim miktarları ve kayıt sayıları (tüm veriler)</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-4">
+                        <div className="space-y-4 mb-6">
                             {[1, 2, 3].map(shift => {
                                 // FİLTRELENMEMİŞ verileri kullan
                                 const shiftManual = (analysisData.allManualWithShift || []).filter(r => r.calculatedShift === shift);
@@ -2098,14 +2259,214 @@ const ManualDataTracking = () => {
                                 );
                             })}
                         </div>
+                        {/* Vardiya Bazlı Grafik */}
+                        <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={(() => {
+                                return [1, 2, 3].map(shift => {
+                                    const shiftManual = (analysisData.allManualWithShift || []).filter(r => r.calculatedShift === shift);
+                                    const shiftRepair = (analysisData.allRepairWithShift || []).filter(r => r.calculatedShift === shift);
+                                    return {
+                                        vardiya: `${shift}. Vardiya`,
+                                        manuel: shiftManual.reduce((sum, r) => sum + (r.quantity || 0), 0),
+                                        tamir: shiftRepair.reduce((sum, r) => sum + (r.quantity || 0), 0),
+                                        toplam: shiftManual.reduce((sum, r) => sum + (r.quantity || 0), 0) + shiftRepair.reduce((sum, r) => sum + (r.quantity || 0), 0)
+                                    };
+                                });
+                            })()}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="vardiya" />
+                                <YAxis />
+                                <Tooltip />
+                                <Legend />
+                                <Bar dataKey="manuel" fill="#3b82f6" name="Manuel Üretim" />
+                                <Bar dataKey="tamir" fill="#f97316" name="Tamir" />
+                            </BarChart>
+                        </ResponsiveContainer>
                     </CardContent>
                 </Card>
                 
-                {/* Top 10 ve Bottom 10 Personel */}
+                {/* Parça Kodu Arama */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Parça Kodu ile Arama</CardTitle>
+                        <CardDescription>Bir parça kodunun ne zaman üretildiğini bulun</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="flex gap-2">
+                            <Input
+                                placeholder="Parça kodu girin (örn: BH123)"
+                                value={partCodeSearch}
+                                onChange={(e) => setPartCodeSearch(e.target.value)}
+                                onKeyPress={(e) => e.key === 'Enter' && handlePartCodeSearch()}
+                                className="flex-1"
+                            />
+                            <Button onClick={handlePartCodeSearch}><Search className="h-4 w-4 mr-2" />Ara</Button>
+                        </div>
+                        {partCodeSearchResults.length > 0 && (
+                            <div className="mt-4">
+                                <p className="text-sm font-semibold mb-2">
+                                    {partCodeSearchResults.length} sonuç bulundu
+                                </p>
+                                <div className="max-h-60 overflow-y-auto border rounded-lg">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 sticky top-0">
+                                            <tr>
+                                                <th className="px-3 py-2 text-left">Tarih</th>
+                                                <th className="px-3 py-2 text-left">Vardiya</th>
+                                                <th className="px-3 py-2 text-left">Operatör</th>
+                                                <th className="px-3 py-2 text-left">Hat</th>
+                                                <th className="px-3 py-2 text-right">Adet</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {partCodeSearchResults.map((r, idx) => (
+                                                <tr key={idx} className="border-b hover:bg-gray-50">
+                                                    <td className="px-3 py-2">{format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr })}</td>
+                                                    <td className="px-3 py-2">{getShiftLabel(r.shift)}</td>
+                                                    <td className="px-3 py-2">{r.operator ? `${r.operator.first_name} ${r.operator.last_name}` : 'N/A'}</td>
+                                                    <td className="px-3 py-2">{r.line?.name || 'N/A'}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold">{r.quantity}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                        )}
+                    </CardContent>
+                </Card>
+                
+                {/* BH Kodu ile Başlayan Top10 Parça */}
+                {bhTop10Parts.length > 0 && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>BH Kodu ile Başlayan Top 10 Parça</CardTitle>
+                            <CardDescription>BT ve YK kodları hariç, manuel yazılan BH kodlu parçalar</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {bhTop10Parts.map((part, index) => (
+                                    <div key={part.code} className="flex justify-between items-center p-3 bg-blue-50 rounded border-l-4 border-blue-500">
+                                        <div className="flex items-center gap-3">
+                                            <span className="text-xl font-bold text-blue-700">#{index + 1}</span>
+                                            <div>
+                                                <p className="font-semibold">{part.code}</p>
+                                                <p className="text-xs text-muted-foreground">{part.records} kayıt, {part.employeeCount} personel</p>
+                                            </div>
+                                        </div>
+                                        <span className="text-lg font-bold text-blue-600">{part.quantity.toLocaleString('tr-TR')} adet</span>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
+                
+                {/* Aylık Bazda Tamir ve Manuel Maliyet Grafiği */}
+                <Card>
+                    <CardHeader>
+                        <CardTitle>Aylık Bazda Tamir ve Manuel Maliyet Analizi</CardTitle>
+                        <CardDescription>Yıl içinde aylık maliyetler ve üretim adedine göre oranlar</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                            <BarChart data={monthlyCostChartData}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="month" />
+                                <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                                <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                                <Tooltip 
+                                    formatter={(value, name) => {
+                                        if (name === 'manualCost' || name === 'repairCost') {
+                                            return formatCurrency(value);
+                                        }
+                                        return value;
+                                    }}
+                                />
+                                <Legend />
+                                <Bar yAxisId="left" dataKey="manualCost" fill="#3b82f6" name="Manuel Maliyet (₺)" />
+                                <Bar yAxisId="left" dataKey="repairCost" fill="#f97316" name="Tamir Maliyeti (₺)" />
+                                <Line yAxisId="right" type="monotone" dataKey="manualQuantity" stroke="#10b981" strokeWidth={2} name="Manuel Adet" />
+                                <Line yAxisId="right" type="monotone" dataKey="repairQuantity" stroke="#ef4444" strokeWidth={2} name="Tamir Adet" />
+                            </BarChart>
+                        </ResponsiveContainer>
+                    </CardContent>
+                </Card>
+                
+                {/* Aylık/Yıllık Top 10 ve Bottom 10 Personel */}
+                <Card>
+                    <CardHeader>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle>Aylık/Yıllık Personel Analizi</CardTitle>
+                                <CardDescription>Seçili dönem için en başarılı ve en düşük performanslı personeller</CardDescription>
+                            </div>
+                            <Select value={employeeAnalysisPeriod} onValueChange={setEmployeeAnalysisPeriod}>
+                                <SelectTrigger className="w-40">
+                                    <SelectValue />
+                                </SelectTrigger>
+                                <SelectContent>
+                                    <SelectItem value="monthly">Aylık</SelectItem>
+                                    <SelectItem value="yearly">Yıllık</SelectItem>
+                                </SelectContent>
+                            </Select>
+                        </div>
+                    </CardHeader>
+                    <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <h4 className="font-semibold text-green-700 mb-3">🏆 Top 10 Personel</h4>
+                                <div className="space-y-2">
+                                    {employeeAnalysisData.top10.map((emp, index) => (
+                                        <div key={emp.id} className="flex justify-between items-center p-3 bg-green-50 rounded border-l-4 border-green-500">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xl font-bold text-green-700">#{index + 1}</span>
+                                                <div>
+                                                    <p className="font-semibold">{emp.name}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {emp.records} kayıt | M: {emp.manualQuantity} T: {emp.repairQuantity}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-lg font-bold text-green-600">{emp.quantity.toLocaleString('tr-TR')} adet</span>
+                                                <p className="text-xs text-muted-foreground">{formatCurrency(emp.cost)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                            <div>
+                                <h4 className="font-semibold text-red-700 mb-3">⚠️ Bottom 10 Personel</h4>
+                                <div className="space-y-2">
+                                    {employeeAnalysisData.bottom10.map((emp, index) => (
+                                        <div key={emp.id} className="flex justify-between items-center p-3 bg-red-50 rounded border-l-4 border-red-500">
+                                            <div className="flex items-center gap-3">
+                                                <span className="text-xl font-bold text-red-700">#{index + 1}</span>
+                                                <div>
+                                                    <p className="font-semibold">{emp.name}</p>
+                                                    <p className="text-xs text-muted-foreground">
+                                                        {emp.records} kayıt | M: {emp.manualQuantity} T: {emp.repairQuantity}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                            <div className="text-right">
+                                                <span className="text-lg font-bold text-red-600">{emp.quantity.toLocaleString('tr-TR')} adet</span>
+                                                <p className="text-xs text-muted-foreground">{formatCurrency(emp.cost)}</p>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </CardContent>
+                </Card>
+                
+                {/* Top 10 ve Bottom 10 Personel (Seçili Dönem) */}
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-green-700">🏆 Top 10 Personel</CardTitle>
+                            <CardTitle className="text-green-700">🏆 Top 10 Personel (Seçili Dönem)</CardTitle>
                             <CardDescription>En yüksek üretim yapan personeller</CardDescription>
                         </CardHeader>
                         <CardContent>
@@ -2151,7 +2512,7 @@ const ManualDataTracking = () => {
                     
                     <Card>
                         <CardHeader>
-                            <CardTitle className="text-red-700">⚠️ Bottom 10 Personel</CardTitle>
+                            <CardTitle className="text-red-700">⚠️ Bottom 10 Personel (Seçili Dönem)</CardTitle>
                             <CardDescription>En düşük üretim yapan personeller</CardDescription>
                         </CardHeader>
                         <CardContent>

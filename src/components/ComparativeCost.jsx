@@ -16,6 +16,7 @@ import { format, startOfMonth, endOfMonth, subMonths, startOfYear, subYears, sta
 import { tr } from 'date-fns/locale';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const initialFormState = {
   line_id: '', robot_id: '', part_code: '', annual_quantity: '',
@@ -485,6 +486,38 @@ const ComparativeCost = () => {
     return { totalAnnualImprovement, count: filteredScenarios.length, totalSavingSeconds };
   }, [filteredScenarios]);
 
+  // Başarılı hatları analiz et (en başarılıdan başarısıza doğru)
+  const successfulLinesData = useMemo(() => {
+    const lineStats = {};
+    
+    filteredScenarios.forEach(s => {
+      const lineId = s.scope?.line_id;
+      if (!lineId) return;
+      
+      const lineName = getLineName(lineId);
+      if (!lineStats[lineId]) {
+        lineStats[lineId] = {
+          lineId,
+          lineName,
+          totalGain: 0,
+          count: 0,
+          avgGain: 0
+        };
+      }
+      
+      lineStats[lineId].totalGain += s.summary?.annualImprovement || 0;
+      lineStats[lineId].count += 1;
+    });
+    
+    // Ortalama kazanç hesapla ve sırala
+    return Object.values(lineStats)
+      .map(line => ({
+        ...line,
+        avgGain: line.count > 0 ? line.totalGain / line.count : 0
+      }))
+      .sort((a, b) => b.totalGain - a.totalGain); // En başarılıdan başarısıza
+  }, [filteredScenarios]);
+
   const handleDateFilterChange = (quickSelect) => {
     const now = new Date();
     let from, to = endOfDay(now);
@@ -625,6 +658,38 @@ const ComparativeCost = () => {
             <Card><CardHeader><CardTitle className="text-xl">{dashboardData.totalSavingSeconds.toFixed(2)} sn</CardTitle><CardDescription>Toplam Süre Kazancı</CardDescription></CardHeader></Card>
             <Card><CardHeader><CardTitle className="text-xl">{filteredScenarios.length > 0 ? (filteredScenarios.reduce((sum, s) => sum + s.summary.beforeTotalTime, 0) / filteredScenarios.length).toFixed(2) : 0} sn</CardTitle><CardDescription>Ort. Önceki Süre</CardDescription></CardHeader></Card>
           </div>
+          
+          {/* Başarılı Hatlar Grafiği */}
+          {successfulLinesData.length > 0 && (
+            <Card className="mt-6">
+              <CardHeader>
+                <CardTitle>Başarılı Hatlar ve Kazanç Maliyetleri</CardTitle>
+                <CardDescription>En başarılıdan başarısıza doğru hat performansı</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={successfulLinesData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="lineName" angle={-45} textAnchor="end" height={100} />
+                    <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                    <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                    <Tooltip 
+                      formatter={(value, name) => {
+                        if (name === 'totalGain' || name === 'avgGain') {
+                          return formatCurrency(value);
+                        }
+                        return value;
+                      }}
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="totalGain" fill="#3b82f6" name="Toplam Kazanç (₺)" />
+                    <Bar yAxisId="left" dataKey="avgGain" fill="#10b981" name="Ortalama Kazanç (₺)" />
+                    <Bar yAxisId="right" dataKey="count" fill="#f97316" name="Kayıt Sayısı" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
           <Card className="mt-6">
             <CardHeader><CardTitle>İyileştirme Kayıtları</CardTitle></CardHeader>
             <CardContent>

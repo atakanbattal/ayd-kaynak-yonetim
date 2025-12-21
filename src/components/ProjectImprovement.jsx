@@ -7,12 +7,14 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { formatCurrency, logAction, openPrintWindow } from '@/lib/utils';
 import { format } from 'date-fns';
 import { tr } from 'date-fns/locale';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
 
 const initialFormState = {
   improvement_date: new Date().toISOString().split('T')[0],
@@ -34,6 +36,7 @@ const ProjectImprovement = () => {
   const [formState, setFormState] = useState(initialFormState);
   const [deleteConfirm, setDeleteConfirm] = useState(null);
   const [uploading, setUploading] = useState(false);
+  const [sortOrder, setSortOrder] = useState('success'); // 'success' veya 'cost'
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -51,12 +54,36 @@ const ProjectImprovement = () => {
   }, []);
 
   useEffect(() => {
-    const results = improvements.filter(item =>
+    let results = improvements.filter(item =>
       item.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
+    
+    // Başarılı hatları ve maliyetleri süz (en başarılıdan en başarısıza doğru)
+    if (sortOrder === 'success') {
+      // Yıllık kazanca göre sırala (en yüksekten en düşüğe)
+      results = results.sort((a, b) => (b.annual_impact || 0) - (a.annual_impact || 0));
+    } else if (sortOrder === 'cost') {
+      // Maliyet bazlı sırala (en düşük maliyetten en yükseğe)
+      results = results.sort((a, b) => (a.improvement_cost || 0) - (b.improvement_cost || 0));
+    }
+    
     setFilteredImprovements(results);
-  }, [searchTerm, improvements]);
+  }, [searchTerm, improvements, sortOrder]);
+  
+  // Başarılı projeler grafik verisi
+  const successfulProjectsData = useMemo(() => {
+    return filteredImprovements
+      .map((item, index) => ({
+        name: item.subject.length > 20 ? item.subject.substring(0, 20) + '...' : item.subject,
+        fullName: item.subject,
+        annualGain: item.annual_impact || 0,
+        cost: item.improvement_cost || 0,
+        roi: item.improvement_cost > 0 ? ((item.annual_impact - item.improvement_cost) / item.improvement_cost) * 100 : 0
+      }))
+      .sort((a, b) => b.annualGain - a.annualGain)
+      .slice(0, 10); // Top 10
+  }, [filteredImprovements]);
 
   const annualImpact = useMemo(() => {
     const prev = parseFloat(formState.previous_cost) || 0;
@@ -355,11 +382,57 @@ const ProjectImprovement = () => {
         <CardContent>
           <div className="flex justify-between items-center mb-4">
             <div className="relative w-full max-w-sm"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><Input placeholder="Proje konusu veya açıklamada ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" /></div>
-            <div className="text-right">
+            <div className="flex items-center gap-4">
+              <div className="text-right">
                 <p className="text-sm text-gray-500">Toplam Yıllık Kazanç</p>
                 <p className="text-2xl font-bold text-green-600">{formatCurrency(totalAnnualImpact)}</p>
+              </div>
+              <div className="space-y-2">
+                <Label className="text-xs">Sıralama</Label>
+                <Select value={sortOrder} onValueChange={setSortOrder}>
+                  <SelectTrigger className="w-40">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value="success">Başarıya Göre</SelectItem>
+                    <SelectItem value="cost">Maliyete Göre</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
             </div>
           </div>
+          
+          {/* Başarılı Projeler Grafiği */}
+          {successfulProjectsData.length > 0 && (
+            <Card className="mb-6">
+              <CardHeader>
+                <CardTitle>Başarılı Projeler ve Maliyetleri</CardTitle>
+                <CardDescription>En başarılıdan başarısıza doğru proje performansı</CardDescription>
+              </CardHeader>
+              <CardContent>
+                <ResponsiveContainer width="100%" height={400}>
+                  <BarChart data={successfulProjectsData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={120} />
+                    <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                    <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                    <Tooltip 
+                      formatter={(value, name) => {
+                        if (name === 'annualGain' || name === 'cost') {
+                          return formatCurrency(value);
+                        }
+                        return `${value.toFixed(2)}%`;
+                      }}
+                    />
+                    <Legend />
+                    <Bar yAxisId="left" dataKey="annualGain" fill="#10b981" name="Yıllık Kazanç (₺)" />
+                    <Bar yAxisId="left" dataKey="cost" fill="#f97316" name="Maliyet (₺)" />
+                    <Bar yAxisId="right" dataKey="roi" fill="#3b82f6" name="ROI (%)" />
+                  </BarChart>
+                </ResponsiveContainer>
+              </CardContent>
+            </Card>
+          )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredImprovements.map(item => (
               <Card key={item.id} className="hover:shadow-lg transition-shadow cursor-pointer flex flex-col" onClick={() => setViewingItem(item)}>

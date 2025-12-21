@@ -339,13 +339,65 @@ import React, { useEffect, useState } from 'react';
             <section className="mb-8">
               <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-green-600">Kanıt Dokümanları</h2>
               <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-                <ul className="list-disc pl-5 space-y-2">
-                  {reportData.attachments.map((file, index) => (
-                    <li key={index} className="text-sm">
-                      <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-blue-600 hover:underline font-medium">{file.name}</a>
-                    </li>
-                  ))}
-                </ul>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+                  {reportData.attachments.map((file, index) => {
+                    const isImage = file.type && file.type.startsWith('image/');
+                    const isPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
+                    
+                    return (
+                      <div key={index} className="border border-gray-300 rounded-lg p-3 bg-white">
+                        {isImage ? (
+                          <div className="space-y-2">
+                            <img 
+                              src={file.url} 
+                              alt={file.name} 
+                              className="w-full h-48 object-contain rounded border border-gray-200"
+                              onError={(e) => {
+                                e.target.style.display = 'none';
+                                e.target.nextSibling.style.display = 'block';
+                              }}
+                            />
+                            <div style={{ display: 'none' }} className="text-center text-gray-500 text-sm">
+                              Görsel yüklenemedi
+                            </div>
+                            <a 
+                              href={file.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-sm text-blue-600 hover:underline font-medium block text-center"
+                            >
+                              {file.name}
+                            </a>
+                          </div>
+                        ) : (
+                          <div className="space-y-2">
+                            <div className="h-48 flex items-center justify-center bg-gray-100 rounded border border-gray-200">
+                              {isPdf ? (
+                                <div className="text-center">
+                                  <div className="text-4xl mb-2">📄</div>
+                                  <p className="text-xs text-gray-600">PDF Dosyası</p>
+                                </div>
+                              ) : (
+                                <div className="text-center">
+                                  <div className="text-4xl mb-2">📎</div>
+                                  <p className="text-xs text-gray-600">Dosya</p>
+                                </div>
+                              )}
+                            </div>
+                            <a 
+                              href={file.url} 
+                              target="_blank" 
+                              rel="noopener noreferrer" 
+                              className="text-sm text-blue-600 hover:underline font-medium block text-center"
+                            >
+                              {file.name}
+                            </a>
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
             </section>
           )}

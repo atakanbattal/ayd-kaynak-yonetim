@@ -81,6 +81,38 @@ import React, { useState, useEffect, useCallback } from 'react';
         };
         openPrintWindow(reportData, toast);
       };
+      
+      // Eğitim adına göre tüm sertifikaları otomatik bas
+      const handlePrintAllCertificates = async () => {
+        const participantsWithCerts = successfulParticipants
+          .map(p => ({
+            ...p,
+            certificate: certificates.find(c => c.participant_id === p.participant.id),
+          }))
+          .filter(p => p.certificate); // Sadece sertifikası olanları al
+        
+        if (participantsWithCerts.length === 0) {
+          toast({ 
+            title: 'Uyarı', 
+            description: 'Yazdırılacak sertifika bulunamadı. Önce sertifikaları oluşturun.', 
+            variant: 'default' 
+          });
+          return;
+        }
+        
+        toast({ 
+          title: 'Bilgi', 
+          description: `${participantsWithCerts.length} adet sertifika yazdırılıyor...` 
+        });
+        
+        // Her sertifikayı sırayla yazdır (kısa gecikme ile)
+        for (let i = 0; i < participantsWithCerts.length; i++) {
+          const p = participantsWithCerts[i];
+          setTimeout(() => {
+            handleDownloadCertificate(p);
+          }, i * 500); // Her sertifika arasında 500ms bekle
+        }
+      };
     
       if (loading) {
         return <div className="flex justify-center items-center p-8"><Loader2 className="h-8 w-8 animate-spin" /></div>;
@@ -90,6 +122,8 @@ import React, { useState, useEffect, useCallback } from 'react';
         ...p,
         certificate: certificates.find(c => c.participant_id === p.participant.id),
       }));
+      
+      const hasCertificates = participantsWithCerts.filter(p => p.certificate).length > 0;
     
       return (
         <Card>
@@ -99,9 +133,18 @@ import React, { useState, useEffect, useCallback } from 'react';
                 <CardTitle>Sertifika Yönetimi</CardTitle>
                 <CardDescription>Başarılı personeller için sertifikaları yönetin.</CardDescription>
               </div>
-              <Button onClick={handleGenerateCertificates} disabled={successfulParticipants.length === 0}>
-                <RefreshCw className="mr-2 h-4 w-4" /> Sertifikaları Oluştur/Güncelle
-              </Button>
+              <div className="flex gap-2">
+                <Button onClick={handleGenerateCertificates} disabled={successfulParticipants.length === 0}>
+                  <RefreshCw className="mr-2 h-4 w-4" /> Sertifikaları Oluştur/Güncelle
+                </Button>
+                <Button 
+                  onClick={handlePrintAllCertificates} 
+                  disabled={!hasCertificates}
+                  variant="outline"
+                >
+                  <Download className="mr-2 h-4 w-4" /> Tümünü Yazdır ({trainingName})
+                </Button>
+              </div>
             </div>
           </CardHeader>
           <CardContent>
