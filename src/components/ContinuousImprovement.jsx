@@ -1293,20 +1293,33 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                                   value: data.count
                                 }))}
                                 cx="50%"
-                                cy="50%"
-                                labelLine={false}
-                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                outerRadius={120}
+                                cy="45%"
+                                labelLine={true}
+                                label={({ name, percent }) => {
+                                  // Sadece yüzde 5'ten büyük olanları göster
+                                  if (percent < 0.05) return '';
+                                  return `${(percent * 100).toFixed(0)}%`;
+                                }}
+                                outerRadius={100}
+                                innerRadius={30}
                                 fill="#8884d8"
                                 dataKey="value"
+                                paddingAngle={2}
                               >
                                 {Object.keys(analysisData.byType).map((entry, index) => (
                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                               </Pie>
                               <Tooltip 
-                                formatter={(value, name) => {
-                                  return [`${value} kayıt`, name];
+                                formatter={(value, name, props) => {
+                                  const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
+                                  const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                                  return [
+                                    <div key="tooltip">
+                                      <div className="font-semibold">{props.payload.name}</div>
+                                      <div>{value} kayıt ({percent}%)</div>
+                                    </div>
+                                  ];
                                 }}
                                 contentStyle={{ 
                                   backgroundColor: 'rgba(255, 255, 255, 0.95)', 
@@ -1317,9 +1330,23 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                                 }}
                               />
                               <Legend 
-                                wrapperStyle={{ paddingTop: '20px' }}
+                                verticalAlign="bottom"
+                                height={36}
                                 iconType="rect"
                                 iconSize={12}
+                                formatter={(value, entry) => {
+                                  const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
+                                  const item = Object.entries(analysisData.byType).find(([type]) => {
+                                    const typeName = type === 'cycle_time' ? 'Çevrim Süresi' : 
+                                                    type === 'quality' ? 'Kalite' :
+                                                    type === 'cost' ? 'Maliyet' :
+                                                    type === 'ergonomics' ? 'Ergonomi' : 'Diğer';
+                                    return typeName === value;
+                                  });
+                                  const count = item ? analysisData.byType[item[0]].count : 0;
+                                  const percent = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                                  return `${value} (${percent}%)`;
+                                }}
                               />
                             </PieChart>
                           </ResponsiveContainer>
