@@ -724,7 +724,7 @@ import React, { useState, useEffect, useMemo } from 'react';
             sections: [
               // BÖLÜM 1: İYİLEŞTİRME DETAYLARI
               {
-                title: '📊 SÜREKLİ İYİLEŞTİRME DETAYLI ANALİZ',
+                title: 'SÜREKLİ İYİLEŞTİRME DETAYLI ANALİZ',
             tableData: {
                   headers: ['İyileştirme Tipi', 'Kayıt Sayısı', 'Toplam Etki (₺)', 'Ortalama Etki (₺)'],
                   rows: Object.entries(improvementsByType)
@@ -738,7 +738,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '🏭 HAT BAZLI İYİLEŞTİRME ANALİZİ',
+                title: 'HAT BAZLI İYİLEŞTİRME ANALİZİ',
                 tableData: {
                   headers: ['Hat Adı', 'İyileştirme Sayısı', 'Toplam Etki (₺)', 'Toplam Süre Kazancı (sn)'],
                   rows: Object.entries(improvementsByLine)
@@ -752,7 +752,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '🤖 ROBOT BAZLI İYİLEŞTİRME ANALİZİ',
+                title: 'ROBOT BAZLI İYİLEŞTİRME ANALİZİ',
                 tableData: {
                   headers: ['Robot Adı', 'İyileştirme Sayısı', 'Toplam Etki (₺)'],
                   rows: Object.entries(improvementsByRobot)
@@ -766,7 +766,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '🏆 TOP 10 EN ETKİLİ İYİLEŞTİRMELER',
+                title: 'TOP 10 EN ETKİLİ İYİLEŞTİRMELER',
                 tableData: {
                   headers: ['#', 'Açıklama', 'Hat', 'Tip', 'Yıllık Etki (₺)'],
                   rows: top10Improvements.map((imp, idx) => [
@@ -781,7 +781,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 2: OPERASYON AZALTMA
               {
-                title: '⚡ OPERASYON AZALTMA HAT BAZLI ANALİZ',
+                title: 'OPERASYON AZALTMA HAT BAZLI ANALİZ',
                 tableData: {
                   headers: ['Hat Adı', 'Senaryo Sayısı', 'Yıllık Etki (₺)', 'Toplam Süre Kazancı (sn)'],
                   rows: Object.entries(scenariosByLine)
@@ -797,7 +797,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 3: PROJE BAZLI İYİLEŞTİRME
               {
-                title: '📈 TOP 5 PROJE BAZLI İYİLEŞTİRME',
+                title: 'TOP 5 PROJE BAZLI İYİLEŞTİRME',
                 tableData: {
                   headers: ['Proje Adı', 'Maliyet (₺)', 'Yıllık Kazanç (₺)', 'Net Kazanç (₺)', 'ROI (%)'],
                   rows: top5Projects.map(p => {
@@ -817,7 +817,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 4: MANUEL VERİ ANALİZİ
               {
-                title: '👷 MANUEL VERİ - VARDİYA BAZLI ANALİZ',
+                title: 'MANUEL VERİ - VARDİYA BAZLI ANALİZ',
                 tableData: {
                   headers: ['Vardiya', 'Kayıt Sayısı', 'Toplam Üretim', 'Toplam Maliyet (₺)'],
                   rows: Object.entries(manualByShift)
@@ -831,7 +831,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '👥 MANUEL VERİ - TOP 10 PERSONEL PERFORMANSI',
+                title: 'MANUEL VERİ - TOP 10 PERSONEL PERFORMANSI',
                 tableData: {
                   headers: ['#', 'Personel', 'Kayıt Sayısı', 'Toplam Üretim'],
                   rows: top10ManualEmployees.map(([name, data], idx) => [
@@ -843,7 +843,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '🏭 MANUEL VERİ - HAT BAZLI ANALİZ',
+                title: 'MANUEL VERİ - HAT BAZLI ANALİZ',
                 tableData: {
                   headers: ['Hat Adı', 'Kayıt Sayısı', 'Toplam Üretim', 'Toplam Maliyet (₺)'],
                   rows: Object.entries(manualByLine)
@@ -859,7 +859,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 5: ÜRETİM ANALİZİ
               {
-                title: '📊 ÜRETİM - TOP 5 HAT PERFORMANSI',
+                title: 'ÜRETİM - TOP 5 HAT PERFORMANSI',
                 tableData: {
                   headers: ['Hat Adı', 'Toplam Üretim', 'Hurda', 'PPM', 'Üretim Maliyeti (₺)'],
                   rows: top5ProductionLines.map(([line, data]) => [
@@ -872,7 +872,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '✅ EN İYİ KALİTE HATLARI (Düşük PPM)',
+                title: 'EN İYİ KALİTE HATLARI (Düşük PPM)',
                 tableData: {
                   headers: ['Hat Adı', 'Ortalama PPM', 'Toplam Üretim', 'Hurda', 'Kalite Oranı (%)'],
                   rows: bestQualityLines.map(line => [
@@ -887,7 +887,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 6: WPS ANALİZİ
               {
-                title: '🔧 WPS - PROSES DAĞILIMI',
+                title: 'WPS - PROSES DAĞILIMI',
                 tableData: {
                   headers: ['Kaynak Prosesi', 'WPS Sayısı', 'Oran (%)'],
                   rows: Object.entries(wpsByProcess)
@@ -900,7 +900,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '📍 WPS - POZİSYON DAĞILIMI',
+                title: 'WPS - POZİSYON DAĞILIMI',
                 tableData: {
                   headers: ['Pozisyon', 'WPS Sayısı', 'Oran (%)'],
                   rows: Object.entries(wpsByPosition)
@@ -913,7 +913,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '🔩 WPS - MALZEME DAĞILIMI',
+                title: 'WPS - MALZEME DAĞILIMI',
                 tableData: {
                   headers: ['Malzeme', 'WPS Sayısı', 'Oran (%)'],
                   rows: Object.entries(wpsByMaterial)
@@ -929,7 +929,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 7: EĞİTİM ANALİZİ
               {
-                title: '📚 EĞİTİM - EĞİTMEN BAZLI ANALİZ',
+                title: 'EĞİTİM - EĞİTMEN BAZLI ANALİZ',
                 tableData: {
                   headers: ['Eğitmen', 'Toplam Eğitim', 'Tamamlanan', 'Tamamlanma Oranı (%)'],
                   rows: Object.entries(trainingsByTrainer)
@@ -945,7 +945,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 8: GÖREV ANALİZİ
               {
-                title: '📋 GÖREV - PERSONEL BAZLI ANALİZ',
+                title: 'GÖREV - PERSONEL BAZLI ANALİZ',
                 tableData: {
                   headers: ['Personel', 'Toplam Görev', 'Tamamlanan', 'Tamamlanma Oranı (%)'],
                   rows: Object.entries(tasksByAssignee)
@@ -962,7 +962,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 9: DENETİM ANALİZİ
               {
-                title: '🔍 DENETİM - EYLEM TİPİ DAĞILIMI',
+                title: 'DENETİM - EYLEM TİPİ DAĞILIMI',
                 tableData: {
                   headers: ['Eylem Tipi', 'Kayıt Sayısı', 'Oran (%)'],
                   rows: Object.entries(auditByAction)
@@ -975,7 +975,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '👤 DENETİM - KULLANICI BAZLI AKTİVİTE',
+                title: 'DENETİM - KULLANICI BAZLI AKTİVİTE',
                 tableData: {
                   headers: ['Kullanıcı', 'Aktivite Sayısı', 'Oran (%)'],
                   rows: Object.entries(auditByUser)
@@ -989,7 +989,7 @@ import React, { useState, useEffect, useMemo } from 'react';
                 }
               },
               {
-                title: '📦 DENETİM - MODÜL BAZLI AKTİVİTE',
+                title: 'DENETİM - MODÜL BAZLI AKTİVİTE',
                 tableData: {
                   headers: ['Modül', 'Aktivite Sayısı', 'Oran (%)'],
                   rows: Object.entries(auditByModule)
@@ -1004,7 +1004,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // BÖLÜM 10: ANA VERİ ANALİZİ
               {
-                title: '🏢 DEPARTMAN BAZLI PERSONEL DAĞILIMI',
+                title: 'DEPARTMAN BAZLI PERSONEL DAĞILIMI',
                 tableData: {
                   headers: ['Departman', 'Personel Sayısı', 'Oran (%)'],
                   rows: Object.entries(employeesByDepartment)
@@ -1019,7 +1019,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
               // FİKSTÜR ANALİZİ
               {
-                title: '🔧 FİKSTÜR İYİLEŞTİRME - SORUMLU BAZLI',
+                title: 'FİKSTÜR İYİLEŞTİRME - SORUMLU BAZLI',
                 tableData: {
                   headers: ['Sorumlu', 'İyileştirme Sayısı'],
                   rows: Object.entries(fixturesByResponsible)

@@ -432,7 +432,7 @@ import React, { useEffect, useState } from 'react';
                     <h3 className="text-base font-bold text-blue-900 bg-blue-50 px-4 py-2 border-l-4 border-blue-600 mb-3">
                       {section.title}
                     </h3>
-                    {hasTable && (
+                    {hasTable ? (
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse text-xs">
                           <thead>
@@ -457,6 +457,10 @@ import React, { useEffect, useState } from 'react';
                           </tbody>
                         </table>
                       </div>
+                    ) : (
+                      <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded border border-gray-200">
+                        Bu dönem için veri bulunamadı.
+                      </p>
                     )}
                     {section.type === 'list' && section.items && (
                       <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
