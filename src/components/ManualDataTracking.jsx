@@ -1509,16 +1509,67 @@ const ManualDataTracking = () => {
     
     // Aylık bazda tamir ve manuel maliyet grafik verisi
     const monthlyCostChartData = useMemo(() => {
-        const currentYear = format(new Date(), 'yyyy');
+        // Tüm kayıtlardan yılları bul
+        const allYears = new Set();
+        
+        // Manuel kayıtlardan yılları çıkar
+        allManualRecords.forEach(r => {
+            if (r.record_date) {
+                const year = r.record_date.substring(0, 4);
+                if (year && year.length === 4) {
+                    allYears.add(year);
+                }
+            }
+        });
+        
+        // Tamir kayıtlarından yılları çıkar
+        allRepairRecords.forEach(r => {
+            if (r.record_date) {
+                const year = r.record_date.substring(0, 4);
+                if (year && year.length === 4) {
+                    allYears.add(year);
+                }
+            }
+        });
+        
+        // monthlyTotals'tan yılları çıkar
+        Object.keys(monthlyTotals).forEach(yearMonth => {
+            if (yearMonth && yearMonth.length >= 4) {
+                allYears.add(yearMonth.substring(0, 4));
+            }
+        });
+        
+        // En son yılı bul (veya mevcut yılı kullan)
+        const yearsArray = Array.from(allYears).sort();
+        const targetYear = yearsArray.length > 0 ? yearsArray[yearsArray.length - 1] : format(new Date(), 'yyyy');
+        
         const months = [];
         
         for (let i = 0; i < 12; i++) {
-            const monthDate = new Date(parseInt(currentYear), i, 1);
+            const monthDate = new Date(parseInt(targetYear), i, 1);
             const yearMonth = format(monthDate, 'yyyy-MM');
             const monthName = format(monthDate, 'MMM', { locale: tr });
             
-            const monthManuals = allManualRecords.filter(r => r.record_date && r.record_date.startsWith(yearMonth));
-            const monthRepairs = allRepairRecords.filter(r => r.record_date && r.record_date.startsWith(yearMonth));
+            // record_date formatını kontrol et - hem yyyy-MM-dd hem de yyyy-MM formatlarını destekle
+            const monthManuals = allManualRecords.filter(r => {
+                if (!r.record_date) return false;
+                // yyyy-MM-dd formatında ise
+                if (r.record_date.length >= 7) {
+                    return r.record_date.substring(0, 7) === yearMonth;
+                }
+                // yyyy-MM formatında ise
+                return r.record_date === yearMonth;
+            });
+            
+            const monthRepairs = allRepairRecords.filter(r => {
+                if (!r.record_date) return false;
+                // yyyy-MM-dd formatında ise
+                if (r.record_date.length >= 7) {
+                    return r.record_date.substring(0, 7) === yearMonth;
+                }
+                // yyyy-MM formatında ise
+                return r.record_date === yearMonth;
+            });
             
             const manualCost = monthManuals.reduce((sum, r) => {
                 const durationSeconds = r.duration_seconds || 0;
@@ -1539,6 +1590,7 @@ const ManualDataTracking = () => {
             months.push({
                 month: monthName,
                 yearMonth,
+                year: targetYear,
                 manualCost,
                 repairCost,
                 manualQuantity,
@@ -2685,35 +2737,40 @@ const ManualDataTracking = () => {
                 )}
                 
                 {/* Aylık Bazda Tamir ve Manuel Maliyet Grafiği */}
-                <Card>
-                    <CardHeader>
-                        <CardTitle>Aylık Bazda Tamir ve Manuel Maliyet Analizi</CardTitle>
-                        <CardDescription>Yıl içinde aylık maliyetler ve üretim adedine göre oranlar</CardDescription>
-                    </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={400}>
-                            <BarChart data={monthlyCostChartData}>
-                                <CartesianGrid strokeDasharray="3 3" />
-                                <XAxis dataKey="month" />
-                                <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
-                                <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
-                                <Tooltip 
-                                    formatter={(value, name) => {
-                                        if (name === 'manualCost' || name === 'repairCost') {
-                                            return formatCurrency(value);
-                                        }
-                                        return value;
-                                    }}
-                                />
-                                <Legend />
-                                <Bar yAxisId="left" dataKey="manualCost" fill="#3b82f6" name="Manuel Maliyet (₺)" />
-                                <Bar yAxisId="left" dataKey="repairCost" fill="#f97316" name="Tamir Maliyeti (₺)" />
-                                <Line yAxisId="right" type="monotone" dataKey="manualQuantity" stroke="#10b981" strokeWidth={2} name="Manuel Adet" />
-                                <Line yAxisId="right" type="monotone" dataKey="repairQuantity" stroke="#ef4444" strokeWidth={2} name="Tamir Adet" />
-                            </BarChart>
-                        </ResponsiveContainer>
-                    </CardContent>
-                </Card>
+                {monthlyCostChartData.length > 0 && monthlyCostChartData[0]?.year && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Aylık Bazda Tamir ve Manuel Maliyet Analizi</CardTitle>
+                            <CardDescription>
+                                {monthlyCostChartData[0].year} yılı içinde aylık maliyetler ve üretim adedine göre oranlar
+                            </CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={400}>
+                                <BarChart data={monthlyCostChartData}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="month" />
+                                    <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                                    <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                                    <Tooltip 
+                                        formatter={(value, name) => {
+                                            if (name === 'manualCost' || name === 'repairCost') {
+                                                return formatCurrency(value);
+                                            }
+                                            return value.toLocaleString('tr-TR');
+                                        }}
+                                        labelFormatter={(label) => `${label} ${monthlyCostChartData[0]?.year || ''}`}
+                                    />
+                                    <Legend />
+                                    <Bar yAxisId="left" dataKey="manualCost" fill="#3b82f6" name="Manuel Maliyet (₺)" />
+                                    <Bar yAxisId="left" dataKey="repairCost" fill="#f97316" name="Tamir Maliyeti (₺)" />
+                                    <Line yAxisId="right" type="monotone" dataKey="manualQuantity" stroke="#10b981" strokeWidth={2} name="Manuel Adet" />
+                                    <Line yAxisId="right" type="monotone" dataKey="repairQuantity" stroke="#ef4444" strokeWidth={2} name="Tamir Adet" />
+                                </BarChart>
+                            </ResponsiveContainer>
+                        </CardContent>
+                    </Card>
+                )}
                 
                 {/* Aylık/Yıllık Top 10 ve Bottom 10 Personel */}
                 <Card>
