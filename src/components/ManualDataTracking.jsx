@@ -1097,33 +1097,63 @@ const ManualDataTracking = () => {
         // Vardiya otomatik hesaplama fonksiyonu (saat bazlı)
         const getShiftFromTime = (recordDatetime) => {
             if (!recordDatetime) return null;
-            const date = new Date(recordDatetime);
-            const hour = date.getHours();
-            
-            // 1. Vardiya: 08:00-16:00
-            if (hour >= 8 && hour < 16) return 1;
-            // 2. Vardiya: 16:00-00:00
-            if (hour >= 16 || hour < 0) return 2;
-            // 3. Vardiya: 00:00-08:00
-            if (hour >= 0 && hour < 8) return 3;
-            
-            return null;
+            try {
+                const date = new Date(recordDatetime);
+                // Geçerli bir tarih mi kontrol et
+                if (isNaN(date.getTime())) return null;
+                
+                const hour = date.getHours();
+                
+                // 1. Vardiya: 08:00-16:00
+                if (hour >= 8 && hour < 16) return 1;
+                // 2. Vardiya: 16:00-24:00 (gece yarısına kadar)
+                if (hour >= 16 && hour < 24) return 2;
+                // 3. Vardiya: 00:00-08:00
+                if (hour >= 0 && hour < 8) return 3;
+                
+                return null;
+            } catch (e) {
+                console.error('Vardiya hesaplama hatası:', e, recordDatetime);
+                return null;
+            }
         };
         
         // Önce tüm kayıtları map'le ve calculatedShift ekle
         const allManualWithShift = allManualRecords
             .filter(r => r.record_date >= from && r.record_date <= to)
-            .map(r => ({
-                ...r,
-                calculatedShift: r.shift || getShiftFromTime(r.created_at)
-            }));
+            .map(r => {
+                // Shift değerini number'a dönüştür
+                let shiftValue = null;
+                if (r.shift !== null && r.shift !== undefined) {
+                    shiftValue = typeof r.shift === 'string' ? parseInt(r.shift, 10) : Number(r.shift);
+                    // Geçerli bir vardiya numarası mı kontrol et (1, 2, veya 3)
+                    if (isNaN(shiftValue) || shiftValue < 1 || shiftValue > 3) {
+                        shiftValue = null;
+                    }
+                }
+                return {
+                    ...r,
+                    calculatedShift: shiftValue || getShiftFromTime(r.created_at)
+                };
+            });
         
         const allRepairWithShift = allRepairRecords
             .filter(r => r.record_date >= from && r.record_date <= to)
-            .map(r => ({
-                ...r,
-                calculatedShift: r.shift || getShiftFromTime(r.created_at)
-            }));
+            .map(r => {
+                // Shift değerini number'a dönüştür
+                let shiftValue = null;
+                if (r.shift !== null && r.shift !== undefined) {
+                    shiftValue = typeof r.shift === 'string' ? parseInt(r.shift, 10) : Number(r.shift);
+                    // Geçerli bir vardiya numarası mı kontrol et (1, 2, veya 3)
+                    if (isNaN(shiftValue) || shiftValue < 1 || shiftValue > 3) {
+                        shiftValue = null;
+                    }
+                }
+                return {
+                    ...r,
+                    calculatedShift: shiftValue || getShiftFromTime(r.created_at)
+                };
+            });
         
         // Sonra filtreleri uygula
         let filteredManual = allManualWithShift;
@@ -2233,9 +2263,15 @@ const ManualDataTracking = () => {
                     <CardContent>
                         <div className="space-y-4 mb-6">
                             {[1, 2, 3].map(shift => {
-                                // FİLTRELENMEMİŞ verileri kullan
-                                const shiftManual = (analysisData.allManualWithShift || []).filter(r => r.calculatedShift === shift);
-                                const shiftRepair = (analysisData.allRepairWithShift || []).filter(r => r.calculatedShift === shift);
+                                // FİLTRELENMEMİŞ verileri kullan - calculatedShift değerlerini number olarak karşılaştır
+                                const shiftManual = (analysisData.allManualWithShift || []).filter(r => {
+                                    const calcShift = typeof r.calculatedShift === 'string' ? parseInt(r.calculatedShift, 10) : Number(r.calculatedShift);
+                                    return calcShift === shift;
+                                });
+                                const shiftRepair = (analysisData.allRepairWithShift || []).filter(r => {
+                                    const calcShift = typeof r.calculatedShift === 'string' ? parseInt(r.calculatedShift, 10) : Number(r.calculatedShift);
+                                    return calcShift === shift;
+                                });
                                 const totalQty = shiftManual.reduce((sum, r) => sum + (r.quantity || 0), 0) +
                                                 shiftRepair.reduce((sum, r) => sum + (r.quantity || 0), 0);
                                 const totalRecords = shiftManual.length + shiftRepair.length;
@@ -2263,13 +2299,22 @@ const ManualDataTracking = () => {
                         <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={(() => {
                                 return [1, 2, 3].map(shift => {
-                                    const shiftManual = (analysisData.allManualWithShift || []).filter(r => r.calculatedShift === shift);
-                                    const shiftRepair = (analysisData.allRepairWithShift || []).filter(r => r.calculatedShift === shift);
+                                    // calculatedShift değerlerini number olarak karşılaştır
+                                    const shiftManual = (analysisData.allManualWithShift || []).filter(r => {
+                                        const calcShift = typeof r.calculatedShift === 'string' ? parseInt(r.calculatedShift, 10) : Number(r.calculatedShift);
+                                        return calcShift === shift;
+                                    });
+                                    const shiftRepair = (analysisData.allRepairWithShift || []).filter(r => {
+                                        const calcShift = typeof r.calculatedShift === 'string' ? parseInt(r.calculatedShift, 10) : Number(r.calculatedShift);
+                                        return calcShift === shift;
+                                    });
+                                    const manuelQty = shiftManual.reduce((sum, r) => sum + (r.quantity || 0), 0);
+                                    const repairQty = shiftRepair.reduce((sum, r) => sum + (r.quantity || 0), 0);
                                     return {
                                         vardiya: `${shift}. Vardiya`,
-                                        manuel: shiftManual.reduce((sum, r) => sum + (r.quantity || 0), 0),
-                                        tamir: shiftRepair.reduce((sum, r) => sum + (r.quantity || 0), 0),
-                                        toplam: shiftManual.reduce((sum, r) => sum + (r.quantity || 0), 0) + shiftRepair.reduce((sum, r) => sum + (r.quantity || 0), 0)
+                                        manuel: manuelQty,
+                                        tamir: repairQty,
+                                        toplam: manuelQty + repairQty
                                     };
                                 });
                             })()}>
