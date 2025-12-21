@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, GitCompare, Save, Trash2, Info, FileText, AlertTriangle, Calendar as CalendarIcon, Plus, Edit, Factory, Bot, Paperclip, Upload, X, Download } from 'lucide-react';
+import { TrendingUp, GitCompare, Save, Trash2, Info, FileText, AlertTriangle, Calendar as CalendarIcon, Plus, Edit, Factory, Bot, Paperclip, Upload, X, Download, BarChart3 } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -10,13 +10,13 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear, subYears, startOfDay, endOfDay, startOfWeek, endOfWeek } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, startOfYear, subYears, startOfDay, endOfDay, startOfWeek, endOfWeek, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+import { BarChart, Bar, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, LineChart, Line, PieChart, Pie, Cell, AreaChart, Area } from 'recharts';
 
 const initialFormState = {
   line_id: '', robot_id: '', part_code: '', annual_quantity: '',
@@ -501,11 +501,13 @@ const ComparativeCost = () => {
           lineName,
           totalGain: 0,
           count: 0,
-          avgGain: 0
+          avgGain: 0,
+          totalTimeSaving: 0
         };
       }
       
       lineStats[lineId].totalGain += s.summary?.annualImprovement || 0;
+      lineStats[lineId].totalTimeSaving += s.summary?.timeDiff || 0;
       lineStats[lineId].count += 1;
     });
     
@@ -516,7 +518,108 @@ const ComparativeCost = () => {
         avgGain: line.count > 0 ? line.totalGain / line.count : 0
       }))
       .sort((a, b) => b.totalGain - a.totalGain); // En başarılıdan başarısıza
-  }, [filteredScenarios]);
+  }, [filteredScenarios, getLineName]);
+  
+  // Detaylı analiz verileri
+  const analysisData = useMemo(() => {
+    // Robot bazlı analiz
+    const byRobot = {};
+    filteredScenarios.forEach(s => {
+      const robotId = s.scope?.robot_id;
+      if (!robotId) return;
+      const robotName = getRobotName(robotId);
+      if (!byRobot[robotId]) {
+        byRobot[robotId] = {
+          robotId,
+          robotName,
+          count: 0,
+          totalGain: 0,
+          totalTimeSaving: 0
+        };
+      }
+      byRobot[robotId].count += 1;
+      byRobot[robotId].totalGain += s.summary?.annualImprovement || 0;
+      byRobot[robotId].totalTimeSaving += s.summary?.timeDiff || 0;
+    });
+    
+    // Parça bazlı analiz
+    const byPart = {};
+    filteredScenarios.forEach(s => {
+      const partCode = s.scope?.part_code;
+      if (!partCode) return;
+      if (!byPart[partCode]) {
+        byPart[partCode] = {
+          partCode,
+          count: 0,
+          totalGain: 0,
+          totalTimeSaving: 0
+        };
+      }
+      byPart[partCode].count += 1;
+      byPart[partCode].totalGain += s.summary?.annualImprovement || 0;
+      byPart[partCode].totalTimeSaving += s.summary?.timeDiff || 0;
+    });
+    
+    // Aylık trend analizi
+    const monthlyTrend = {};
+    filteredScenarios.forEach(s => {
+      if (!s.scenario_date) return;
+      const month = format(parseISO(s.scenario_date), 'yyyy-MM');
+      if (!monthlyTrend[month]) {
+        monthlyTrend[month] = {
+          month,
+          count: 0,
+          totalGain: 0,
+          totalTimeSaving: 0
+        };
+      }
+      monthlyTrend[month].count += 1;
+      monthlyTrend[month].totalGain += s.summary?.annualImprovement || 0;
+      monthlyTrend[month].totalTimeSaving += s.summary?.timeDiff || 0;
+    });
+    
+    const monthlyTrendArray = Object.values(monthlyTrend)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map(m => ({
+        ...m,
+        monthLabel: format(parseISO(m.month + '-01'), 'MMM yyyy', { locale: tr })
+      }));
+    
+    // Top 10 robotlar
+    const top10Robots = Object.values(byRobot)
+      .map(r => ({ ...r, avgGain: r.count > 0 ? r.totalGain / r.count : 0 }))
+      .sort((a, b) => b.totalGain - a.totalGain)
+      .slice(0, 10);
+    
+    // Top 10 parçalar
+    const top10Parts = Object.values(byPart)
+      .map(p => ({ ...p, avgGain: p.count > 0 ? p.totalGain / p.count : 0 }))
+      .sort((a, b) => b.totalGain - a.totalGain)
+      .slice(0, 10);
+    
+    // Top 10 en etkili senaryolar
+    const top10Scenarios = [...filteredScenarios]
+      .map(s => ({
+        ...s,
+        gain: s.summary?.annualImprovement || 0
+      }))
+      .sort((a, b) => b.gain - a.gain)
+      .slice(0, 10);
+    
+    return {
+      byRobot,
+      byPart,
+      monthlyTrend: monthlyTrendArray,
+      top10Robots,
+      top10Parts,
+      top10Scenarios,
+      totalCount: filteredScenarios.length,
+      totalGain: filteredScenarios.reduce((sum, s) => sum + (s.summary?.annualImprovement || 0), 0),
+      totalTimeSaving: filteredScenarios.reduce((sum, s) => sum + (s.summary?.timeDiff || 0), 0)
+    };
+  }, [filteredScenarios, getRobotName]);
+  
+  const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
   const handleDateFilterChange = (quickSelect) => {
     const now = new Date();
@@ -638,82 +741,340 @@ const ComparativeCost = () => {
       <Card>
         <CardHeader><div className="flex justify-between items-center"><div><CardTitle className="flex items-center space-x-2"><TrendingUp className="h-5 w-5" /><span>Operasyon Azaltma Dashboard</span></CardTitle><CardDescription>Operasyonel iyileştirmeleri ve maliyet etkilerini takip edin.</CardDescription></div><div className="flex space-x-2"><Button onClick={() => { setEditingScenario(null); setFormState(initialFormState); setAnalysisResult(null); setShowFormDialog(true); setIsDirty(false); }}><Plus className="h-4 w-4 mr-2" />Yeni Kayıt</Button><Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button><Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button></div></div></CardHeader>
         <CardContent>
-          <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-4 no-print">
-            <div className="space-y-2">
-              <Label>Filtreler</Label>
-              <div className="flex flex-wrap items-center gap-2">
-                <Tabs value={filters.quickSelect} onValueChange={handleDateFilterChange} className="w-auto"><TabsList><TabsTrigger value="today">Bugün</TabsTrigger><TabsTrigger value="thisWeek">Bu Hafta</TabsTrigger><TabsTrigger value="thisMonth">Bu Ay</TabsTrigger><TabsTrigger value="last3Months">Son 3 Ay</TabsTrigger><TabsTrigger value="ytd">Yıl Başı</TabsTrigger><TabsTrigger value="last12Months">Son 12 Ay</TabsTrigger><TabsTrigger value="allTime">Tüm Zamanlar</TabsTrigger></TabsList></Tabs>
-                <Popover><PopoverTrigger asChild><Button variant="outline" size="sm" className="w-full md:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />Özel Aralık</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={filters.date} onSelect={(date) => setFilters({...filters, date, quickSelect: 'custom'})} locale={tr} /></PopoverContent></Popover>
-                <Select onValueChange={(v) => setFilters({...filters, lines: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent></Select>
-                <Select onValueChange={(v) => setFilters({...filters, robots: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Robotlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Robotlar</SelectItem>{robots.map(r => <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>)}</SelectContent></Select>
-                <Input placeholder="Parça Kodu Ara..." className="w-[160px]" value={filters.partCode} onChange={(e) => setFilters({...filters, partCode: e.target.value})} />
-                <Button variant="ghost" onClick={clearFilters}>Filtreleri Temizle</Button>
+          <Tabs defaultValue="data" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="data">Veri Takip</TabsTrigger>
+              <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
+            </TabsList>
+            
+            <TabsContent value="data" className="space-y-4">
+              <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-4 no-print">
+                <div className="space-y-2">
+                  <Label>Filtreler</Label>
+                  <div className="flex flex-wrap items-center gap-2">
+                    <Tabs value={filters.quickSelect} onValueChange={handleDateFilterChange} className="w-auto"><TabsList><TabsTrigger value="today">Bugün</TabsTrigger><TabsTrigger value="thisWeek">Bu Hafta</TabsTrigger><TabsTrigger value="thisMonth">Bu Ay</TabsTrigger><TabsTrigger value="last3Months">Son 3 Ay</TabsTrigger><TabsTrigger value="ytd">Yıl Başı</TabsTrigger><TabsTrigger value="last12Months">Son 12 Ay</TabsTrigger><TabsTrigger value="allTime">Tüm Zamanlar</TabsTrigger></TabsList></Tabs>
+                    <Popover><PopoverTrigger asChild><Button variant="outline" size="sm" className="w-full md:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />Özel Aralık</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={filters.date} onSelect={(date) => setFilters({...filters, date, quickSelect: 'custom'})} locale={tr} /></PopoverContent></Popover>
+                    <Select onValueChange={(v) => setFilters({...filters, lines: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent></Select>
+                    <Select onValueChange={(v) => setFilters({...filters, robots: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Robotlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Robotlar</SelectItem>{robots.map(r => <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>)}</SelectContent></Select>
+                    <Input placeholder="Parça Kodu Ara..." className="w-[160px]" value={filters.partCode} onChange={(e) => setFilters({...filters, partCode: e.target.value})} />
+                    <Button variant="ghost" onClick={clearFilters}>Filtreleri Temizle</Button>
+                  </div>
+                </div>
+                {(filters.lines.length > 0 || filters.robots.length > 0 || filters.partCode) && <div className="flex items-center space-x-2 pt-2"><div className="flex flex-wrap gap-2">{filters.lines.map(l => <span key={l} className="chip"><Factory className="h-3 w-3 mr-1"/>{getLineName(l)}</span>)}{filters.robots.map(r => <span key={r} className="chip"><Bot className="h-3 w-3 mr-1"/>{getRobotName(r)}</span>)}{filters.partCode && <span className="chip">{filters.partCode}</span>}</div></div>}
               </div>
-            </div>
-            {(filters.lines.length > 0 || filters.robots.length > 0 || filters.partCode) && <div className="flex items-center space-x-2 pt-2"><div className="flex flex-wrap gap-2">{filters.lines.map(l => <span key={l} className="chip"><Factory className="h-3 w-3 mr-1"/>{getLineName(l)}</span>)}{filters.robots.map(r => <span key={r} className="chip"><Bot className="h-3 w-3 mr-1"/>{getRobotName(r)}</span>)}{filters.partCode && <span className="chip">{filters.partCode}</span>}</div></div>}
-          </div>
-          <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-            <Card><CardHeader><CardTitle className="text-xl">{formatCurrency(dashboardData.totalAnnualImprovement)}</CardTitle><CardDescription>Yıllık İyileştirme (₺)</CardDescription></CardHeader></Card>
-            <Card><CardHeader><CardTitle className="text-xl">{dashboardData.count}</CardTitle><CardDescription>İyileştirme Kaydı</CardDescription></CardHeader></Card>
-            <Card><CardHeader><CardTitle className="text-xl">{dashboardData.totalSavingSeconds.toFixed(2)} sn</CardTitle><CardDescription>Toplam Süre Kazancı</CardDescription></CardHeader></Card>
-            <Card><CardHeader><CardTitle className="text-xl">{filteredScenarios.length > 0 ? (filteredScenarios.reduce((sum, s) => sum + s.summary.beforeTotalTime, 0) / filteredScenarios.length).toFixed(2) : 0} sn</CardTitle><CardDescription>Ort. Önceki Süre</CardDescription></CardHeader></Card>
-          </div>
-          
-          {/* Başarılı Hatlar Grafiği */}
-          {successfulLinesData.length > 0 && (
-            <Card className="mt-6">
-              <CardHeader>
-                <CardTitle>Başarılı Hatlar ve Kazanç Maliyetleri</CardTitle>
-                <CardDescription>En başarılıdan başarısıza doğru hat performansı</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={successfulLinesData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="lineName" angle={-45} textAnchor="end" height={100} />
-                    <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
-                    <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
-                    <Tooltip 
-                      formatter={(value, name) => {
-                        if (name === 'totalGain' || name === 'avgGain') {
-                          return formatCurrency(value);
-                        }
-                        return value;
-                      }}
-                    />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="totalGain" fill="#3b82f6" name="Toplam Kazanç (₺)" />
-                    <Bar yAxisId="left" dataKey="avgGain" fill="#10b981" name="Ortalama Kazanç (₺)" />
-                    <Bar yAxisId="right" dataKey="count" fill="#f97316" name="Kayıt Sayısı" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
-          )}
-          <Card className="mt-6">
-            <CardHeader><CardTitle>İyileştirme Kayıtları</CardTitle></CardHeader>
-            <CardContent>
-              <div className="border rounded-lg overflow-x-auto">
-                <table className="w-full">
-                  <thead className="bg-gray-50"><tr>{['Kayıt Adı', 'Hat', 'Parça Kodu', 'Önce (sn)', 'Sonra (sn)', 'Kazanç (sn)', 'Yıllık Etki (₺)', ''].map(h => <th key={h} className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase ${['Yıllık Etki (₺)', 'Önce (sn)', 'Sonra (sn)', 'Kazanç (sn)'].includes(h) ? 'text-right' : ''}`}>{h}</th>)}</tr></thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredScenarios.length > 0 ? filteredScenarios.map((s) => (
-                      <tr key={s.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingScenario(s)}>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{s.name}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm">{getLineName(s.scope?.line_id)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm">{s.scope?.part_code || 'N/A'}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{s.summary?.beforeTotalTime.toFixed(2)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{s.summary?.afterTotalTime.toFixed(2)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm text-right font-medium">{s.summary?.timeDiff.toFixed(2)}</td>
-                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-green-600 text-right">{formatCurrency(s.summary?.annualImprovement)}</td>
-                        <td className="px-4 py-2 text-right no-print"><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handlePrint(s); }}><FileText className="h-4 w-4" /></Button></td>
-                      </tr>
-                    )) : <tr><td colSpan="8" className="text-center py-10 text-gray-500">Veri bulunamadı.</td></tr>}
-                  </tbody>
-                </table>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <Card><CardHeader><CardTitle className="text-xl">{formatCurrency(dashboardData.totalAnnualImprovement)}</CardTitle><CardDescription>Yıllık İyileştirme (₺)</CardDescription></CardHeader></Card>
+                <Card><CardHeader><CardTitle className="text-xl">{dashboardData.count}</CardTitle><CardDescription>İyileştirme Kaydı</CardDescription></CardHeader></Card>
+                <Card><CardHeader><CardTitle className="text-xl">{dashboardData.totalSavingSeconds.toFixed(2)} sn</CardTitle><CardDescription>Toplam Süre Kazancı</CardDescription></CardHeader></Card>
+                <Card><CardHeader><CardTitle className="text-xl">{filteredScenarios.length > 0 ? (filteredScenarios.reduce((sum, s) => sum + s.summary.beforeTotalTime, 0) / filteredScenarios.length).toFixed(2) : 0} sn</CardTitle><CardDescription>Ort. Önceki Süre</CardDescription></CardHeader></Card>
               </div>
-            </CardContent>
-          </Card>
+              
+              {/* Başarılı Hatlar Grafiği */}
+              {successfulLinesData.length > 0 && (
+                <Card className="mt-6">
+                  <CardHeader>
+                    <CardTitle>Başarılı Hatlar ve Kazanç Maliyetleri</CardTitle>
+                    <CardDescription>En başarılıdan başarısıza doğru hat performansı</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={successfulLinesData}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="lineName" angle={-45} textAnchor="end" height={100} />
+                        <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
+                        <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'totalGain' || name === 'avgGain') {
+                              return formatCurrency(value);
+                            }
+                            return value;
+                          }}
+                        />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="totalGain" fill="#3b82f6" name="Toplam Kazanç (₺)" />
+                        <Bar yAxisId="left" dataKey="avgGain" fill="#10b981" name="Ortalama Kazanç (₺)" />
+                        <Bar yAxisId="right" dataKey="count" fill="#f97316" name="Kayıt Sayısı" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+              <Card className="mt-6">
+                <CardHeader><CardTitle>İyileştirme Kayıtları</CardTitle></CardHeader>
+                <CardContent>
+                  <div className="border rounded-lg overflow-x-auto">
+                    <table className="w-full">
+                      <thead className="bg-gray-50"><tr>{['Kayıt Adı', 'Hat', 'Parça Kodu', 'Önce (sn)', 'Sonra (sn)', 'Kazanç (sn)', 'Yıllık Etki (₺)', ''].map(h => <th key={h} className={`px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase ${['Yıllık Etki (₺)', 'Önce (sn)', 'Sonra (sn)', 'Kazanç (sn)'].includes(h) ? 'text-right' : ''}`}>{h}</th>)}</tr></thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredScenarios.length > 0 ? filteredScenarios.map((s) => (
+                          <tr key={s.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingScenario(s)}>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{s.name}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm">{getLineName(s.scope?.line_id)}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm">{s.scope?.part_code || 'N/A'}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{s.summary?.beforeTotalTime.toFixed(2)}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-right">{s.summary?.afterTotalTime.toFixed(2)}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm text-right font-medium">{s.summary?.timeDiff.toFixed(2)}</td>
+                            <td className="px-4 py-2 whitespace-nowrap text-sm font-medium text-green-600 text-right">{formatCurrency(s.summary?.annualImprovement)}</td>
+                            <td className="px-4 py-2 text-right no-print"><Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handlePrint(s); }}><FileText className="h-4 w-4" /></Button></td>
+                          </tr>
+                        )) : <tr><td colSpan="8" className="text-center py-10 text-gray-500">Veri bulunamadı.</td></tr>}
+                      </tbody>
+                    </table>
+                  </div>
+                </CardContent>
+              </Card>
+            </TabsContent>
+            
+            <TabsContent value="analysis" className="space-y-6">
+              {/* Özet KPI Kartları */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Toplam Senaryo</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-blue-700">{analysisData.totalCount}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Kayıt sayısı</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Toplam Kazanç</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-green-700">{formatCurrency(analysisData.totalGain)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Yıllık kazanç</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Ortalama Kazanç</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-purple-700">
+                      {formatCurrency(analysisData.totalCount > 0 ? analysisData.totalGain / analysisData.totalCount : 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">Senaryo başına</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Toplam Süre Kazancı</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-orange-700">{analysisData.totalTimeSaving.toFixed(2)} sn</div>
+                    <p className="text-xs text-muted-foreground mt-1">Saniye</p>
+                  </CardContent>
+                </Card>
+              </div>
+              
+              {/* Robot Bazlı Analiz */}
+              {analysisData.top10Robots.length > 0 && (
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Top 10 Robot Analizi</CardTitle>
+                      <CardDescription>En etkili robotlar ve kazançları</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={400}>
+                        <BarChart data={analysisData.top10Robots.map(r => ({
+                          robot: r.robotName.length > 15 ? r.robotName.substring(0, 15) + '...' : r.robotName,
+                          kazanc: r.totalGain,
+                          ortalama: r.avgGain,
+                          sayi: r.count
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="robot" angle={-45} textAnchor="end" height={100} />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip 
+                            formatter={(value, name) => {
+                              if (name === 'kazanc' || name === 'ortalama') {
+                                return formatCurrency(value);
+                              }
+                              return value;
+                            }}
+                          />
+                          <Legend />
+                          <Bar yAxisId="left" dataKey="kazanc" fill="#3b82f6" name="Toplam Kazanç (₺)" />
+                          <Bar yAxisId="left" dataKey="ortalama" fill="#10b981" name="Ortalama Kazanç (₺)" />
+                          <Bar yAxisId="right" dataKey="sayi" fill="#f97316" name="Kayıt Sayısı" />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                  
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Top 10 Robot Detayları</CardTitle>
+                      <CardDescription>Robot bazında detaylı istatistikler</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="space-y-2 max-h-96 overflow-y-auto">
+                        {analysisData.top10Robots.map((robot, index) => (
+                          <div key={robot.robotId} className="p-3 bg-blue-50 rounded border-l-4 border-blue-500">
+                            <div className="flex justify-between items-start mb-2">
+                              <div className="flex items-center gap-2">
+                                <span className="text-lg font-bold text-blue-700">#{index + 1}</span>
+                                <p className="font-semibold">{robot.robotName}</p>
+                              </div>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-blue-600">{formatCurrency(robot.totalGain)}</p>
+                                <p className="text-xs text-gray-600">{robot.totalTimeSaving.toFixed(2)} sn</p>
+                              </div>
+                            </div>
+                            <div className="grid grid-cols-2 gap-2 text-xs text-gray-600">
+                              <span>📋 {robot.count} kayıt</span>
+                              <span>💰 {formatCurrency(robot.avgGain)} ortalama</span>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+              
+              {/* Parça Bazlı Analiz */}
+              {analysisData.top10Parts.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top 10 Parça Bazlı Analiz</CardTitle>
+                    <CardDescription>En çok iyileştirme yapılan parçalar</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={analysisData.top10Parts.map(p => ({
+                        parca: p.partCode.length > 15 ? p.partCode.substring(0, 15) + '...' : p.partCode,
+                        kazanc: p.totalGain,
+                        ortalama: p.avgGain,
+                        sure: p.totalTimeSaving
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="parca" angle={-45} textAnchor="end" height={100} />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'kazanc' || name === 'ortalama') {
+                              return formatCurrency(value);
+                            }
+                            return value.toFixed(2);
+                          }}
+                        />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="kazanc" fill="#3b82f6" name="Toplam Kazanç (₺)" />
+                        <Bar yAxisId="left" dataKey="ortalama" fill="#10b981" name="Ortalama Kazanç (₺)" />
+                        <Line yAxisId="right" type="monotone" dataKey="sure" stroke="#f97316" strokeWidth={2} name="Süre Kazancı (sn)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Aylık Trend */}
+              {analysisData.monthlyTrend.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Aylık İyileştirme Trendi</CardTitle>
+                    <CardDescription>Zaman içinde senaryo sayıları ve kazançlar</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <AreaChart data={analysisData.monthlyTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="monthLabel" />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'totalGain') {
+                              return formatCurrency(value);
+                            }
+                            return value;
+                          }}
+                        />
+                        <Legend />
+                        <Area yAxisId="left" type="monotone" dataKey="count" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="Kayıt Sayısı" />
+                        <Line yAxisId="right" type="monotone" dataKey="totalGain" stroke="#10b981" strokeWidth={2} name="Toplam Kazanç (₺)" />
+                        <Line yAxisId="right" type="monotone" dataKey="totalTimeSaving" stroke="#f97316" strokeWidth={2} name="Süre Kazancı (sn)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Top 10 En Etkili Senaryolar */}
+              {analysisData.top10Scenarios.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top 10 En Etkili Senaryolar</CardTitle>
+                    <CardDescription>En yüksek kazanca sahip iyileştirmeler</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {analysisData.top10Scenarios.map((scenario, index) => (
+                        <div key={scenario.id} className="p-3 bg-green-50 rounded border-l-4 border-green-500">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <span className="text-xl font-bold text-green-700">#{index + 1}</span>
+                              <div>
+                                <p className="font-semibold">{scenario.name}</p>
+                                <p className="text-xs text-gray-600">
+                                  {getLineName(scenario.scope?.line_id)} | {scenario.scope?.part_code || 'N/A'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-green-600">{formatCurrency(scenario.gain)}</p>
+                              <p className="text-xs text-gray-600">
+                                {scenario.summary?.timeDiff.toFixed(2)} sn kazanç
+                              </p>
+                            </div>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+              
+              {/* Hat Bazlı Detaylı Analiz */}
+              {successfulLinesData.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Hat Bazlı Detaylı Performans Analizi</CardTitle>
+                    <CardDescription>Tüm hatların kapsamlı performans karşılaştırması</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={500}>
+                      <BarChart data={successfulLinesData.slice(0, 15)}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="lineName" angle={-45} textAnchor="end" height={120} />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip 
+                          formatter={(value, name) => {
+                            if (name === 'totalGain' || name === 'avgGain') {
+                              return formatCurrency(value);
+                            }
+                            return value;
+                          }}
+                        />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="totalGain" fill="#3b82f6" name="Toplam Kazanç (₺)" />
+                        <Bar yAxisId="left" dataKey="avgGain" fill="#10b981" name="Ortalama Kazanç (₺)" />
+                        <Bar yAxisId="right" dataKey="count" fill="#f97316" name="Kayıt Sayısı" />
+                        <Bar yAxisId="right" dataKey="totalTimeSaving" fill="#8b5cf6" name="Toplam Süre Kazancı (sn)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
 
