@@ -57,25 +57,51 @@ const ExamResults = ({ trainingId, passingGrade }) => {
   }, [fetchData]);
 
   const handleScoreChange = (participantId, score) => {
-    setResults(prev => prev.map(r => r.participant_id === participantId ? { ...r, score: score } : r));
+    // Score'u number'a çevir ve maxScore'u aşmamasını sağla
+    const numScore = score === '' ? '' : Math.min(Math.max(0, Number(score)), maxScore);
+    setResults(prev => prev.map(r => r.participant_id === participantId ? { ...r, score: numScore } : r));
   };
 
   const handleSaveResults = async () => {
+    // passingGrade kontrolü - null veya undefined ise uyarı ver
+    const validPassingGrade = passingGrade !== null && passingGrade !== undefined ? Number(passingGrade) : null;
+    
+    if (validPassingGrade === null) {
+      toast({ 
+        title: 'Uyarı', 
+        description: 'Lütfen önce geçme notunu kaydedin.', 
+        variant: 'destructive' 
+      });
+      return;
+    }
+
     const resultsToSave = results
-      .filter(r => r.score !== '' && r.score !== null)
+      .filter(r => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
       .map(r => {
-        const percentage = maxScore > 0 ? (r.score / maxScore) * 100 : 0;
+        const scoreValue = Number(r.score);
+        // Yüzde hesaplama - maxScore 0'dan büyük olmalı
+        const percentage = maxScore > 0 ? (scoreValue / maxScore) * 100 : 0;
+        
+        // Yüzde değerini kontrol et (0-100 arası olmalı)
+        const validPercentage = Math.max(0, Math.min(100, percentage));
+        
+        // Geçme notu kontrolü - passingGrade yüzde cinsinden
+        const isPassed = validPercentage >= validPassingGrade;
+        
         return {
           training_id: trainingId,
           participant_id: r.participant_id,
-          score: r.score,
-          percentage: percentage,
-          status: percentage >= passingGrade ? 'Başarılı' : 'Başarısız',
+          score: scoreValue,
+          percentage: validPercentage,
+          status: isPassed ? 'Başarılı' : 'Başarısız',
           exam_date: new Date().toISOString(),
         };
       });
 
-    if (resultsToSave.length === 0) return;
+    if (resultsToSave.length === 0) {
+      toast({ title: 'Uyarı', description: 'Kaydedilecek geçerli not bulunamadı.', variant: 'default' });
+      return;
+    }
 
     const { error } = await supabase.from('training_exam_results').upsert(resultsToSave, { onConflict: 'training_id, participant_id' });
 
@@ -120,8 +146,19 @@ const ExamResults = ({ trainingId, passingGrade }) => {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {results.map(r => {
-                  const percentage = maxScore > 0 ? (r.score / maxScore) * 100 : 0;
-                  const status = percentage >= passingGrade ? 'Başarılı' : 'Başarısız';
+                  // Score'u number'a çevir ve validate et
+                  const scoreValue = r.score !== '' && r.score !== null ? Number(r.score) : null;
+                  const percentage = maxScore > 0 && scoreValue !== null ? (scoreValue / maxScore) * 100 : 0;
+                  
+                  // Yüzde değerini kontrol et (0-100 arası olmalı)
+                  const validPercentage = Math.max(0, Math.min(100, percentage));
+                  
+                  // Geçme notu kontrolü
+                  const validPassingGrade = passingGrade !== null && passingGrade !== undefined ? Number(passingGrade) : null;
+                  const status = validPassingGrade !== null && scoreValue !== null 
+                    ? (validPercentage >= validPassingGrade ? 'Başarılı' : 'Başarısız')
+                    : null;
+                  
                   return (
                     <tr key={r.participant_id}>
                       <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{r.participant_name}</td>
@@ -130,14 +167,24 @@ const ExamResults = ({ trainingId, passingGrade }) => {
                           type="number"
                           className="w-24 h-8"
                           value={r.score}
-                          onChange={e => handleScoreChange(r.participant_id, e.target.value === '' ? '' : Number(e.target.value))}
+                          onChange={e => handleScoreChange(r.participant_id, e.target.value)}
+                          min={0}
                           max={maxScore}
+                          step="0.01"
                         />
                       </td>
-                      <td className="px-4 py-2 whitespace-nowrap text-sm">{r.score !== '' ? `${percentage.toFixed(2)}%` : '-'}</td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">
-                        {r.score !== '' && (
+                        {scoreValue !== null ? `${validPercentage.toFixed(2)}%` : '-'}
+                        {validPassingGrade !== null && (
+                          <span className="text-xs text-gray-500 ml-2">(Geçme: {validPassingGrade}%)</span>
+                        )}
+                      </td>
+                      <td className="px-4 py-2 whitespace-nowrap text-sm">
+                        {status && (
                           <span className={`font-semibold ${status === 'Başarılı' ? 'text-green-600' : 'text-red-600'}`}>{status}</span>
+                        )}
+                        {!status && scoreValue !== null && (
+                          <span className="text-gray-400 text-xs">Geçme notu belirlenmemiş</span>
                         )}
                       </td>
                     </tr>
