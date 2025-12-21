@@ -711,20 +711,32 @@ import React, { useEffect, useState } from 'react';
               }
           `}</style>
           {pageClass === 'page-landscape' && (
-            <style>{`
+            <style dangerouslySetInnerHTML={{__html: `
               @page {
                 size: A4 landscape;
                 margin: 0;
               }
-            `}</style>
+              @media print {
+                @page {
+                  size: A4 landscape;
+                  margin: 0;
+                }
+              }
+            `}} />
           )}
           {pageClass === 'page-portrait' && (
-            <style>{`
+            <style dangerouslySetInnerHTML={{__html: `
               @page {
                 size: A4 portrait;
                 margin: 0;
               }
-            `}</style>
+              @media print {
+                @page {
+                  size: A4 portrait;
+                  margin: 0;
+                }
+              }
+            `}} />
           )}
         </>
       );
