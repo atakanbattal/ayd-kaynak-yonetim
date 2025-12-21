@@ -74,13 +74,24 @@ const ProjectImprovement = () => {
   // Başarılı projeler grafik verisi
   const successfulProjectsData = useMemo(() => {
     return filteredImprovements
-      .map((item, index) => ({
-        name: item.subject.length > 20 ? item.subject.substring(0, 20) + '...' : item.subject,
-        fullName: item.subject,
-        annualGain: item.annual_impact || 0,
-        cost: item.improvement_cost || 0,
-        roi: item.improvement_cost > 0 ? ((item.annual_impact - item.improvement_cost) / item.improvement_cost) * 100 : 0
-      }))
+      .map((item, index) => {
+        const annualGain = parseFloat(item.annual_impact) || 0;
+        const cost = parseFloat(item.improvement_cost) || 0;
+        let roi = 0;
+        if (cost > 0) {
+          roi = ((annualGain - cost) / cost) * 100;
+        } else if (annualGain > 0) {
+          roi = Infinity; // Sonsuz ROI
+        }
+        
+        return {
+          name: item.subject.length > 20 ? item.subject.substring(0, 20) + '...' : item.subject,
+          fullName: item.subject,
+          annualGain: annualGain,
+          cost: cost,
+          roi: isFinite(roi) ? roi : 0 // Sonsuz ROI'yi 0 olarak göster
+        };
+      })
       .sort((a, b) => b.annualGain - a.annualGain)
       .slice(0, 10); // Top 10
   }, [filteredImprovements]);
@@ -411,18 +422,23 @@ const ProjectImprovement = () => {
               </CardHeader>
               <CardContent>
                 <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={successfulProjectsData}>
+                  <BarChart data={successfulProjectsData} layout="vertical">
                     <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={120} />
-                    <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
-                    <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
+                    <XAxis type="number" yAxisId="left" />
+                    <XAxis type="number" yAxisId="right" orientation="top" />
+                    <YAxis dataKey="name" type="category" width={150} />
                     <Tooltip 
                       formatter={(value, name) => {
                         if (name === 'annualGain' || name === 'cost') {
-                          return formatCurrency(value);
+                          return formatCurrency(parseFloat(value) || 0);
                         }
-                        return `${value.toFixed(2)}%`;
+                        if (name === 'roi') {
+                          const roiValue = parseFloat(value) || 0;
+                          return `${roiValue.toFixed(2)}%`;
+                        }
+                        return value;
                       }}
+                      labelFormatter={(label) => label}
                     />
                     <Legend />
                     <Bar yAxisId="left" dataKey="annualGain" fill="#10b981" name="Yıllık Kazanç (₺)" />
