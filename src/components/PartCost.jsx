@@ -1,20 +1,22 @@
 import React, { useState, useEffect, useMemo } from 'react';
     import { motion } from 'framer-motion';
-    import { Calculator, Save, Trash2, Plus, Eye, Search, Calendar as CalendarIcon, Filter, X, Edit, TrendingUp, AlertCircle, Package, FileText, Download } from 'lucide-react';
+    import { Calculator, Save, Trash2, Plus, Eye, Search, Calendar as CalendarIcon, Filter, X, Edit, TrendingUp, AlertCircle, Package, FileText, Download, BarChart3 } from 'lucide-react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
     import { Label } from '@/components/ui/label';
     import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter, DialogClose } from '@/components/ui/dialog';
+    import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
     import { useToast } from '@/components/ui/use-toast';
     import { supabase } from '@/lib/customSupabaseClient';
     import { useAuth } from '@/contexts/SupabaseAuthContext';
     import { logAction, formatCurrency, openPrintWindow } from '@/lib/utils';
     import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
     import { Calendar } from '@/components/ui/calendar';
-    import { format, startOfMonth, endOfMonth, parseISO } from 'date-fns';
+    import { format, startOfMonth, endOfMonth, parseISO, startOfYear, endOfYear } from 'date-fns';
     import { tr } from 'date-fns/locale';
+    import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
     const DailyRecordForm = ({ onSave, productionLines, initialData }) => {
       const [productionDate, setProductionDate] = useState(initialData?.productionDate || new Date().toISOString().split('T')[0]);
@@ -594,6 +596,143 @@ import React, { useState, useEffect, useMemo } from 'react';
           return searchMatch;
         }).sort((a, b) => new Date(b.production_date) - new Date(a.production_date));
       }, [aggregatedDailyRecords, filters.searchTerm]);
+      
+      // Analiz verileri
+      const analysisData = useMemo(() => {
+        const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
+        const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        
+        const filtered = filteredRecords.filter(r => {
+          const recordDate = format(parseISO(r.production_date), 'yyyy-MM-dd');
+          return recordDate >= from && recordDate <= to;
+        });
+        
+        // Hat bazlı analiz
+        const byLine = {};
+        dailyRecords.forEach(record => {
+          if (!record.production_date) return;
+          const recordDate = format(parseISO(record.production_date), 'yyyy-MM-dd');
+          if (recordDate < from || recordDate > to) return;
+          
+          const lineId = record.production_line_id;
+          const line = productionLines.find(l => l.id === lineId);
+          const lineName = line?.name || 'Bilinmeyen';
+          
+          if (!byLine[lineId]) {
+            byLine[lineId] = {
+              lineId,
+              lineName,
+              totalQuantity: 0,
+              totalScrap: 0,
+              totalProductionCost: 0,
+              totalScrapCost: 0,
+              records: 0,
+              parts: new Set()
+            };
+          }
+          
+          byLine[lineId].totalQuantity += record.total_quantity || 0;
+          byLine[lineId].totalScrap += record.total_scrap || 0;
+          byLine[lineId].totalProductionCost += record.total_production_cost || 0;
+          byLine[lineId].totalScrapCost += record.total_scrap_cost || 0;
+          byLine[lineId].records += 1;
+          if (record.part_code) byLine[lineId].parts.add(record.part_code);
+        });
+        
+        // Parça bazlı analiz
+        const byPart = {};
+        dailyRecords.forEach(record => {
+          if (!record.production_date || !record.part_code) return;
+          const recordDate = format(parseISO(record.production_date), 'yyyy-MM-dd');
+          if (recordDate < from || recordDate > to) return;
+          
+          const partCode = record.part_code;
+          if (!byPart[partCode]) {
+            byPart[partCode] = {
+              partCode,
+              totalQuantity: 0,
+              totalScrap: 0,
+              totalProductionCost: 0,
+              totalScrapCost: 0,
+              records: 0,
+              lines: new Set()
+            };
+          }
+          
+          byPart[partCode].totalQuantity += record.total_quantity || 0;
+          byPart[partCode].totalScrap += record.total_scrap || 0;
+          byPart[partCode].totalProductionCost += record.total_production_cost || 0;
+          byPart[partCode].totalScrapCost += record.total_scrap_cost || 0;
+          byPart[partCode].records += 1;
+          const line = productionLines.find(l => l.id === record.production_line_id);
+          if (line) byPart[partCode].lines.add(line.name);
+        });
+        
+        // Aylık trend
+        const monthlyTrend = {};
+        filtered.forEach(record => {
+          const month = format(parseISO(record.production_date), 'yyyy-MM');
+          if (!monthlyTrend[month]) {
+            monthlyTrend[month] = {
+              month,
+              totalQuantity: 0,
+              totalScrap: 0,
+              totalProductionCost: 0,
+              totalScrapCost: 0,
+              ppm: 0
+            };
+          }
+          monthlyTrend[month].totalQuantity += record.total_quantity;
+          monthlyTrend[month].totalScrap += record.total_scrap;
+          monthlyTrend[month].totalProductionCost += record.total_production_cost;
+          monthlyTrend[month].totalScrapCost += record.total_scrap_cost;
+        });
+        
+        Object.keys(monthlyTrend).forEach(month => {
+          const data = monthlyTrend[month];
+          const totalItems = data.totalQuantity + data.totalScrap;
+          data.ppm = totalItems > 0 ? (data.totalScrap * 1000000) / totalItems : 0;
+          data.monthLabel = format(parseISO(month + '-01'), 'MMM yyyy', { locale: tr });
+        });
+        
+        const monthlyTrendArray = Object.values(monthlyTrend)
+          .sort((a, b) => a.month.localeCompare(b.month));
+        
+        // Top 10 hatlar
+        const top10Lines = Object.values(byLine)
+          .map(l => ({
+            ...l,
+            partCount: l.parts.size,
+            ppm: (l.totalQuantity + l.totalScrap) > 0 ? (l.totalScrap * 1000000) / (l.totalQuantity + l.totalScrap) : 0
+          }))
+          .sort((a, b) => b.totalQuantity - a.totalQuantity)
+          .slice(0, 10);
+        
+        // Top 10 parçalar
+        const top10Parts = Object.values(byPart)
+          .map(p => ({
+            ...p,
+            lineCount: p.lines.size,
+            ppm: (p.totalQuantity + p.totalScrap) > 0 ? (p.totalScrap * 1000000) / (p.totalQuantity + p.totalScrap) : 0
+          }))
+          .sort((a, b) => b.totalQuantity - a.totalQuantity)
+          .slice(0, 10);
+        
+        return {
+          byLine,
+          byPart,
+          monthlyTrend: monthlyTrendArray,
+          top10Lines,
+          top10Parts,
+          totalQuantity: filtered.reduce((sum, r) => sum + r.total_quantity, 0),
+          totalScrap: filtered.reduce((sum, r) => sum + r.total_scrap, 0),
+          totalProductionCost: filtered.reduce((sum, r) => sum + r.total_production_cost, 0),
+          totalScrapCost: filtered.reduce((sum, r) => sum + r.total_scrap_cost, 0),
+          avgPPM: filtered.length > 0 
+            ? filtered.reduce((sum, r) => sum + r.ppm, 0) / filtered.length 
+            : 0
+        };
+      }, [filteredRecords, dailyRecords, productionLines, filters.dateRange]);
 
       return (
         <div className="space-y-6">
@@ -613,59 +752,274 @@ import React, { useState, useEffect, useMemo } from 'react';
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="flex flex-col sm:flex-row gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
-                  <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Hat adına göre ara..." value={filters.searchTerm} onChange={e => setFilters({...filters, searchTerm: e.target.value})} className="pl-10" /></div>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {filters.dateRange?.from ? (
-                          filters.dateRange.to ? (
-                            <>
-                              {format(filters.dateRange.from, "dd LLL, y", { locale: tr })} -{" "}
-                              {format(filters.dateRange.to, "dd LLL, y", { locale: tr })}
-                            </>
-                          ) : (
-                            format(filters.dateRange.from, "dd LLL, y", { locale: tr })
-                          )
-                        ) : (
-                          <span>Tarih Aralığı Seç</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        initialFocus
-                        mode="range"
-                        defaultMonth={filters.dateRange?.from}
-                        selected={filters.dateRange}
-                        onSelect={(range) => setFilters({ ...filters, dateRange: range })}
-                        numberOfMonths={2}
-                        locale={tr}
-                      />
-                    </PopoverContent>
-                  </Popover>
-                  <Button variant="ghost" onClick={() => setFilters({ dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, searchTerm: '' })}><X className="h-4 w-4 mr-2" />Temizle</Button>
-                </div>
-                <div className="border rounded-lg overflow-hidden">
-                  <table className="w-full">
-                    <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Çalışılan Hatlar</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Toplam Üretim</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">PPM</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Üretim Maliyeti</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hurda Maliyeti</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">İşlemler</th></tr></thead>
-                    <tbody className="bg-white divide-y divide-gray-200">
-                      {filteredRecords.map(record => (
-                        <tr key={record.production_date} className="hover:bg-gray-50">
-                          <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">{new Date(record.production_date).toLocaleDateString('tr-TR')}</td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm">{Array.from(record.lines).join(', ')}</td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-semibold">{record.total_quantity}</td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-bold text-orange-600">{Math.round(record.ppm)}</td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-semibold text-green-600">{formatCurrency(record.total_production_cost)}</td>
-                          <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-semibold text-red-600">{formatCurrency(record.total_scrap_cost)}</td>
-                          <td className="px-4 py-4 whitespace-nowrap text-right"><div className="flex justify-end space-x-1"><Button variant="ghost" size="sm" onClick={() => handleViewDetails(record)}><Eye className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => handleEdit(record)}><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => handlePrint(record)}><FileText className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => setRecordToDelete(record)}><Trash2 className="h-4 w-4 text-red-500" /></Button></div></td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  {filteredRecords.length === 0 && <p className="text-center text-gray-500 py-8">Filtrelerle eşleşen kayıt bulunamadı.</p>}
-                </div>
+                <Tabs defaultValue="data" className="w-full">
+                  <TabsList className="grid w-full grid-cols-2">
+                    <TabsTrigger value="data">Veri Takip</TabsTrigger>
+                    <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
+                  </TabsList>
+                  
+                  <TabsContent value="data" className="space-y-4">
+                    <div className="flex flex-col sm:flex-row gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
+                      <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Hat adına göre ara..." value={filters.searchTerm} onChange={e => setFilters({...filters, searchTerm: e.target.value})} className="pl-10" /></div>
+                      <Popover>
+                        <PopoverTrigger asChild>
+                          <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
+                            <CalendarIcon className="mr-2 h-4 w-4" />
+                            {filters.dateRange?.from ? (
+                              filters.dateRange.to ? (
+                                <>
+                                  {format(filters.dateRange.from, "dd LLL, y", { locale: tr })} -{" "}
+                                  {format(filters.dateRange.to, "dd LLL, y", { locale: tr })}
+                                </>
+                              ) : (
+                                format(filters.dateRange.from, "dd LLL, y", { locale: tr })
+                              )
+                            ) : (
+                              <span>Tarih Aralığı Seç</span>
+                            )}
+                          </Button>
+                        </PopoverTrigger>
+                        <PopoverContent className="w-auto p-0" align="start">
+                          <Calendar
+                            initialFocus
+                            mode="range"
+                            defaultMonth={filters.dateRange?.from}
+                            selected={filters.dateRange}
+                            onSelect={(range) => setFilters({ ...filters, dateRange: range })}
+                            numberOfMonths={2}
+                            locale={tr}
+                          />
+                        </PopoverContent>
+                      </Popover>
+                      <Button variant="ghost" onClick={() => setFilters({ dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, searchTerm: '' })}><X className="h-4 w-4 mr-2" />Temizle</Button>
+                    </div>
+                    <div className="border rounded-lg overflow-hidden">
+                      <table className="w-full">
+                        <thead className="bg-gray-50"><tr><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Tarih</th><th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">Çalışılan Hatlar</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Toplam Üretim</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">PPM</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Üretim Maliyeti</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">Hurda Maliyeti</th><th className="px-4 py-3 text-right text-xs font-medium text-gray-500 uppercase">İşlemler</th></tr></thead>
+                        <tbody className="bg-white divide-y divide-gray-200">
+                          {filteredRecords.map(record => (
+                            <tr key={record.production_date} className="hover:bg-gray-50">
+                              <td className="px-4 py-4 whitespace-nowrap text-sm font-medium">{new Date(record.production_date).toLocaleDateString('tr-TR')}</td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm">{Array.from(record.lines).join(', ')}</td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-semibold">{record.total_quantity}</td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-bold text-orange-600">{Math.round(record.ppm)}</td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-semibold text-green-600">{formatCurrency(record.total_production_cost)}</td>
+                              <td className="px-4 py-4 whitespace-nowrap text-sm text-right font-semibold text-red-600">{formatCurrency(record.total_scrap_cost)}</td>
+                              <td className="px-4 py-4 whitespace-nowrap text-right"><div className="flex justify-end space-x-1"><Button variant="ghost" size="sm" onClick={() => handleViewDetails(record)}><Eye className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => handleEdit(record)}><Edit className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => handlePrint(record)}><FileText className="h-4 w-4" /></Button><Button variant="ghost" size="sm" onClick={() => setRecordToDelete(record)}><Trash2 className="h-4 w-4 text-red-500" /></Button></div></td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {filteredRecords.length === 0 && <p className="text-center text-gray-500 py-8">Filtrelerle eşleşen kayıt bulunamadı.</p>}
+                    </div>
+                  </TabsContent>
+                  
+                  <TabsContent value="analysis" className="space-y-6">
+                    {/* Özet KPI Kartları */}
+                    <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                      <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Toplam Üretim</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-blue-700">{analysisData.totalQuantity.toLocaleString('tr-TR')}</div>
+                          <p className="text-xs text-muted-foreground mt-1">adet</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-red-50 to-red-100">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Toplam Hurda</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-red-700">{analysisData.totalScrap.toLocaleString('tr-TR')}</div>
+                          <p className="text-xs text-muted-foreground mt-1">adet</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Üretim Maliyeti</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-green-700">{formatCurrency(analysisData.totalProductionCost)}</div>
+                          <p className="text-xs text-muted-foreground mt-1">toplam</p>
+                        </CardContent>
+                      </Card>
+                      <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                        <CardHeader className="pb-2">
+                          <CardTitle className="text-sm">Ortalama PPM</CardTitle>
+                        </CardHeader>
+                        <CardContent>
+                          <div className="text-3xl font-bold text-orange-700">{Math.round(analysisData.avgPPM)}</div>
+                          <p className="text-xs text-muted-foreground mt-1">milyonda hata</p>
+                        </CardContent>
+                      </Card>
+                    </div>
+                    
+                    {/* Aylık Trend */}
+                    {analysisData.monthlyTrend.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Aylık Üretim ve Hurda Trendi</CardTitle>
+                          <CardDescription>Zaman içinde üretim, hurda ve maliyet trendleri</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={400}>
+                            <AreaChart data={analysisData.monthlyTrend}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="monthLabel" />
+                              <YAxis yAxisId="left" />
+                              <YAxis yAxisId="right" orientation="right" />
+                              <Tooltip 
+                                formatter={(value, name) => {
+                                  if (name === 'totalProductionCost' || name === 'totalScrapCost') {
+                                    return formatCurrency(value);
+                                  }
+                                  return value.toLocaleString('tr-TR');
+                                }}
+                              />
+                              <Legend />
+                              <Area yAxisId="left" type="monotone" dataKey="totalQuantity" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="Üretim (adet)" />
+                              <Area yAxisId="left" type="monotone" dataKey="totalScrap" stackId="2" stroke="#ef4444" fill="#ef4444" name="Hurda (adet)" />
+                              <Line yAxisId="right" type="monotone" dataKey="ppm" stroke="#f97316" strokeWidth={2} name="PPM" />
+                            </AreaChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    )}
+                    
+                    {/* Hat Bazlı Analiz */}
+                    {analysisData.top10Lines.length > 0 && (
+                      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <Card>
+                          <CardHeader>
+                            <CardTitle>Top 10 Hat - Üretim Bazlı</CardTitle>
+                            <CardDescription>En çok üretim yapan hatlar</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <ResponsiveContainer width="100%" height={400}>
+                              <BarChart data={analysisData.top10Lines.map(l => ({
+                                hat: l.lineName.length > 15 ? l.lineName.substring(0, 15) + '...' : l.lineName,
+                                uretim: l.totalQuantity,
+                                hurda: l.totalScrap,
+                                uretimMaliyet: l.totalProductionCost,
+                                hurdaMaliyet: l.totalScrapCost
+                              }))}>
+                                <CartesianGrid strokeDasharray="3 3" />
+                                <XAxis dataKey="hat" angle={-45} textAnchor="end" height={100} />
+                                <YAxis yAxisId="left" />
+                                <YAxis yAxisId="right" orientation="right" />
+                                <Tooltip 
+                                  formatter={(value, name) => {
+                                    if (name === 'uretimMaliyet' || name === 'hurdaMaliyet') {
+                                      return formatCurrency(value);
+                                    }
+                                    return value.toLocaleString('tr-TR');
+                                  }}
+                                />
+                                <Legend />
+                                <Bar yAxisId="left" dataKey="uretim" fill="#3b82f6" name="Üretim (adet)" />
+                                <Bar yAxisId="left" dataKey="hurda" fill="#ef4444" name="Hurda (adet)" />
+                                <Bar yAxisId="right" dataKey="uretimMaliyet" fill="#10b981" name="Üretim Maliyeti (₺)" />
+                                <Bar yAxisId="right" dataKey="hurdaMaliyet" fill="#f97316" name="Hurda Maliyeti (₺)" />
+                              </BarChart>
+                            </ResponsiveContainer>
+                          </CardContent>
+                        </Card>
+                        
+                        <Card>
+                          <CardHeader>
+                            <CardTitle>Top 10 Hat Detayları</CardTitle>
+                            <CardDescription>Hat bazında detaylı istatistikler</CardDescription>
+                          </CardHeader>
+                          <CardContent>
+                            <div className="space-y-2 max-h-96 overflow-y-auto">
+                              {analysisData.top10Lines.map((line, index) => (
+                                <div key={line.lineId} className="p-3 bg-blue-50 rounded border-l-4 border-blue-500">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div className="flex items-center gap-2">
+                                      <span className="text-lg font-bold text-blue-700">#{index + 1}</span>
+                                      <p className="font-semibold">{line.lineName}</p>
+                                    </div>
+                                    <div className="text-right">
+                                      <p className="text-lg font-bold text-blue-600">{line.totalQuantity.toLocaleString('tr-TR')} adet</p>
+                                      <p className="text-xs text-gray-600">PPM: {Math.round(line.ppm)}</p>
+                                    </div>
+                                  </div>
+                                  <div className="grid grid-cols-4 gap-2 text-xs text-gray-600">
+                                    <span>📋 {line.records} kayıt</span>
+                                    <span>🔧 {line.partCount} parça</span>
+                                    <span>💰 {formatCurrency(line.totalProductionCost)}</span>
+                                    <span>❌ {formatCurrency(line.totalScrapCost)}</span>
+                                  </div>
+                                </div>
+                              ))}
+                            </div>
+                          </CardContent>
+                        </Card>
+                      </div>
+                    )}
+                    
+                    {/* Parça Bazlı Analiz */}
+                    {analysisData.top10Parts.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Top 10 Parça Bazlı Analiz</CardTitle>
+                          <CardDescription>En çok üretilen parçalar ve hurda oranları</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={400}>
+                            <BarChart data={analysisData.top10Parts.map(p => ({
+                              parca: p.partCode.length > 15 ? p.partCode.substring(0, 15) + '...' : p.partCode,
+                              uretim: p.totalQuantity,
+                              hurda: p.totalScrap,
+                              ppm: Math.round(p.ppm)
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="parca" angle={-45} textAnchor="end" height={100} />
+                              <YAxis yAxisId="left" />
+                              <YAxis yAxisId="right" orientation="right" />
+                              <Tooltip />
+                              <Legend />
+                              <Bar yAxisId="left" dataKey="uretim" fill="#3b82f6" name="Üretim (adet)" />
+                              <Bar yAxisId="left" dataKey="hurda" fill="#ef4444" name="Hurda (adet)" />
+                              <Line yAxisId="right" type="monotone" dataKey="ppm" stroke="#f97316" strokeWidth={2} name="PPM" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    )}
+                    
+                    {/* Hurda Maliyeti Analizi */}
+                    {analysisData.monthlyTrend.length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Hurda Maliyeti Trendi</CardTitle>
+                          <CardDescription>Aylık bazda hurda maliyetleri ve üretim maliyetleri karşılaştırması</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={400}>
+                            <BarChart data={analysisData.monthlyTrend}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="monthLabel" />
+                              <YAxis />
+                              <Tooltip 
+                                formatter={(value, name) => {
+                                  if (name === 'totalProductionCost' || name === 'totalScrapCost') {
+                                    return formatCurrency(value);
+                                  }
+                                  return value.toLocaleString('tr-TR');
+                                }}
+                              />
+                              <Legend />
+                              <Bar dataKey="totalProductionCost" fill="#10b981" name="Üretim Maliyeti (₺)" />
+                              <Bar dataKey="totalScrapCost" fill="#ef4444" name="Hurda Maliyeti (₺)" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </TabsContent>
+                </Tabs>
               </CardContent>
             </Card>
           </motion.div>

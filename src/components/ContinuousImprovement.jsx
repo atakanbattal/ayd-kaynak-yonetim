@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
     import { motion } from 'framer-motion';
-    import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download } from 'lucide-react';
+    import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3 } from 'lucide-react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
@@ -9,13 +9,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
     import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
     import { Calendar } from '@/components/ui/calendar';
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+    import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
     import { useToast } from '@/components/ui/use-toast';
     import { supabase } from '@/lib/customSupabaseClient';
     import { useAuth } from '@/contexts/SupabaseAuthContext';
     import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
-    import { format, startOfMonth, endOfMonth, subDays, startOfQuarter, endOfQuarter, parseISO, startOfDay, endOfDay } from 'date-fns';
+    import { format, startOfMonth, endOfMonth, subDays, startOfQuarter, endOfQuarter, parseISO, startOfDay, endOfDay, startOfYear, endOfYear } from 'date-fns';
     import { tr } from 'date-fns/locale';
     import { Combobox } from '@/components/ui/combobox';
+    import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
     const initialFormState = {
       improvement_date: new Date().toISOString().split('T')[0],
@@ -1005,6 +1007,116 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
         </div>
     );
 
+      // Analiz verileri
+      const analysisData = useMemo(() => {
+        const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
+        const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        
+        const filtered = filteredImprovements.filter(i => {
+          const itemDate = format(parseISO(i.improvement_date), 'yyyy-MM-dd');
+          return itemDate >= from && itemDate <= to;
+        });
+        
+        // Tip bazlı analiz
+        const byType = filtered.reduce((acc, item) => {
+          const type = item.type || 'other';
+          if (!acc[type]) {
+            acc[type] = { count: 0, totalImpact: 0, avgImpact: 0 };
+          }
+          acc[type].count += 1;
+          const impact = calculateImpact(item);
+          acc[type].totalImpact += impact;
+          return acc;
+        }, {});
+        
+        Object.keys(byType).forEach(type => {
+          byType[type].avgImpact = byType[type].count > 0 ? byType[type].totalImpact / byType[type].count : 0;
+        });
+        
+        // Hat bazlı analiz
+        const byLine = filtered.reduce((acc, item) => {
+          const lineId = item.line_id;
+          if (!lineId) return acc;
+          const lineName = getLineName(lineId);
+          if (!acc[lineId]) {
+            acc[lineId] = { lineName, count: 0, totalImpact: 0, avgImpact: 0 };
+          }
+          acc[lineId].count += 1;
+          const impact = calculateImpact(item);
+          acc[lineId].totalImpact += impact;
+          return acc;
+        }, {});
+        
+        Object.keys(byLine).forEach(lineId => {
+          byLine[lineId].avgImpact = byLine[lineId].count > 0 ? byLine[lineId].totalImpact / byLine[lineId].count : 0;
+        });
+        
+        // Durum bazlı analiz
+        const byStatus = filtered.reduce((acc, item) => {
+          const status = item.status || 'Belirtilmemiş';
+          if (!acc[status]) {
+            acc[status] = { count: 0, totalImpact: 0 };
+          }
+          acc[status].count += 1;
+          acc[status].totalImpact += calculateImpact(item);
+          return acc;
+        }, {});
+        
+        // Aylık trend analizi
+        const monthlyTrend = {};
+        filtered.forEach(item => {
+          const month = format(parseISO(item.improvement_date), 'yyyy-MM');
+          if (!monthlyTrend[month]) {
+            monthlyTrend[month] = { month, count: 0, totalImpact: 0 };
+          }
+          monthlyTrend[month].count += 1;
+          monthlyTrend[month].totalImpact += calculateImpact(item);
+        });
+        
+        const monthlyTrendArray = Object.values(monthlyTrend)
+          .sort((a, b) => a.month.localeCompare(b.month))
+          .map(m => ({
+            ...m,
+            monthLabel: format(parseISO(m.month + '-01'), 'MMM yyyy', { locale: tr })
+          }));
+        
+        // Top 10 en etkili iyileştirmeler
+        const top10Improvements = [...filtered]
+          .map(item => ({ ...item, impact: calculateImpact(item) }))
+          .sort((a, b) => b.impact - a.impact)
+          .slice(0, 10);
+        
+        // Parça bazlı analiz
+        const byPart = filtered
+          .filter(item => item.part_code)
+          .reduce((acc, item) => {
+            const partCode = item.part_code;
+            if (!acc[partCode]) {
+              acc[partCode] = { partCode, count: 0, totalImpact: 0 };
+            }
+            acc[partCode].count += 1;
+            acc[partCode].totalImpact += calculateImpact(item);
+            return acc;
+          }, {});
+        
+        const top10Parts = Object.values(byPart)
+          .sort((a, b) => b.totalImpact - a.totalImpact)
+          .slice(0, 10);
+        
+        return {
+          byType,
+          byLine,
+          byStatus,
+          monthlyTrend: monthlyTrendArray,
+          top10Improvements,
+          top10Parts,
+          totalImpact: filtered.reduce((sum, item) => sum + calculateImpact(item), 0),
+          totalCount: filtered.length
+        };
+      }, [filteredImprovements, filters, calculateImpact, getLineName]);
+      
+      const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+      
       return (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
           <Card>
@@ -1022,17 +1134,330 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
               </div>
             </CardHeader>
             <CardContent>
-              <ImprovementFilters filters={filters} setFilters={setFilters} lines={lines} />
-              <KpiCards improvements={filteredImprovements} calculateImpact={calculateImpact} getLineName={getLineName} />
-              <ImprovementTable 
-                improvements={filteredImprovements} 
-                calculateImpact={calculateImpact} 
-                getLineName={getLineName}
-                setViewingItem={setViewingItem}
-                handlePrint={handlePrint}
-                openDialog={openDialog}
-                setDeleteConfirm={setDeleteConfirm}
-              />
+              <Tabs defaultValue="data" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="data">Veri Takip</TabsTrigger>
+                  <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="data" className="space-y-4">
+                  <ImprovementFilters filters={filters} setFilters={setFilters} lines={lines} />
+                  <KpiCards improvements={filteredImprovements} calculateImpact={calculateImpact} getLineName={getLineName} />
+                  <ImprovementTable 
+                    improvements={filteredImprovements} 
+                    calculateImpact={calculateImpact} 
+                    getLineName={getLineName}
+                    setViewingItem={setViewingItem}
+                    handlePrint={handlePrint}
+                    openDialog={openDialog}
+                    setDeleteConfirm={setDeleteConfirm}
+                  />
+                </TabsContent>
+                
+                <TabsContent value="analysis" className="space-y-6">
+                  {/* Özet KPI Kartları */}
+                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Toplam İyileştirme</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-blue-700">{analysisData.totalCount}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Kayıt sayısı</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Toplam Etki</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-green-700">{formatCurrency(analysisData.totalImpact)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Yıllık kazanç</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Ortalama Etki</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-purple-700">
+                          {formatCurrency(analysisData.totalCount > 0 ? analysisData.totalImpact / analysisData.totalCount : 0)}
+                        </div>
+                        <p className="text-xs text-muted-foreground mt-1">İyileştirme başına</p>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                      <CardHeader className="pb-2">
+                        <CardTitle className="text-sm">Farklı Hat</CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="text-3xl font-bold text-orange-700">{Object.keys(analysisData.byLine).length}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Hat sayısı</p>
+                      </CardContent>
+                    </Card>
+                  </div>
+                  
+                  {/* Tip Bazlı Analiz */}
+                  {Object.keys(analysisData.byType).length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>İyileştirme Tipi Bazlı Analiz</CardTitle>
+                          <CardDescription>Tip bazında iyileştirme sayıları ve etkileri</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={Object.entries(analysisData.byType).map(([type, data]) => ({
+                              tip: type === 'cycle_time' ? 'Çevrim Süresi' : 
+                                   type === 'quality' ? 'Kalite' :
+                                   type === 'cost' ? 'Maliyet' :
+                                   type === 'ergonomics' ? 'Ergonomi' : 'Diğer',
+                              sayi: data.count,
+                              etki: data.totalImpact
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="tip" />
+                              <YAxis yAxisId="left" />
+                              <YAxis yAxisId="right" orientation="right" />
+                              <Tooltip />
+                              <Legend />
+                              <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                              <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>İyileştirme Tipi Dağılımı</CardTitle>
+                          <CardDescription>Tip bazında yüzde dağılımı</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(analysisData.byType).map(([type, data]) => ({
+                                  name: type === 'cycle_time' ? 'Çevrim Süresi' : 
+                                        type === 'quality' ? 'Kalite' :
+                                        type === 'cost' ? 'Maliyet' :
+                                        type === 'ergonomics' ? 'Ergonomi' : 'Diğer',
+                                  value: data.count
+                                }))}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                outerRadius={80}
+                                fill="#8884d8"
+                                dataKey="value"
+                              >
+                                {Object.keys(analysisData.byType).map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                  
+                  {/* Hat Bazlı Analiz */}
+                  {Object.keys(analysisData.byLine).length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Hat Bazlı İyileştirme Analizi</CardTitle>
+                        <CardDescription>Her hat için iyileştirme sayıları ve toplam etkileri</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={Object.values(analysisData.byLine)
+                            .sort((a, b) => b.totalImpact - a.totalImpact)
+                            .slice(0, 10)
+                            .map(line => ({
+                              hat: line.lineName.length > 15 ? line.lineName.substring(0, 15) + '...' : line.lineName,
+                              sayi: line.count,
+                              etki: line.totalImpact,
+                              ortalama: line.avgImpact
+                            }))}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="hat" angle={-45} textAnchor="end" height={100} />
+                            <YAxis yAxisId="left" />
+                            <YAxis yAxisId="right" orientation="right" />
+                            <Tooltip 
+                              formatter={(value, name) => {
+                                if (name === 'etki' || name === 'ortalama') {
+                                  return formatCurrency(value);
+                                }
+                                return value;
+                              }}
+                            />
+                            <Legend />
+                            <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                            <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                            <Bar yAxisId="right" dataKey="ortalama" fill="#f97316" name="Ortalama Etki (₺)" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Aylık Trend */}
+                  {analysisData.monthlyTrend.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Aylık İyileştirme Trendi</CardTitle>
+                        <CardDescription>Zaman içinde iyileştirme sayıları ve etkileri</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <AreaChart data={analysisData.monthlyTrend}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="monthLabel" />
+                            <YAxis yAxisId="left" />
+                            <YAxis yAxisId="right" orientation="right" />
+                            <Tooltip 
+                              formatter={(value, name) => {
+                                if (name === 'totalImpact') {
+                                  return formatCurrency(value);
+                                }
+                                return value;
+                              }}
+                            />
+                            <Legend />
+                            <Area yAxisId="left" type="monotone" dataKey="count" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="Kayıt Sayısı" />
+                            <Line yAxisId="right" type="monotone" dataKey="totalImpact" stroke="#10b981" strokeWidth={2} name="Toplam Etki (₺)" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Durum Bazlı Analiz */}
+                  {Object.keys(analysisData.byStatus).length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Durum Bazlı Analiz</CardTitle>
+                        <CardDescription>İyileştirme durumlarına göre dağılım</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={Object.entries(analysisData.byStatus).map(([status, data]) => ({
+                              durum: status,
+                              sayi: data.count,
+                              etki: data.totalImpact
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="durum" />
+                              <YAxis yAxisId="left" />
+                              <YAxis yAxisId="right" orientation="right" />
+                              <Tooltip 
+                                formatter={(value, name) => {
+                                  if (name === 'etki') {
+                                    return formatCurrency(value);
+                                  }
+                                  return value;
+                                }}
+                              />
+                              <Legend />
+                              <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                              <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                          
+                          <div className="space-y-2">
+                            {Object.entries(analysisData.byStatus).map(([status, data]) => (
+                              <div key={status} className="p-3 bg-gray-50 rounded border-l-4 border-blue-500">
+                                <div className="flex justify-between items-center">
+                                  <span className="font-semibold">{status}</span>
+                                  <div className="text-right">
+                                    <p className="text-lg font-bold text-blue-600">{data.count} kayıt</p>
+                                    <p className="text-sm text-gray-600">{formatCurrency(data.totalImpact)}</p>
+                                  </div>
+                                </div>
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Top 10 En Etkili İyileştirmeler */}
+                  {analysisData.top10Improvements.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Top 10 En Etkili İyileştirmeler</CardTitle>
+                        <CardDescription>En yüksek etkiye sahip iyileştirmeler</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <div className="space-y-2">
+                          {analysisData.top10Improvements.map((item, index) => (
+                            <div key={item.id} className="p-3 bg-green-50 rounded border-l-4 border-green-500">
+                              <div className="flex justify-between items-start">
+                                <div className="flex items-center gap-3">
+                                  <span className="text-xl font-bold text-green-700">#{index + 1}</span>
+                                  <div>
+                                    <p className="font-semibold">{item.description}</p>
+                                    <p className="text-xs text-gray-600">
+                                      {getLineName(item.line_id)} | {item.type === 'cycle_time' ? 'Çevrim Süresi' : 
+                                                                      item.type === 'quality' ? 'Kalite' :
+                                                                      item.type === 'cost' ? 'Maliyet' :
+                                                                      item.type === 'ergonomics' ? 'Ergonomi' : 'Diğer'}
+                                    </p>
+                                  </div>
+                                </div>
+                                <div className="text-right">
+                                  <p className="text-lg font-bold text-green-600">{formatCurrency(item.impact)}</p>
+                                  <p className="text-xs text-gray-600">{format(parseISO(item.improvement_date), 'dd.MM.yyyy', { locale: tr })}</p>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Top 10 Parça Bazlı Analiz */}
+                  {analysisData.top10Parts.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Top 10 Parça Bazlı İyileştirmeler</CardTitle>
+                        <CardDescription>En çok iyileştirme yapılan parçalar</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={analysisData.top10Parts.map(part => ({
+                            parca: part.partCode.length > 15 ? part.partCode.substring(0, 15) + '...' : part.partCode,
+                            sayi: part.count,
+                            etki: part.totalImpact
+                          }))}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="parca" angle={-45} textAnchor="end" height={100} />
+                            <YAxis yAxisId="left" />
+                            <YAxis yAxisId="right" orientation="right" />
+                            <Tooltip 
+                              formatter={(value, name) => {
+                                if (name === 'etki') {
+                                  return formatCurrency(value);
+                                }
+                                return value;
+                              }}
+                            />
+                            <Legend />
+                            <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                            <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
           

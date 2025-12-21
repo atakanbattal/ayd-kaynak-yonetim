@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
     import { motion } from 'framer-motion';
-    import { FileText, Plus, Save, AlertCircle, Info, Search, Edit, Trash2, Eye, Download, Upload, Paperclip, X } from 'lucide-react';
+    import { FileText, Plus, Save, AlertCircle, Info, Search, Edit, Trash2, Eye, Download, Upload, Paperclip, X, BarChart3 } from 'lucide-react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
@@ -8,11 +8,15 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
     import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue, SelectGroup, SelectLabel } from '@/components/ui/select';
     import { Textarea } from '@/components/ui/textarea';
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+    import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
     import { useToast } from '@/components/ui/use-toast';
     import { supabase } from '@/lib/customSupabaseClient';
     import { useAuth } from '@/contexts/SupabaseAuthContext';
     import { openPrintWindow, logAction } from '@/lib/utils';
     import { materialGroups, weldingProcesses, positions, gasTypes, wireTypes, jointTypes, getSuggestions, validateWPS, jointDesigns, calculateRobotSpeed, calculateHeatInput } from '@/lib/wpsUtils';
+    import { BarChart, Bar, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer } from 'recharts';
+    import { format, parseISO } from 'date-fns';
+    import { tr } from 'date-fns/locale';
     
     const initialPartState = { material_type: '', thickness: '', pipe_od: '', pipe_wt: '' };
     const initialFormState = {
@@ -202,6 +206,78 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
         );
         setFilteredWpsList(filteredData);
       }, [searchTerm, wpsList]);
+      
+      // Analiz verileri
+      const analysisData = useMemo(() => {
+        // Proses bazlı analiz
+        const byProcess = {};
+        wpsList.forEach(wps => {
+          const process = wps.welding_process || 'Belirtilmemiş';
+          if (!byProcess[process]) {
+            byProcess[process] = { count: 0, processes: new Set() };
+          }
+          byProcess[process].count += 1;
+        });
+        
+        // Pozisyon bazlı analiz
+        const byPosition = {};
+        wpsList.forEach(wps => {
+          const position = wps.position || 'Belirtilmemiş';
+          if (!byPosition[position]) {
+            byPosition[position] = { count: 0 };
+          }
+          byPosition[position].count += 1;
+        });
+        
+        // Birleştirme tipi bazlı analiz
+        const byJointType = {};
+        wpsList.forEach(wps => {
+          const jointType = wps.joint_type || 'Belirtilmemiş';
+          if (!byJointType[jointType]) {
+            byJointType[jointType] = { count: 0 };
+          }
+          byJointType[jointType].count += 1;
+        });
+        
+        // Malzeme bazlı analiz
+        const byMaterial = {};
+        wpsList.forEach(wps => {
+          const material = wps.part1?.material_type || 'Belirtilmemiş';
+          if (!byMaterial[material]) {
+            byMaterial[material] = { count: 0 };
+          }
+          byMaterial[material].count += 1;
+        });
+        
+        // Aylık trend
+        const monthlyTrend = {};
+        wpsList.forEach(wps => {
+          if (!wps.created_at) return;
+          const month = format(parseISO(wps.created_at), 'yyyy-MM');
+          if (!monthlyTrend[month]) {
+            monthlyTrend[month] = { month, count: 0 };
+          }
+          monthlyTrend[month].count += 1;
+        });
+        
+        const monthlyTrendArray = Object.values(monthlyTrend)
+          .sort((a, b) => a.month.localeCompare(b.month))
+          .map(m => ({
+            ...m,
+            monthLabel: format(parseISO(m.month + '-01'), 'MMM yyyy', { locale: tr })
+          }));
+        
+        return {
+          byProcess,
+          byPosition,
+          byJointType,
+          byMaterial,
+          monthlyTrend: monthlyTrendArray,
+          totalCount: wpsList.length
+        };
+      }, [wpsList]);
+      
+      const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
     
       useEffect(() => {
         if ((formData.part1.material_type && (formData.part1.thickness || formData.part1.pipe_wt)) || (formData.part2.material_type && (formData.part2.thickness || formData.part2.pipe_wt))) {
@@ -438,32 +514,212 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
               </div>
             </CardHeader>
             <CardContent>
-              <div className="mb-4"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="WPS kodu, parça kodu, malzeme veya prosese göre ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div></div>
-              <div className="border rounded-lg overflow-hidden">
-                <table className="w-full">
-                  <thead className="bg-gray-50"><tr>{['WPS Kodu', 'Parça Kodu', 'Malzeme', 'Kalınlık', 'Proses', 'Pozisyon', 'Oluşturulma', 'İşlemler'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
-                  <tbody className="bg-white divide-y divide-gray-200">
-                    {filteredWpsList.map(wps => (
-                      <tr key={wps.id} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-blue-600">{wps.wps_code}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.part_code}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.part1_material}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.part1_thickness_display}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.welding_process}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.position}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm">{new Date(wps.created_at).toLocaleDateString('tr-TR')}</td>
-                        <td className="px-4 py-3 whitespace-nowrap text-sm"><div className="flex items-center space-x-1">
-                          <Button variant="ghost" size="icon" onClick={() => openViewDialog(wps)}><Eye className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => openFormDialog(wps)}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => handleGeneratePDF(wps.id)}><Download className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(wps)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                        </div></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-                {filteredWpsList.length === 0 && <p className="text-center text-gray-500 py-8">Kayıt bulunamadı.</p>}
-              </div>
+              <Tabs defaultValue="data" className="w-full">
+                <TabsList className="grid w-full grid-cols-2">
+                  <TabsTrigger value="data">Veri Takip</TabsTrigger>
+                  <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
+                </TabsList>
+                
+                <TabsContent value="data" className="space-y-4">
+                  <div className="mb-4"><div className="relative"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="WPS kodu, parça kodu, malzeme veya prosese göre ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div></div>
+                  <div className="border rounded-lg overflow-hidden">
+                    <table className="w-full">
+                      <thead className="bg-gray-50"><tr>{['WPS Kodu', 'Parça Kodu', 'Malzeme', 'Kalınlık', 'Proses', 'Pozisyon', 'Oluşturulma', 'İşlemler'].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
+                      <tbody className="bg-white divide-y divide-gray-200">
+                        {filteredWpsList.map(wps => (
+                          <tr key={wps.id} className="hover:bg-gray-50">
+                            <td className="px-4 py-3 whitespace-nowrap text-sm font-medium text-blue-600">{wps.wps_code}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.part_code}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.part1_material}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.part1_thickness_display}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.welding_process}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">{wps.position}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm">{new Date(wps.created_at).toLocaleDateString('tr-TR')}</td>
+                            <td className="px-4 py-3 whitespace-nowrap text-sm"><div className="flex items-center space-x-1">
+                              <Button variant="ghost" size="icon" onClick={() => openViewDialog(wps)}><Eye className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => openFormDialog(wps)}><Edit className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => handleGeneratePDF(wps.id)}><Download className="h-4 w-4" /></Button>
+                              <Button variant="ghost" size="icon" onClick={() => openDeleteDialog(wps)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                            </div></td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {filteredWpsList.length === 0 && <p className="text-center text-gray-500 py-8">Kayıt bulunamadı.</p>}
+                  </div>
+                </TabsContent>
+                
+                <TabsContent value="analysis" className="space-y-6">
+                  {/* Özet KPI */}
+                  <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                    <CardContent className="p-6">
+                      <div className="text-center">
+                        <div className="text-4xl font-bold text-blue-700">{analysisData.totalCount}</div>
+                        <p className="text-sm text-gray-600 mt-2">Toplam WPS Kaydı</p>
+                      </div>
+                    </CardContent>
+                  </Card>
+                  
+                  {/* Proses Bazlı Analiz */}
+                  {Object.keys(analysisData.byProcess).length > 0 && (
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Kaynak Prosesi Dağılımı</CardTitle>
+                          <CardDescription>Proses bazında WPS sayıları</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={Object.entries(analysisData.byProcess).map(([process, data]) => ({
+                              proses: process.length > 15 ? process.substring(0, 15) + '...' : process,
+                              sayi: data.count
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="proses" angle={-45} textAnchor="end" height={100} />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="sayi" fill="#3b82f6" name="WPS Sayısı" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                      
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Kaynak Prosesi Yüzde Dağılımı</CardTitle>
+                          <CardDescription>Proses bazında yüzde dağılımı</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <PieChart>
+                              <Pie
+                                data={Object.entries(analysisData.byProcess).map(([process, data]) => ({
+                                  name: process.length > 20 ? process.substring(0, 20) + '...' : process,
+                                  value: data.count
+                                }))}
+                                cx="50%"
+                                cy="50%"
+                                labelLine={false}
+                                label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
+                                outerRadius={80}
+                                fill="#8884d8"
+                                dataKey="value"
+                              >
+                                {Object.keys(analysisData.byProcess).map((entry, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  )}
+                  
+                  {/* Pozisyon ve Birleştirme Tipi */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    {Object.keys(analysisData.byPosition).length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Kaynak Pozisyonu Analizi</CardTitle>
+                          <CardDescription>Pozisyon bazında WPS sayıları</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={Object.entries(analysisData.byPosition).map(([position, data]) => ({
+                              pozisyon: position,
+                              sayi: data.count
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="pozisyon" />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="sayi" fill="#10b981" name="WPS Sayısı" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    )}
+                    
+                    {Object.keys(analysisData.byJointType).length > 0 && (
+                      <Card>
+                        <CardHeader>
+                          <CardTitle>Birleştirme Tipi Analizi</CardTitle>
+                          <CardDescription>Birleştirme tipi bazında WPS sayıları</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                          <ResponsiveContainer width="100%" height={300}>
+                            <BarChart data={Object.entries(analysisData.byJointType).map(([jointType, data]) => ({
+                              tip: jointType,
+                              sayi: data.count
+                            }))}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="tip" angle={-45} textAnchor="end" height={100} />
+                              <YAxis />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="sayi" fill="#f97316" name="WPS Sayısı" />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    )}
+                  </div>
+                  
+                  {/* Malzeme Bazlı Analiz */}
+                  {Object.keys(analysisData.byMaterial).length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Malzeme Bazlı Analiz</CardTitle>
+                        <CardDescription>Malzeme tipi bazında WPS sayıları</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={Object.entries(analysisData.byMaterial)
+                            .sort((a, b) => b[1].count - a[1].count)
+                            .slice(0, 10)
+                            .map(([material, data]) => ({
+                              malzeme: material.length > 20 ? material.substring(0, 20) + '...' : material,
+                              sayi: data.count
+                            }))}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="malzeme" angle={-45} textAnchor="end" height={100} />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="sayi" fill="#8b5cf6" name="WPS Sayısı" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+                  
+                  {/* Aylık Trend */}
+                  {analysisData.monthlyTrend.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle>Aylık WPS Oluşturma Trendi</CardTitle>
+                        <CardDescription>Zaman içinde WPS oluşturma sayıları</CardDescription>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={400}>
+                          <BarChart data={analysisData.monthlyTrend}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="monthLabel" />
+                            <YAxis />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="count" fill="#3b82f6" name="WPS Sayısı" />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+                </TabsContent>
+              </Tabs>
             </CardContent>
           </Card>
     

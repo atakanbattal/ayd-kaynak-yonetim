@@ -250,7 +250,7 @@ const ManualDataTracking = () => {
     
     // Yeni state'ler
     const [partCodeSearch, setPartCodeSearch] = useState('');
-    const [partCodeSearchResults, setPartCodeSearchResults] = useState([]);
+    const [partCodeSearchResults, setPartCodeSearchResults] = useState(null);
     const [showPartCodeSearch, setShowPartCodeSearch] = useState(false);
     const [employeeAnalysisPeriod, setEmployeeAnalysisPeriod] = useState('monthly'); // 'monthly' veya 'yearly'
 
@@ -1265,7 +1265,7 @@ const ManualDataTracking = () => {
         setViewingDetails(details);
     };
     
-    // Parça kodu ile arama fonksiyonu
+    // Parça kodu ile arama fonksiyonu - Tüm detayları içeren gelişmiş arama
     const handlePartCodeSearch = useCallback(() => {
         if (!partCodeSearch.trim()) {
             toast({ title: "Uyarı", description: "Lütfen bir parça kodu girin.", variant: "default" });
@@ -1273,19 +1273,67 @@ const ManualDataTracking = () => {
         }
         
         const searchTerm = partCodeSearch.trim().toUpperCase();
-        const results = [...allManualRecords]
+        
+        // Manuel kayıtları bul
+        const manualResults = [...allManualRecords]
             .filter(r => r.part_code && r.part_code.toUpperCase().includes(searchTerm))
-            .map(r => ({
-                ...r,
-                recordType: 'manual',
-                line: lines.find(l => l.id === r.line_id),
-                operator: employees.find(e => e.id === r.operator_id)
-            }))
+            .map(r => {
+                const line = lines.find(l => l.id === r.line_id);
+                const operator = employees.find(e => e.id === r.operator_id);
+                const durationSeconds = r.duration_seconds || 0;
+                const cost = calculateCost(r.quantity, r.line_id, durationSeconds);
+                return {
+                    ...r,
+                    recordType: 'manual',
+                    line,
+                    operator,
+                    cost,
+                    durationSeconds
+                };
+            });
+        
+        // Tamir kayıtlarını bul (parça kodu olmayabilir ama kontrol edelim)
+        const repairResults = [...allRepairRecords]
+            .filter(r => {
+                // Tamir kayıtlarında part_code genelde yok ama description'da olabilir
+                return (r.part_code && r.part_code.toUpperCase().includes(searchTerm)) ||
+                       (r.description && r.description.toUpperCase().includes(searchTerm));
+            })
+            .map(r => {
+                const repairLine = lines.find(l => l.id === r.repair_line_id);
+                const sourceLine = lines.find(l => l.id === r.source_line_id);
+                const operator = employees.find(e => e.id === r.operator_id);
+                const durationSeconds = r.duration_seconds || 0;
+                const cost = calculateCost(r.quantity, r.repair_line_id, durationSeconds);
+                return {
+                    ...r,
+                    recordType: 'repair',
+                    repairLine,
+                    sourceLine,
+                    operator,
+                    cost,
+                    durationSeconds
+                };
+            });
+        
+        const allResults = [...manualResults, ...repairResults]
             .sort((a, b) => new Date(b.record_date) - new Date(a.record_date));
         
-        setPartCodeSearchResults(results);
+        // İstatistikler hesapla
+        const stats = {
+            totalRecords: allResults.length,
+            totalQuantity: allResults.reduce((sum, r) => sum + (r.quantity || 0), 0),
+            totalCost: allResults.reduce((sum, r) => sum + (r.cost || 0), 0),
+            manualCount: manualResults.length,
+            repairCount: repairResults.length,
+            uniqueDates: new Set(allResults.map(r => r.record_date)).size,
+            uniqueOperators: new Set(allResults.map(r => r.operator_id).filter(Boolean)).size,
+            uniqueLines: new Set([...manualResults.map(r => r.line_id), ...repairResults.map(r => r.repair_line_id)].filter(Boolean)).size
+        };
+        
+        setPartCodeSearchResults({ results: allResults, stats });
         setShowPartCodeSearch(true);
-    }, [partCodeSearch, allManualRecords, lines, employees, toast]);
+    }, [partCodeSearch, allManualRecords, allRepairRecords, lines, employees, calculateCost, toast]);
     
     // Aylık/yıllık personel analizi
     const employeeAnalysisData = useMemo(() => {
@@ -1373,6 +1421,86 @@ const ManualDataTracking = () => {
             .sort((a, b) => b.quantity - a.quantity)
             .slice(0, 10);
     }, [allManualRecords]);
+    
+    // Manuel ve tamire en çok parça gönderen hatlar analizi
+    const linesSendingToManualAndRepair = useMemo(() => {
+        // Manuel hatlara gönderen kaynak hatlar
+        const manualBySourceLine = {};
+        allManualRecords.forEach(r => {
+            const lineId = r.line_id;
+            if (!lineId) return;
+            const line = lines.find(l => l.id === lineId);
+            const lineName = line?.name || 'Bilinmeyen';
+            
+            if (!manualBySourceLine[lineId]) {
+                manualBySourceLine[lineId] = {
+                    lineId,
+                    lineName,
+                    totalQuantity: 0,
+                    totalRecords: 0,
+                    totalCost: 0,
+                    parts: new Set(),
+                    employees: new Set()
+                };
+            }
+            
+            manualBySourceLine[lineId].totalQuantity += r.quantity || 0;
+            manualBySourceLine[lineId].totalRecords += 1;
+            if (r.part_code) manualBySourceLine[lineId].parts.add(r.part_code);
+            if (r.operator_id) manualBySourceLine[lineId].employees.add(r.operator_id);
+            
+            const durationSeconds = r.duration_seconds || 0;
+            const cost = calculateCost(r.quantity, r.line_id, durationSeconds);
+            manualBySourceLine[lineId].totalCost += cost;
+        });
+        
+        // Tamir hatlarına gönderen kaynak hatlar
+        const repairBySourceLine = {};
+        allRepairRecords.forEach(r => {
+            const sourceLineId = r.source_line_id;
+            if (!sourceLineId) return;
+            const sourceLine = lines.find(l => l.id === sourceLineId);
+            const sourceLineName = sourceLine?.name || 'Bilinmeyen';
+            
+            if (!repairBySourceLine[sourceLineId]) {
+                repairBySourceLine[sourceLineId] = {
+                    lineId: sourceLineId,
+                    lineName: sourceLineName,
+                    totalQuantity: 0,
+                    totalRecords: 0,
+                    totalCost: 0,
+                    repairLines: new Set(),
+                    employees: new Set()
+                };
+            }
+            
+            repairBySourceLine[sourceLineId].totalQuantity += r.quantity || 0;
+            repairBySourceLine[sourceLineId].totalRecords += 1;
+            if (r.repair_line_id) {
+                const repairLine = lines.find(l => l.id === r.repair_line_id);
+                if (repairLine) repairBySourceLine[sourceLineId].repairLines.add(repairLine.name);
+            }
+            if (r.operator_id) repairBySourceLine[sourceLineId].employees.add(r.operator_id);
+            
+            const durationSeconds = r.duration_seconds || 0;
+            const cost = calculateCost(r.quantity, r.repair_line_id, durationSeconds);
+            repairBySourceLine[sourceLineId].totalCost += cost;
+        });
+        
+        // Top 10 manuel gönderen hatlar
+        const topManualLines = Object.values(manualBySourceLine)
+            .map(l => ({ ...l, partCount: l.parts.size, employeeCount: l.employees.size }))
+            .sort((a, b) => b.totalQuantity - a.totalQuantity)
+            .slice(0, 10);
+        
+        // Top 10 tamir gönderen hatlar
+        const topRepairLines = Object.values(repairBySourceLine)
+            .map(l => ({ ...l, repairLineCount: l.repairLines.size, employeeCount: l.employees.size }))
+            .sort((a, b) => b.totalQuantity - a.totalQuantity)
+            .slice(0, 10);
+        
+        return { topManualLines, topRepairLines };
+    }, [allManualRecords, allRepairRecords, lines, calculateCost]);
     
     // Aylık bazda tamir ve manuel maliyet grafik verisi
     const monthlyCostChartData = useMemo(() => {
@@ -2347,30 +2475,82 @@ const ManualDataTracking = () => {
                             />
                             <Button onClick={handlePartCodeSearch}><Search className="h-4 w-4 mr-2" />Ara</Button>
                         </div>
-                        {partCodeSearchResults.length > 0 && (
-                            <div className="mt-4">
-                                <p className="text-sm font-semibold mb-2">
-                                    {partCodeSearchResults.length} sonuç bulundu
-                                </p>
-                                <div className="max-h-60 overflow-y-auto border rounded-lg">
+                        {partCodeSearchResults.results && partCodeSearchResults.results.length > 0 && (
+                            <div className="mt-4 space-y-4">
+                                {/* İstatistikler */}
+                                <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                                    <Card className="bg-blue-50">
+                                        <CardContent className="p-4">
+                                            <p className="text-xs text-gray-600">Toplam Kayıt</p>
+                                            <p className="text-2xl font-bold text-blue-700">{partCodeSearchResults.stats.totalRecords}</p>
+                                        </CardContent>
+                                    </Card>
+                                    <Card className="bg-green-50">
+                                        <CardContent className="p-4">
+                                            <p className="text-xs text-gray-600">Toplam Adet</p>
+                                            <p className="text-2xl font-bold text-green-700">{partCodeSearchResults.stats.totalQuantity.toLocaleString('tr-TR')}</p>
+                                        </CardContent>
+                                    </Card>
+                                    <Card className="bg-purple-50">
+                                        <CardContent className="p-4">
+                                            <p className="text-xs text-gray-600">Toplam Maliyet</p>
+                                            <p className="text-2xl font-bold text-purple-700">{formatCurrency(partCodeSearchResults.stats.totalCost)}</p>
+                                        </CardContent>
+                                    </Card>
+                                    <Card className="bg-orange-50">
+                                        <CardContent className="p-4">
+                                            <p className="text-xs text-gray-600">Farklı Tarih</p>
+                                            <p className="text-2xl font-bold text-orange-700">{partCodeSearchResults.stats.uniqueDates}</p>
+                                        </CardContent>
+                                    </Card>
+                                </div>
+                                
+                                {/* Detaylı Tablo */}
+                                <div className="max-h-96 overflow-y-auto border rounded-lg">
                                     <table className="w-full text-sm">
                                         <thead className="bg-gray-50 sticky top-0">
                                             <tr>
-                                                <th className="px-3 py-2 text-left">Tarih</th>
+                                                <th className="px-3 py-2 text-left">Tarih/Saat</th>
+                                                <th className="px-3 py-2 text-left">Tip</th>
                                                 <th className="px-3 py-2 text-left">Vardiya</th>
                                                 <th className="px-3 py-2 text-left">Operatör</th>
                                                 <th className="px-3 py-2 text-left">Hat</th>
                                                 <th className="px-3 py-2 text-right">Adet</th>
+                                                <th className="px-3 py-2 text-right">Süre (sn)</th>
+                                                <th className="px-3 py-2 text-right">Maliyet</th>
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {partCodeSearchResults.map((r, idx) => (
+                                            {partCodeSearchResults.results.map((r, idx) => (
                                                 <tr key={idx} className="border-b hover:bg-gray-50">
-                                                    <td className="px-3 py-2">{format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr })}</td>
+                                                    <td className="px-3 py-2">
+                                                        <div className="flex flex-col">
+                                                            <span>{format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr })}</span>
+                                                            {r.created_at && (
+                                                                <span className="text-xs text-gray-500">{format(new Date(r.created_at), 'HH:mm:ss')}</span>
+                                                            )}
+                                                        </div>
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        <span className={`px-2 py-1 rounded text-xs ${
+                                                            r.recordType === 'manual' ? 'bg-blue-100 text-blue-700' : 'bg-orange-100 text-orange-700'
+                                                        }`}>
+                                                            {r.recordType === 'manual' ? 'Manuel' : 'Tamir'}
+                                                        </span>
+                                                    </td>
                                                     <td className="px-3 py-2">{getShiftLabel(r.shift)}</td>
-                                                    <td className="px-3 py-2">{r.operator ? `${r.operator.first_name} ${r.operator.last_name}` : 'N/A'}</td>
-                                                    <td className="px-3 py-2">{r.line?.name || 'N/A'}</td>
+                                                    <td className="px-3 py-2">
+                                                        {r.operator ? `${r.operator.first_name} ${r.operator.last_name}` : 'N/A'}
+                                                    </td>
+                                                    <td className="px-3 py-2">
+                                                        {r.recordType === 'manual' 
+                                                            ? (r.line?.name || 'N/A')
+                                                            : (r.repairLine?.name ? `${r.sourceLine?.name || 'N/A'} → ${r.repairLine.name}` : 'N/A')
+                                                        }
+                                                    </td>
                                                     <td className="px-3 py-2 text-right font-semibold">{r.quantity}</td>
+                                                    <td className="px-3 py-2 text-right">{r.durationSeconds || 0}</td>
+                                                    <td className="px-3 py-2 text-right font-semibold text-green-600">{formatCurrency(r.cost || 0)}</td>
                                                 </tr>
                                             ))}
                                         </tbody>
@@ -2403,6 +2583,98 @@ const ManualDataTracking = () => {
                                     </div>
                                 ))}
                             </div>
+                        </CardContent>
+                    </Card>
+                )}
+                
+                {/* Manuel ve Tamire En Çok Parça Gönderen Hatlar */}
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-blue-700">Manuel Hatlara En Çok Gönderen Kaynak Hatlar</CardTitle>
+                            <CardDescription>Top 10 hat - En çok manuel üretime gönderen hatlar</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {linesSendingToManualAndRepair.topManualLines.map((line, index) => (
+                                    <div key={line.lineId} className="p-3 bg-blue-50 rounded border-l-4 border-blue-500">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg font-bold text-blue-700">#{index + 1}</span>
+                                                <p className="font-semibold">{line.lineName}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-lg font-bold text-blue-600">{line.totalQuantity.toLocaleString('tr-TR')} adet</p>
+                                                <p className="text-xs text-gray-600">{formatCurrency(line.totalCost)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                                            <span>📋 {line.totalRecords} kayıt</span>
+                                            <span>🔧 {line.partCount} farklı parça</span>
+                                            <span>👥 {line.employeeCount} personel</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card>
+                        <CardHeader>
+                            <CardTitle className="text-orange-700">Tamir Hatlarına En Çok Gönderen Kaynak Hatlar</CardTitle>
+                            <CardDescription>Top 10 hat - En çok tamire gönderen hatlar</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <div className="space-y-2">
+                                {linesSendingToManualAndRepair.topRepairLines.map((line, index) => (
+                                    <div key={line.lineId} className="p-3 bg-orange-50 rounded border-l-4 border-orange-500">
+                                        <div className="flex justify-between items-start mb-2">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-lg font-bold text-orange-700">#{index + 1}</span>
+                                                <p className="font-semibold">{line.lineName}</p>
+                                            </div>
+                                            <div className="text-right">
+                                                <p className="text-lg font-bold text-orange-600">{line.totalQuantity.toLocaleString('tr-TR')} adet</p>
+                                                <p className="text-xs text-gray-600">{formatCurrency(line.totalCost)}</p>
+                                            </div>
+                                        </div>
+                                        <div className="grid grid-cols-3 gap-2 text-xs text-gray-600">
+                                            <span>📋 {line.totalRecords} kayıt</span>
+                                            <span>🔧 {line.repairLineCount} tamir hattı</span>
+                                            <span>👥 {line.employeeCount} personel</span>
+                                        </div>
+                                    </div>
+                                ))}
+                            </div>
+                        </CardContent>
+                    </Card>
+                </div>
+                
+                {/* Manuel ve Tamire Gönderen Hatlar Grafiği */}
+                {(linesSendingToManualAndRepair.topManualLines.length > 0 || linesSendingToManualAndRepair.topRepairLines.length > 0) && (
+                    <Card>
+                        <CardHeader>
+                            <CardTitle>Manuel ve Tamire Gönderen Hatlar Karşılaştırması</CardTitle>
+                            <CardDescription>En çok gönderen hatların görsel karşılaştırması</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <ResponsiveContainer width="100%" height={400}>
+                                <BarChart data={[
+                                    ...linesSendingToManualAndRepair.topManualLines.slice(0, 5).map(l => ({
+                                        hat: l.lineName.length > 15 ? l.lineName.substring(0, 15) + '...' : l.lineName,
+                                        manuel: l.totalQuantity,
+                                        tamir: linesSendingToManualAndRepair.topRepairLines.find(r => r.lineId === l.lineId)?.totalQuantity || 0
+                                    }))
+                                ]}>
+                                    <CartesianGrid strokeDasharray="3 3" />
+                                    <XAxis dataKey="hat" angle={-45} textAnchor="end" height={100} />
+                                    <YAxis />
+                                    <Tooltip />
+                                    <Legend />
+                                    <Bar dataKey="manuel" fill="#3b82f6" name="Manuel Üretim (adet)" />
+                                    <Bar dataKey="tamir" fill="#f97316" name="Tamir (adet)" />
+                                </BarChart>
+                            </ResponsiveContainer>
                         </CardContent>
                     </Card>
                 )}
