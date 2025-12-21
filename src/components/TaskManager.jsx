@@ -3,9 +3,9 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from 
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
-import { Plus, GripVertical, Calendar as CalendarIcon, User, AlertCircle, CheckCircle, Loader, Search, X as XIcon, Tag, Trash2, Edit } from 'lucide-react';
+import { Plus, GripVertical, Calendar as CalendarIcon, User, AlertCircle, CheckCircle, Loader, Search, X as XIcon, Tag, Trash2, Edit, BarChart3, TrendingUp, Target, Clock, Download } from 'lucide-react';
 import { Button } from '@/components/ui/button';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -13,6 +13,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Textarea } from '@/components/ui/textarea';
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
 import { Calendar } from '@/components/ui/calendar';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { cn, logAction, openPrintWindow, formatCurrency } from '@/lib/utils';
 import { format } from 'date-fns';
@@ -20,7 +21,9 @@ import { tr } from 'date-fns/locale';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Combobox } from '@/components/ui/combobox';
-import { Download } from 'lucide-react';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell, LineChart, Line, CartesianGrid, AreaChart, Area } from 'recharts';
+
+const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
 const priorityMap = {
   low: { label: 'Düşük', icon: <CheckCircle className="h-4 w-4 text-gray-500" />, color: 'text-gray-500' },
@@ -81,12 +84,115 @@ const TaskManager = ({ user }) => {
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [editingTask, setEditingTask] = useState(null);
   const [viewingTask, setViewingTask] = useState(null);
+  const [activeTab, setActiveTab] = useState('kanban');
   const { toast } = useToast();
   const { user: authUser } = useAuth();
 
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterTag, setFilterTag] = useState('');
+
+  // Analiz verileri
+  const analysisData = useMemo(() => {
+    if (!tasks.length) return null;
+
+    const today = new Date();
+
+    // Durum bazlı analiz
+    const byStatus = {
+      todo: tasks.filter(t => t.status === 'todo').length,
+      inProgress: tasks.filter(t => t.status === 'in-progress').length,
+      done: tasks.filter(t => t.status === 'done').length,
+    };
+
+    const statusData = [
+      { name: 'Beklemede', value: byStatus.todo, color: '#3B82F6' },
+      { name: 'Devam Ediyor', value: byStatus.inProgress, color: '#F59E0B' },
+      { name: 'Tamamlandı', value: byStatus.done, color: '#10B981' },
+    ];
+
+    // Öncelik bazlı analiz
+    const byPriority = {};
+    tasks.forEach(t => {
+      const priority = t.priority || 'medium';
+      if (!byPriority[priority]) byPriority[priority] = 0;
+      byPriority[priority]++;
+    });
+
+    const priorityData = [
+      { name: 'Düşük', value: byPriority.low || 0, color: '#9CA3AF' },
+      { name: 'Orta', value: byPriority.medium || 0, color: '#3B82F6' },
+      { name: 'Yüksek', value: byPriority.high || 0, color: '#F59E0B' },
+      { name: 'Kritik', value: byPriority.critical || 0, color: '#EF4444' },
+    ].filter(d => d.value > 0);
+
+    // Atanan bazlı analiz
+    const byAssignee = {};
+    tasks.forEach(t => {
+      const assignee = t.assignee_name || 'Atanmamış';
+      if (!byAssignee[assignee]) byAssignee[assignee] = { total: 0, done: 0, pending: 0 };
+      byAssignee[assignee].total++;
+      if (t.status === 'done') byAssignee[assignee].done++;
+      else byAssignee[assignee].pending++;
+    });
+
+    const assigneeData = Object.entries(byAssignee)
+      .map(([name, data]) => ({ name: name.length > 15 ? name.substring(0, 15) + '...' : name, ...data }))
+      .sort((a, b) => b.total - a.total)
+      .slice(0, 10);
+
+    // Geciken görevler
+    const overdueTasks = tasks.filter(t => {
+      if (!t.due_date || t.status === 'done') return false;
+      return new Date(t.due_date) < today;
+    });
+
+    // Aylık trend
+    const byMonth = {};
+    tasks.forEach(t => {
+      if (!t.created_at) return;
+      const month = format(new Date(t.created_at), 'MMM yyyy', { locale: tr });
+      if (!byMonth[month]) byMonth[month] = { created: 0, done: 0 };
+      byMonth[month].created++;
+      if (t.status === 'done') byMonth[month].done++;
+    });
+
+    const monthlyData = Object.entries(byMonth)
+      .map(([month, data]) => ({ month, ...data }))
+      .slice(-12);
+
+    // Etiket bazlı analiz
+    const byTag = {};
+    tasks.forEach(t => {
+      if (!t.tags) return;
+      t.tags.split(',').forEach(tag => {
+        const trimmedTag = tag.trim();
+        if (!trimmedTag) return;
+        if (!byTag[trimmedTag]) byTag[trimmedTag] = 0;
+        byTag[trimmedTag]++;
+      });
+    });
+
+    const tagData = Object.entries(byTag)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 10);
+
+    // Tamamlanma oranı
+    const completionRate = tasks.length > 0 ? Math.round((byStatus.done / tasks.length) * 100) : 0;
+
+    return {
+      total: tasks.length,
+      byStatus,
+      completionRate,
+      overdue: overdueTasks.length,
+      statusData,
+      priorityData,
+      assigneeData,
+      monthlyData,
+      tagData,
+    };
+  }, [tasks]);
 
   const employeeOptions = useMemo(() => employees.map(emp => ({
     value: emp.id,
@@ -332,19 +438,225 @@ const TaskManager = ({ user }) => {
       <Card>
         <CardHeader><div className="flex justify-between items-center"><CardTitle>Aksiyon Takibi</CardTitle><div className="flex space-x-2"><Button onClick={() => { setEditingTask(null); setIsFormOpen(true); }}><Plus className="mr-2 h-4 w-4" /> Yeni Görev</Button><Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button></div></div></CardHeader>
         <CardContent>
-          <div className="flex flex-col sm:flex-row gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
-            <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Görev ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div>
-            <Input placeholder="Personel filtrele..." value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="w-full sm:w-[180px]" />
-            <Input placeholder="Etiket filtrele..." value={filterTag} onChange={e => setFilterTag(e.target.value)} className="w-full sm:w-[180px]" />
-            {(searchTerm || filterAssignee || filterTag) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); setFilterTag(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
-          </div>
-          <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
-            <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
-              <TaskColumn id="todo" title={statusMap['todo']} tasks={columns.todo} onSelectTask={setViewingTask} />
-              <TaskColumn id="in-progress" title={statusMap['in-progress']} tasks={columns['in-progress']} onSelectTask={setViewingTask} />
-              <TaskColumn id="done" title={statusMap['done']} tasks={columns.done} onSelectTask={setViewingTask} />
-            </div>
-          </DndContext>
+          <Tabs value={activeTab} onValueChange={setActiveTab}>
+            <TabsList className="mb-4">
+              <TabsTrigger value="kanban" className="flex items-center gap-2">
+                <Target className="h-4 w-4" /> Kanban
+              </TabsTrigger>
+              <TabsTrigger value="analysis" className="flex items-center gap-2">
+                <BarChart3 className="h-4 w-4" /> Detaylı Analiz
+              </TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="kanban">
+              <div className="flex flex-col sm:flex-row gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
+                <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Görev ara..." value={searchTerm} onChange={e => setSearchTerm(e.target.value)} className="pl-10" /></div>
+                <Input placeholder="Personel filtrele..." value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="w-full sm:w-[180px]" />
+                <Input placeholder="Etiket filtrele..." value={filterTag} onChange={e => setFilterTag(e.target.value)} className="w-full sm:w-[180px]" />
+                {(searchTerm || filterAssignee || filterTag) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); setFilterTag(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
+              </div>
+              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
+                <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
+                  <TaskColumn id="todo" title={statusMap['todo']} tasks={columns.todo} onSelectTask={setViewingTask} />
+                  <TaskColumn id="in-progress" title={statusMap['in-progress']} tasks={columns['in-progress']} onSelectTask={setViewingTask} />
+                  <TaskColumn id="done" title={statusMap['done']} tasks={columns.done} onSelectTask={setViewingTask} />
+                </div>
+              </DndContext>
+            </TabsContent>
+
+            <TabsContent value="analysis">
+              {analysisData ? (
+                <div className="space-y-6">
+                  {/* KPI Kartları */}
+                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-blue-600">Toplam Görev</p>
+                            <p className="text-3xl font-bold text-blue-900">{analysisData.total}</p>
+                          </div>
+                          <Target className="h-8 w-8 text-blue-500" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-green-600">Tamamlanma Oranı</p>
+                            <p className="text-3xl font-bold text-green-900">%{analysisData.completionRate}</p>
+                          </div>
+                          <CheckCircle className="h-8 w-8 text-green-500" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-yellow-600">Devam Eden</p>
+                            <p className="text-3xl font-bold text-yellow-900">{analysisData.byStatus.inProgress}</p>
+                          </div>
+                          <Loader className="h-8 w-8 text-yellow-500" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                    <Card className="bg-gradient-to-br from-red-50 to-red-100">
+                      <CardContent className="p-4">
+                        <div className="flex items-center justify-between">
+                          <div>
+                            <p className="text-sm font-medium text-red-600">Geciken</p>
+                            <p className="text-3xl font-bold text-red-900">{analysisData.overdue}</p>
+                          </div>
+                          <Clock className="h-8 w-8 text-red-500" />
+                        </div>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Grafikler - İlk Satır */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Durum Dağılımı */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Target className="h-5 w-5" /> Durum Dağılımı
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={analysisData.statusData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={3}
+                              dataKey="value"
+                              label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            >
+                              {analysisData.statusData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => [value + ' görev', '']} />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Öncelik Dağılımı */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <AlertCircle className="h-5 w-5" /> Öncelik Dağılımı
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <PieChart>
+                            <Pie
+                              data={analysisData.priorityData}
+                              cx="50%"
+                              cy="50%"
+                              innerRadius={60}
+                              outerRadius={100}
+                              paddingAngle={3}
+                              dataKey="value"
+                              label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                            >
+                              {analysisData.priorityData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={entry.color} />
+                              ))}
+                            </Pie>
+                            <Tooltip formatter={(value) => [value + ' görev', '']} />
+                            <Legend />
+                          </PieChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Grafikler - İkinci Satır */}
+                  <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    {/* Aylık Trend */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <TrendingUp className="h-5 w-5" /> Aylık Görev Trendi
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <AreaChart data={analysisData.monthlyData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="month" fontSize={11} />
+                            <YAxis fontSize={12} />
+                            <Tooltip />
+                            <Legend />
+                            <Area type="monotone" dataKey="created" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} name="Oluşturulan" />
+                            <Area type="monotone" dataKey="done" stroke="#10B981" fill="#10B981" fillOpacity={0.3} name="Tamamlanan" />
+                          </AreaChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+
+                    {/* Kişi Bazlı Performans */}
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <User className="h-5 w-5" /> Personel Bazlı Görevler
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={300}>
+                          <BarChart data={analysisData.assigneeData} layout="vertical">
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis type="number" fontSize={12} />
+                            <YAxis dataKey="name" type="category" fontSize={10} width={100} />
+                            <Tooltip />
+                            <Legend />
+                            <Bar dataKey="done" stackId="a" fill="#10B981" name="Tamamlandı" radius={[0, 0, 0, 0]} />
+                            <Bar dataKey="pending" stackId="a" fill="#F59E0B" name="Bekliyor" radius={[0, 4, 4, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  </div>
+
+                  {/* Etiket Bazlı Analiz */}
+                  {analysisData.tagData.length > 0 && (
+                    <Card>
+                      <CardHeader>
+                        <CardTitle className="text-lg flex items-center gap-2">
+                          <Tag className="h-5 w-5" /> Etiket Bazlı Dağılım
+                        </CardTitle>
+                      </CardHeader>
+                      <CardContent>
+                        <ResponsiveContainer width="100%" height={250}>
+                          <BarChart data={analysisData.tagData}>
+                            <CartesianGrid strokeDasharray="3 3" />
+                            <XAxis dataKey="name" fontSize={11} />
+                            <YAxis fontSize={12} />
+                            <Tooltip />
+                            <Bar dataKey="value" fill="#8B5CF6" name="Görev Sayısı" radius={[4, 4, 0, 0]} />
+                          </BarChart>
+                        </ResponsiveContainer>
+                      </CardContent>
+                    </Card>
+                  )}
+                </div>
+              ) : (
+                <div className="text-center py-20 text-gray-500">
+                  <BarChart3 className="h-16 w-16 mx-auto mb-4 text-gray-300" />
+                  <p>Analiz için yeterli veri bulunmuyor.</p>
+                </div>
+              )}
+            </TabsContent>
+          </Tabs>
         </CardContent>
       </Card>
       <Dialog open={isFormOpen} onOpenChange={setIsFormOpen}><DialogContent className="sm:max-w-3xl"><DialogHeader><DialogTitle>{editingTask ? 'Görevi Düzenle' : 'Yeni Görev Oluştur'}</DialogTitle></DialogHeader><TaskForm task={editingTask} onSave={handleSaveTask} /></DialogContent></Dialog>

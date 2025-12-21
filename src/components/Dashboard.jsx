@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
     import { motion } from 'framer-motion';
     import { useNavigate } from 'react-router-dom';
     import { 
@@ -15,8 +15,29 @@ import React, { useState, useEffect } from 'react';
       Award,
       FileText,
       Download,
-      Calendar as CalendarIcon
+      Calendar as CalendarIcon,
+      Activity,
+      Target,
+      Zap,
+      PieChart as PieChartIcon
     } from 'lucide-react';
+    import { 
+      ResponsiveContainer, 
+      BarChart, 
+      Bar, 
+      XAxis, 
+      YAxis, 
+      Tooltip, 
+      Legend, 
+      LineChart, 
+      Line, 
+      PieChart, 
+      Pie, 
+      Cell, 
+      AreaChart, 
+      Area,
+      CartesianGrid
+    } from 'recharts';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
@@ -27,6 +48,8 @@ import React, { useState, useEffect } from 'react';
     import { supabase } from '@/lib/customSupabaseClient';
     import { format, startOfMonth, endOfMonth, subMonths, startOfYear, subYears, startOfDay, endOfDay } from 'date-fns';
     import { tr } from 'date-fns/locale';
+
+    const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
     const Dashboard = ({ user }) => {
       const [stats, setStats] = useState({
@@ -44,69 +67,182 @@ import React, { useState, useEffect } from 'react';
         from: startOfMonth(new Date()),
         to: endOfMonth(new Date())
       });
+      
+      // Grafik verileri için yeni state'ler
+      const [weeklyProduction, setWeeklyProduction] = useState([]);
+      const [monthlyTrend, setMonthlyTrend] = useState([]);
+      const [improvementsByType, setImprovementsByType] = useState([]);
+      const [linePerformance, setLinePerformance] = useState([]);
+      const [taskStats, setTaskStats] = useState({ todo: 0, inProgress: 0, done: 0 });
+      const [trainingStats, setTrainingStats] = useState({ planned: 0, completed: 0, participants: 0 });
+      
       const { toast } = useToast();
       const navigate = useNavigate();
 
       useEffect(() => {
         const fetchData = async () => {
-          const today = new Date().toISOString().split('T')[0];
+          const today = new Date();
+          const todayStr = today.toISOString().split('T')[0];
+          
+          // Son 7 gün için tarih aralığı
+          const weekAgo = new Date(today);
+          weekAgo.setDate(weekAgo.getDate() - 7);
+          const weekAgoStr = weekAgo.toISOString().split('T')[0];
+          
+          // Son 6 ay için tarih aralığı
+          const sixMonthsAgo = new Date(today);
+          sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
+          const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0];
 
           try {
             const [
               improvementsRes,
               scenariosRes,
               projectImprovementsRes,
+              fixtureImprovementsRes,
               productionRes,
+              weeklyProductionRes,
+              monthlyProductionRes,
               wpsRes,
               auditLogsRes,
               trainingsRes,
               participantsRes,
+              tasksRes,
+              linesRes,
             ] = await Promise.all([
-              supabase.from('improvements').select('impact').eq('deleted', false),
-              supabase.from('scenarios').select('summary').eq('deleted', false),
-              supabase.from('project_improvements').select('annual_impact'),
-              supabase.from('production_records').select('quantity').eq('record_date', today),
+              supabase.from('improvements').select('*, line:lines(name), type').eq('deleted', false),
+              supabase.from('scenarios').select('summary, scope, scenario_date').eq('deleted', false),
+              supabase.from('project_improvements').select('annual_impact, improvement_date, name'),
+              supabase.from('fixture_improvements').select('*').eq('deleted', false),
+              supabase.from('production_records').select('quantity').eq('record_date', todayStr),
+              supabase.from('daily_production_summary').select('*').gte('production_date', weekAgoStr).lte('production_date', todayStr).order('production_date'),
+              supabase.from('daily_production_summary').select('*').gte('production_date', sixMonthsAgoStr).lte('production_date', todayStr),
               supabase.from('wps').select('id', { count: 'exact' }),
-              supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(5),
-              supabase.from('trainings').select('id', { count: 'exact' }),
-              supabase.from('training_participants').select('id', { count: 'exact' }),
+              supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(10),
+              supabase.from('trainings').select('*, status'),
+              supabase.from('training_participants').select('*, participation_status'),
+              supabase.from('tasks').select('*, status'),
+              supabase.from('lines').select('id, name').eq('deleted', false),
             ]);
 
             const responses = {
               improvements: improvementsRes,
               scenarios: scenariosRes,
               projectImprovements: projectImprovementsRes,
+              fixtureImprovements: fixtureImprovementsRes,
               production: productionRes,
+              weeklyProduction: weeklyProductionRes,
+              monthlyProduction: monthlyProductionRes,
               wps: wpsRes,
               auditLogs: auditLogsRes,
               trainings: trainingsRes,
               participants: participantsRes,
+              tasks: tasksRes,
+              lines: linesRes,
             };
 
             for (const key in responses) {
               if (responses[key].error) {
                 console.error(`Dashboard data fetch error (${key}):`, responses[key].error);
-                throw new Error(`Veri yüklenirken hata oluştu: ${key}`);
               }
             }
             
-            const improvementSavings = (improvementsRes.data || []).reduce((acc, i) => acc + (i.impact || 0), 0);
-            const scenarioSavings = (scenariosRes.data || []).reduce((acc, s) => acc + (s.summary?.annualImprovement || 0), 0);
-            const projectImprovementSavings = (projectImprovementsRes.data || []).reduce((acc, p) => acc + (p.annual_impact || 0), 0);
+            const improvements = improvementsRes.data || [];
+            const scenarios = scenariosRes.data || [];
+            const projectImprovements = projectImprovementsRes.data || [];
+            const fixtureImprovements = fixtureImprovementsRes.data || [];
+            const trainings = trainingsRes.data || [];
+            const participants = participantsRes.data || [];
+            const tasks = tasksRes.data || [];
+            const lines = linesRes.data || [];
+            const weeklyProd = weeklyProductionRes.data || [];
+            const monthlyProd = monthlyProductionRes.data || [];
+            
+            const improvementSavings = improvements.reduce((acc, i) => acc + (i.impact || 0), 0);
+            const scenarioSavings = scenarios.reduce((acc, s) => acc + (s.summary?.annualImprovement || 0), 0);
+            const projectImprovementSavings = projectImprovements.reduce((acc, p) => acc + (p.annual_impact || 0), 0);
             
             const totalGrossProfit = improvementSavings + scenarioSavings + projectImprovementSavings;
             
             const dailyProduction = (productionRes.data || []).reduce((acc, p) => acc + (p.quantity || 0), 0);
             
-            const totalImprovements = (improvementsRes.data?.length || 0) + (scenariosRes.data?.length || 0) + (projectImprovementsRes.data?.length || 0);
+            const totalImprovements = improvements.length + scenarios.length + projectImprovements.length + fixtureImprovements.length;
 
             setStats({
               dailyProduction: dailyProduction,
               grossProfit: totalGrossProfit,
               activeWPS: wpsRes.count || 0,
               improvements: totalImprovements,
-              totalTrainings: trainingsRes.count || 0,
-              totalParticipants: participantsRes.count || 0,
+              totalTrainings: trainings.length,
+              totalParticipants: participants.length,
+            });
+
+            // Haftalık üretim verileri
+            const weeklyData = weeklyProd.map(p => ({
+              date: format(new Date(p.production_date), 'dd MMM', { locale: tr }),
+              production: p.total_quantity || 0,
+              scrap: p.total_scrap || 0,
+              ppm: p.ppm || 0,
+            }));
+            setWeeklyProduction(weeklyData);
+
+            // Aylık trend verileri
+            const monthlyGrouped = {};
+            monthlyProd.forEach(p => {
+              const month = format(new Date(p.production_date), 'MMM yyyy', { locale: tr });
+              if (!monthlyGrouped[month]) {
+                monthlyGrouped[month] = { production: 0, scrap: 0, cost: 0 };
+              }
+              monthlyGrouped[month].production += p.total_quantity || 0;
+              monthlyGrouped[month].scrap += p.total_scrap || 0;
+              monthlyGrouped[month].cost += p.total_production_cost || 0;
+            });
+            const monthlyData = Object.entries(monthlyGrouped).map(([month, data]) => ({
+              month,
+              production: data.production,
+              scrap: data.scrap,
+              cost: data.cost,
+            }));
+            setMonthlyTrend(monthlyData);
+
+            // İyileştirme türlerine göre dağılım
+            const typeData = [
+              { name: 'Sürekli İyileştirme', value: improvements.length, color: '#3B82F6' },
+              { name: 'Operasyon Azaltma', value: scenarios.length, color: '#10B981' },
+              { name: 'Proje Bazlı', value: projectImprovements.length, color: '#F59E0B' },
+              { name: 'Fikstür İyileştirme', value: fixtureImprovements.length, color: '#EF4444' },
+            ].filter(t => t.value > 0);
+            setImprovementsByType(typeData);
+
+            // Hat bazlı performans
+            const lineData = {};
+            weeklyProd.forEach(p => {
+              const line = lines.find(l => l.id === p.production_line_id);
+              const lineName = line?.name || 'Diğer';
+              if (!lineData[lineName]) {
+                lineData[lineName] = { production: 0, scrap: 0 };
+              }
+              lineData[lineName].production += p.total_quantity || 0;
+              lineData[lineName].scrap += p.total_scrap || 0;
+            });
+            const linePerf = Object.entries(lineData)
+              .map(([name, data]) => ({ name, ...data }))
+              .sort((a, b) => b.production - a.production)
+              .slice(0, 10);
+            setLinePerformance(linePerf);
+
+            // Görev istatistikleri
+            setTaskStats({
+              todo: tasks.filter(t => t.status === 'todo').length,
+              inProgress: tasks.filter(t => t.status === 'in-progress').length,
+              done: tasks.filter(t => t.status === 'done').length,
+            });
+
+            // Eğitim istatistikleri
+            setTrainingStats({
+              planned: trainings.filter(t => t.status === 'Planlandı').length,
+              completed: trainings.filter(t => t.status === 'Tamamlandı').length,
+              participants: participants.filter(p => p.participation_status === 'Katıldı').length,
             });
 
             setRecentActivities((auditLogsRes.data || []).map(log => ({
@@ -449,7 +585,224 @@ import React, { useState, useEffect } from 'react';
             </motion.div>
           </div>
 
-          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+          {/* Grafikler Bölümü */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Haftalık Üretim Grafiği */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Activity className="h-5 w-5" />
+                    <span>Son 7 Gün Üretim</span>
+                  </CardTitle>
+                  <CardDescription>Günlük üretim ve hurda miktarları</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {weeklyProduction.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={weeklyProduction}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" fontSize={12} />
+                        <YAxis fontSize={12} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}K` : v} />
+                        <Tooltip 
+                          formatter={(value, name) => [value.toLocaleString('tr-TR'), name === 'production' ? 'Üretim' : 'Hurda']}
+                          labelFormatter={(label) => `Tarih: ${label}`}
+                        />
+                        <Legend formatter={(value) => value === 'production' ? 'Üretim' : 'Hurda'} />
+                        <Bar dataKey="production" fill="#3B82F6" name="production" radius={[4, 4, 0, 0]} />
+                        <Bar dataKey="scrap" fill="#EF4444" name="scrap" radius={[4, 4, 0, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center text-gray-500">
+                      <p>Üretim verisi bulunamadı</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* İyileştirme Türleri Pasta Grafiği */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <PieChartIcon className="h-5 w-5" />
+                    <span>İyileştirme Dağılımı</span>
+                  </CardTitle>
+                  <CardDescription>Türlere göre iyileştirme sayıları</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {improvementsByType.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <PieChart>
+                        <Pie
+                          data={improvementsByType}
+                          cx="50%"
+                          cy="50%"
+                          innerRadius={60}
+                          outerRadius={100}
+                          paddingAngle={3}
+                          dataKey="value"
+                          label={({ name, percent }) => `${(percent * 100).toFixed(0)}%`}
+                        >
+                          {improvementsByType.map((entry, index) => (
+                            <Cell key={`cell-${index}`} fill={entry.color || CHART_COLORS[index % CHART_COLORS.length]} />
+                          ))}
+                        </Pie>
+                        <Tooltip formatter={(value, name, props) => [value + ' adet', props.payload.name]} />
+                        <Legend />
+                      </PieChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center text-gray-500">
+                      <p>İyileştirme verisi bulunamadı</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Aylık Trend ve Hat Performansı */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            {/* Aylık Trend */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <TrendingUp className="h-5 w-5" />
+                    <span>Aylık Üretim Trendi</span>
+                  </CardTitle>
+                  <CardDescription>Son 6 aylık üretim performansı</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {monthlyTrend.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <AreaChart data={monthlyTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="month" fontSize={12} />
+                        <YAxis fontSize={12} tickFormatter={(v) => v >= 1000000 ? `${(v/1000000).toFixed(1)}M` : v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                        <Tooltip 
+                          formatter={(value, name) => [
+                            name === 'cost' ? formatCurrency(value) : value.toLocaleString('tr-TR'),
+                            name === 'production' ? 'Üretim' : name === 'scrap' ? 'Hurda' : 'Maliyet'
+                          ]}
+                        />
+                        <Legend formatter={(value) => value === 'production' ? 'Üretim' : value === 'scrap' ? 'Hurda' : 'Maliyet'} />
+                        <Area type="monotone" dataKey="production" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.3} />
+                        <Area type="monotone" dataKey="scrap" stroke="#EF4444" fill="#EF4444" fillOpacity={0.3} />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center text-gray-500">
+                      <p>Trend verisi bulunamadı</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            {/* Hat Performansı */}
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.8 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Target className="h-5 w-5" />
+                    <span>Hat Bazlı Performans</span>
+                  </CardTitle>
+                  <CardDescription>Son 7 gün - En yüksek üretim hatları</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  {linePerformance.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={300}>
+                      <BarChart data={linePerformance} layout="vertical">
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis type="number" fontSize={12} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(0)}K` : v} />
+                        <YAxis dataKey="name" type="category" fontSize={11} width={100} />
+                        <Tooltip formatter={(value, name) => [value.toLocaleString('tr-TR'), name === 'production' ? 'Üretim' : 'Hurda']} />
+                        <Legend formatter={(value) => value === 'production' ? 'Üretim' : 'Hurda'} />
+                        <Bar dataKey="production" fill="#10B981" name="production" radius={[0, 4, 4, 0]} />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[300px] flex items-center justify-center text-gray-500">
+                      <p>Hat verisi bulunamadı</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Görev ve Eğitim Durumu */}
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.9 }}>
+              <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-blue-600">Bekleyen Görevler</p>
+                      <p className="text-3xl font-bold text-blue-900">{taskStats.todo}</p>
+                    </div>
+                    <div className="bg-blue-200 p-3 rounded-full">
+                      <Clock className="h-6 w-6 text-blue-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.0 }}>
+              <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-yellow-600">Devam Eden Görevler</p>
+                      <p className="text-3xl font-bold text-yellow-900">{taskStats.inProgress}</p>
+                    </div>
+                    <div className="bg-yellow-200 p-3 rounded-full">
+                      <Zap className="h-6 w-6 text-yellow-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.1 }}>
+              <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-green-600">Tamamlanan Görevler</p>
+                      <p className="text-3xl font-bold text-green-900">{taskStats.done}</p>
+                    </div>
+                    <div className="bg-green-200 p-3 rounded-full">
+                      <CheckCircle className="h-6 w-6 text-green-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.2 }}>
+              <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                <CardContent className="p-6">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="text-sm font-medium text-purple-600">Eğitim Katılımcısı</p>
+                      <p className="text-3xl font-bold text-purple-900">{trainingStats.participants}</p>
+                    </div>
+                    <div className="bg-purple-200 p-3 rounded-full">
+                      <Users className="h-6 w-6 text-purple-600" />
+                    </div>
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 1.3 }}>
             <Card><CardHeader><CardTitle>Sistem Durumu</CardTitle><CardDescription>Veritabanı bağlantısı ve sistem performansı</CardDescription></CardHeader>
               <CardContent><div className="flex items-center justify-between p-4 bg-green-50 rounded-lg"><div className="flex items-center space-x-3"><CheckCircle className="h-5 w-5 text-green-600" /><div><p className="font-medium text-green-900">Sistem Normal Çalışıyor</p><p className="text-sm text-green-700">Tüm servisler aktif ve erişilebilir</p></div></div><div className="text-right"><p className="text-sm font-medium text-green-900">99.9% Uptime</p><p className="text-xs text-green-700">Son 30 gün</p></div></div></CardContent>
             </Card>

@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useCallback, useMemo } from 'react';
 import { motion } from 'framer-motion';
-import { Plus, Edit, Trash2, Search, Factory, Settings, Wrench, Save, DollarSign, Undo, AlertTriangle, Wrench as Tool, Users } from 'lucide-react';
+import { Plus, Edit, Trash2, Search, Factory, Settings, Wrench, Save, DollarSign, Undo, AlertTriangle, Wrench as Tool, Users, BarChart3, TrendingUp, Zap } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -13,6 +13,9 @@ import { cn, logAction } from '@/lib/utils';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Switch } from '@/components/ui/switch';
+import { ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, Legend, PieChart, Pie, Cell, CartesianGrid } from 'recharts';
+
+const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
 
 const MasterData = () => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -39,6 +42,67 @@ const MasterData = () => {
   const [costItems, setCostItems] = useState([]);
   const [revisedFixtures, setRevisedFixtures] = useState([]);
   const [employees, setEmployees] = useState([]);
+
+  // Özet istatistikler
+  const stats = useMemo(() => {
+    const activeLines = lines.filter(l => !l.deleted && l.active);
+    const activeRobots = robots.filter(r => !r.deleted && r.active);
+    const activeFixtures = fixtures.filter(f => !f.deleted && f.active);
+    const activeEmployees = employees.filter(e => e.is_active);
+
+    // Hat tipleri dağılımı
+    const lineTypes = {};
+    activeLines.forEach(l => {
+      const type = l.type || 'other';
+      if (!lineTypes[type]) lineTypes[type] = 0;
+      lineTypes[type]++;
+    });
+
+    const lineTypeData = Object.entries(lineTypes).map(([name, value]) => ({
+      name: name === 'robot' ? 'Robot' : name === 'manual' ? 'Manuel' : name === 'repair' ? 'Tamir' : 'Diğer',
+      value
+    }));
+
+    // Departman bazlı personel
+    const departments = {};
+    activeEmployees.forEach(e => {
+      const dept = e.department || 'Belirtilmemiş';
+      if (!departments[dept]) departments[dept] = 0;
+      departments[dept]++;
+    });
+
+    const deptData = Object.entries(departments)
+      .map(([name, value]) => ({ name: name.length > 12 ? name.substring(0, 12) + '...' : name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
+    // Hat başına robot dağılımı
+    const robotsByLine = {};
+    activeRobots.forEach(r => {
+      const line = activeLines.find(l => l.id === r.line_id);
+      const lineName = line?.name || 'Bağlı Değil';
+      if (!robotsByLine[lineName]) robotsByLine[lineName] = 0;
+      robotsByLine[lineName]++;
+    });
+
+    const robotLineData = Object.entries(robotsByLine)
+      .map(([name, value]) => ({ name: name.length > 12 ? name.substring(0, 12) + '...' : name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8);
+
+    return {
+      totalLines: activeLines.length,
+      totalRobots: activeRobots.length,
+      totalFixtures: activeFixtures.length,
+      totalEmployees: activeEmployees.length,
+      totalCostItems: costItems.filter(c => !c.deleted && c.active).length,
+      revisedFixturesCompleted: revisedFixtures.filter(rf => rf.result === 'Tamamlandı').length,
+      revisedFixturesTotal: revisedFixtures.length,
+      lineTypeData,
+      deptData,
+      robotLineData,
+    };
+  }, [lines, robots, fixtures, employees, costItems, revisedFixtures]);
 
   const dataMap = {
     lines: { state: lines, setState: setLines, initial: initialLineState, table: 'lines' },
@@ -377,7 +441,167 @@ const MasterData = () => {
 
   return (
     <div className="space-y-6">
+      {/* Özet İstatistik Kartları */}
       <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
+        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-blue-600">Aktif Hat</p>
+                  <p className="text-2xl font-bold text-blue-900">{stats.totalLines}</p>
+                </div>
+                <Factory className="h-6 w-6 text-blue-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-green-50 to-green-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-green-600">Aktif Robot</p>
+                  <p className="text-2xl font-bold text-green-900">{stats.totalRobots}</p>
+                </div>
+                <Settings className="h-6 w-6 text-green-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-orange-600">Aktif Fikstür</p>
+                  <p className="text-2xl font-bold text-orange-900">{stats.totalFixtures}</p>
+                </div>
+                <Wrench className="h-6 w-6 text-orange-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-purple-600">Aktif Personel</p>
+                  <p className="text-2xl font-bold text-purple-900">{stats.totalEmployees}</p>
+                </div>
+                <Users className="h-6 w-6 text-purple-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-yellow-50 to-yellow-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-yellow-600">Maliyet Kalemi</p>
+                  <p className="text-2xl font-bold text-yellow-900">{stats.totalCostItems}</p>
+                </div>
+                <DollarSign className="h-6 w-6 text-yellow-500" />
+              </div>
+            </CardContent>
+          </Card>
+          <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100">
+            <CardContent className="p-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-xs font-medium text-cyan-600">Revize Fikstür</p>
+                  <p className="text-2xl font-bold text-cyan-900">{stats.revisedFixturesCompleted}/{stats.revisedFixturesTotal}</p>
+                </div>
+                <Tool className="h-6 w-6 text-cyan-500" />
+              </div>
+            </CardContent>
+          </Card>
+        </div>
+      </motion.div>
+
+      {/* Grafikler */}
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }}>
+        <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+          {/* Hat Tipi Dağılımı */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Factory className="h-4 w-4" /> Hat Tipi Dağılımı
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {stats.lineTypeData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <PieChart>
+                    <Pie
+                      data={stats.lineTypeData}
+                      cx="50%"
+                      cy="50%"
+                      innerRadius={40}
+                      outerRadius={70}
+                      paddingAngle={3}
+                      dataKey="value"
+                      label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                    >
+                      {stats.lineTypeData.map((entry, index) => (
+                        <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />
+                      ))}
+                    </Pie>
+                    <Tooltip formatter={(value) => [value + ' hat', '']} />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[180px] flex items-center justify-center text-gray-400 text-sm">Veri yok</div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Departman Dağılımı */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Users className="h-4 w-4" /> Departman Dağılımı
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {stats.deptData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={stats.deptData} layout="vertical">
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis type="number" fontSize={10} />
+                    <YAxis dataKey="name" type="category" fontSize={9} width={80} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#8B5CF6" name="Personel" radius={[0, 4, 4, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[180px] flex items-center justify-center text-gray-400 text-sm">Veri yok</div>
+              )}
+            </CardContent>
+          </Card>
+
+          {/* Hat Başına Robot */}
+          <Card>
+            <CardHeader className="pb-2">
+              <CardTitle className="text-sm flex items-center gap-2">
+                <Settings className="h-4 w-4" /> Hat Başına Robot
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              {stats.robotLineData.length > 0 ? (
+                <ResponsiveContainer width="100%" height={180}>
+                  <BarChart data={stats.robotLineData}>
+                    <CartesianGrid strokeDasharray="3 3" />
+                    <XAxis dataKey="name" fontSize={9} />
+                    <YAxis fontSize={10} />
+                    <Tooltip />
+                    <Bar dataKey="value" fill="#10B981" name="Robot" radius={[4, 4, 0, 0]} />
+                  </BarChart>
+                </ResponsiveContainer>
+              ) : (
+                <div className="h-[180px] flex items-center justify-center text-gray-400 text-sm">Veri yok</div>
+              )}
+            </CardContent>
+          </Card>
+        </div>
+      </motion.div>
+
+      <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.2 }}>
         <Card>
           <CardHeader><CardTitle>Veri Yönetimi</CardTitle><CardDescription>Sistem genelinde kullanılan referans verilerini yönetin.</CardDescription></CardHeader>
           <CardContent>
