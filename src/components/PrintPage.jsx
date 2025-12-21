@@ -10,61 +10,61 @@ import React, { useEffect, useState } from 'react';
     
     const CertificatePrintLayout = ({ certificateData }) => {
       return (
-        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans flex flex-col p-5 relative overflow-hidden" style={{ width: '297mm', height: '210mm' }}>
+        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans flex flex-col p-4 relative overflow-hidden" style={{ width: '297mm', height: '210mm', minHeight: '210mm', maxHeight: '210mm' }}>
             {/* Decorative Elements */}
-            <div className="absolute top-0 left-0 w-56 h-56 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
-            <div className="absolute bottom-0 right-0 w-56 h-56 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
+            <div className="absolute top-0 left-0 w-48 h-48 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
+            <div className="absolute bottom-0 right-0 w-48 h-48 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
             
-            <div className="absolute -top-16 -right-16 w-64 h-64 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -top-8 -right-24 w-64 h-64 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute -top-12 -right-12 w-56 h-56 bg-[#4A90E2] rounded-full opacity-80"></div>
+            <div className="absolute -top-6 -right-20 w-56 h-56 bg-[#357ABD] rounded-full opacity-70"></div>
     
-            <div className="absolute -bottom-16 -left-16 w-64 h-64 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -bottom-8 -left-24 w-64 h-64 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute -bottom-12 -left-12 w-56 h-56 bg-[#4A90E2] rounded-full opacity-80"></div>
+            <div className="absolute -bottom-6 -left-20 w-56 h-56 bg-[#357ABD] rounded-full opacity-70"></div>
     
-            <div className="relative z-10 text-center w-full h-full flex flex-col items-center justify-between py-3">
-                <div className="w-full flex justify-center flex-shrink-0">
+            <div className="relative z-10 text-center w-full h-full flex flex-col items-center justify-between py-2" style={{ minHeight: '100%' }}>
+                <div className="w-full flex justify-center flex-shrink-0" style={{ marginBottom: '8px' }}>
                     <AydLogo />
                 </div>
                 
-                <div className="flex-grow flex flex-col justify-center items-center w-full px-4">
-                    <h1 className="text-3xl font-extrabold tracking-wider mb-4" style={{ fontFamily: "'Arial Black', sans-serif" }}>
+                <div className="flex-grow flex flex-col justify-center items-center w-full px-6" style={{ flex: '1 1 auto', justifyContent: 'center' }}>
+                    <h1 className="text-2xl font-extrabold tracking-wider mb-2" style={{ fontFamily: "'Arial Black', sans-serif", marginTop: '4px' }}>
                         BAŞARI SERTİFİKASI
                     </h1>
         
-                    <p className="text-lg text-gray-600 mb-1" style={{ fontFamily: "'Georgia', serif" }}>
+                    <p className="text-base text-gray-600 mb-0.5" style={{ fontFamily: "'Georgia', serif", marginTop: '4px' }}>
                         Bu sertifika,
                     </p>
         
-                    <p className="text-5xl mb-4" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                    <p className="text-4xl mb-2" style={{ fontFamily: "'Great Vibes', cursive", marginTop: '4px', marginBottom: '8px' }}>
                         {certificateData.participantName}
                     </p>
                     
-                    <div className="text-center text-sm text-[#333] leading-tight max-w-full mx-auto" style={{ fontFamily: "'Georgia', serif" }}>
-                        <p className="mb-1">
+                    <div className="text-center text-xs text-[#333] leading-snug max-w-full mx-auto px-2" style={{ fontFamily: "'Georgia', serif", marginTop: '8px' }}>
+                        <p className="mb-0.5" style={{ marginBottom: '2px' }}>
                             "<span className="font-bold">{certificateData.trainingName}</span>" programına katılarak gerekli tüm bilgi, beceri ve yeterlilikleri başarıyla göstermiştir.
                         </p>
-                        <p className="mb-1">
+                        <p className="mb-0.5" style={{ marginBottom: '2px' }}>
                             Görevine olan özverisi, öğrenmeye olan isteği ve gelişime açık yaklaşımıyla bu eğitimi başarıyla tamamlamış, kurumumuzun kalite ve mükemmeliyet hedeflerine değerli katkılarda bulunmuştur.
                         </p>
-                        <p>
+                        <p style={{ marginBottom: '0' }}>
                             Bu belge, göstermiş olduğu gayret ve başarıyı onurlandırmak amacıyla kendisine verilmiştir.
                         </p>
                     </div>
                 </div>
                 
-                <div className="w-full flex-shrink-0 mt-2">
-                    <div className="grid grid-cols-2 gap-24 text-center max-w-full mx-auto">
-                        <div className="text-sm">
-                            <p className="font-bold border-t-2 border-gray-400 pt-1.5">Tuğçe MAVİ BATTAL</p>
-                            <p className="text-xs text-gray-600 mt-0.5">Eğitmen</p>
+                <div className="w-full flex-shrink-0" style={{ marginTop: '12px', paddingTop: '8px' }}>
+                    <div className="grid grid-cols-2 gap-16 text-center max-w-full mx-auto px-8">
+                        <div className="text-xs">
+                            <p className="font-bold border-t-2 border-gray-400 pt-1" style={{ paddingTop: '4px' }}>Tuğçe MAVİ BATTAL</p>
+                            <p className="text-xs text-gray-600 mt-0.5" style={{ fontSize: '10px', marginTop: '2px' }}>Eğitmen</p>
                         </div>
-                        <div className="text-sm">
-                            <p className="font-bold border-t-2 border-gray-400 pt-1.5">Yusuf ÇAKIR</p>
-                            <p className="text-xs text-gray-600 mt-0.5">Genel Müdür</p>
+                        <div className="text-xs">
+                            <p className="font-bold border-t-2 border-gray-400 pt-1" style={{ paddingTop: '4px' }}>Yusuf ÇAKIR</p>
+                            <p className="text-xs text-gray-600 mt-0.5" style={{ fontSize: '10px', marginTop: '2px' }}>Genel Müdür</p>
                         </div>
                     </div>
         
-                    <div className="text-center mt-2 text-xs text-gray-500">
+                    <div className="text-center mt-1 text-xs text-gray-500" style={{ marginTop: '4px', fontSize: '10px' }}>
                         Tarih: {certificateData.issueDate} | Sertifika No: {certificateData.certificateNumber}
                     </div>
                 </div>
