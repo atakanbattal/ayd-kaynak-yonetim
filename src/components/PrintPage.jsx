@@ -10,59 +10,63 @@ import React, { useEffect, useState } from 'react';
     
     const CertificatePrintLayout = ({ certificateData }) => {
       return (
-        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans w-[297mm] h-[210mm] flex flex-col p-8 relative overflow-hidden">
+        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans w-full h-full flex flex-col p-6 relative overflow-hidden" style={{ width: '297mm', height: '210mm', minHeight: '210mm', maxHeight: '210mm' }}>
             {/* Decorative Elements */}
-            <div className="absolute top-0 left-0 w-80 h-80 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
-            <div className="absolute bottom-0 right-0 w-80 h-80 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
+            <div className="absolute top-0 left-0 w-64 h-64 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
+            <div className="absolute bottom-0 right-0 w-64 h-64 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
             
-            <div className="absolute -top-24 -right-24 w-96 h-96 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -top-12 -right-36 w-96 h-96 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute -top-20 -right-20 w-72 h-72 bg-[#4A90E2] rounded-full opacity-80"></div>
+            <div className="absolute -top-10 -right-28 w-72 h-72 bg-[#357ABD] rounded-full opacity-70"></div>
     
-            <div className="absolute -bottom-24 -left-24 w-96 h-96 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -bottom-12 -left-36 w-96 h-96 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute -bottom-20 -left-20 w-72 h-72 bg-[#4A90E2] rounded-full opacity-80"></div>
+            <div className="absolute -bottom-10 -left-28 w-72 h-72 bg-[#357ABD] rounded-full opacity-70"></div>
     
-            <div className="relative z-10 text-center w-full flex-grow flex flex-col items-center">
-                <div className="w-full flex justify-center mt-4">
+            <div className="relative z-10 text-center w-full flex-grow flex flex-col items-center justify-between py-4">
+                <div className="w-full flex justify-center">
                     <AydLogo />
                 </div>
                 
-                <h1 className="text-5xl font-extrabold tracking-wider mt-4" style={{ fontFamily: "'Arial Black', sans-serif" }}>
-                    BAŞARI SERTİFİKASI
-                </h1>
-    
-                <p className="mt-8 text-2xl text-gray-600" style={{ fontFamily: "'Georgia', serif" }}>
-                    Bu sertifika,
-                </p>
-    
-                <p className="text-7xl mt-4" style={{ fontFamily: "'Great Vibes', cursive" }}>
-                    {certificateData.participantName}
-                </p>
-                
-                <div className="mt-8 text-center text-lg text-[#333] leading-relaxed max-w-4xl mx-auto" style={{ fontFamily: "'Georgia', serif" }}>
-                    <p>
-                        "<span className="font-bold">{certificateData.trainingName}</span>" programına katılarak gerekli tüm bilgi, beceri ve yeterlilikleri başarıyla göstermiştir.
+                <div className="flex-grow flex flex-col justify-center items-center w-full">
+                    <h1 className="text-4xl font-extrabold tracking-wider mb-6" style={{ fontFamily: "'Arial Black', sans-serif" }}>
+                        BAŞARI SERTİFİKASI
+                    </h1>
+        
+                    <p className="text-xl text-gray-600 mb-2" style={{ fontFamily: "'Georgia', serif" }}>
+                        Bu sertifika,
                     </p>
-                    <p className="mt-4">
-                        Görevine olan özverisi, öğrenmeye olan isteği ve gelişime açık yaklaşımıyla bu eğitimi başarıyla tamamlamış, kurumumuzun kalite ve mükemmeliyet hedeflerine değerli katkılarda bulunmuştur.
+        
+                    <p className="text-6xl mb-6" style={{ fontFamily: "'Great Vibes', cursive" }}>
+                        {certificateData.participantName}
                     </p>
-                    <p className="mt-4">
-                        Bu belge, göstermiş olduğu gayret ve başarıyı onurlandırmak amacıyla kendisine verilmiştir.
-                    </p>
-                </div>
-                
-                <div className="mt-auto mb-12 grid grid-cols-2 gap-48 text-center w-full max-w-3xl">
-                    <div className="text-lg">
-                        <p className="font-bold border-t-2 border-gray-400 pt-3">Tuğçe MAVİ BATTAL</p>
-                        <p className="text-base text-gray-600 mt-1">Eğitmen</p>
-                    </div>
-                    <div className="text-lg">
-                        <p className="font-bold border-t-2 border-gray-400 pt-3">Yusuf ÇAKIR</p>
-                        <p className="text-base text-gray-600 mt-1">Genel Müdür</p>
+                    
+                    <div className="text-center text-base text-[#333] leading-relaxed max-w-5xl mx-auto px-4" style={{ fontFamily: "'Georgia', serif" }}>
+                        <p className="mb-2">
+                            "<span className="font-bold">{certificateData.trainingName}</span>" programına katılarak gerekli tüm bilgi, beceri ve yeterlilikleri başarıyla göstermiştir.
+                        </p>
+                        <p className="mb-2">
+                            Görevine olan özverisi, öğrenmeye olan isteği ve gelişime açık yaklaşımıyla bu eğitimi başarıyla tamamlamış, kurumumuzun kalite ve mükemmeliyet hedeflerine değerli katkılarda bulunmuştur.
+                        </p>
+                        <p>
+                            Bu belge, göstermiş olduğu gayret ve başarıyı onurlandırmak amacıyla kendisine verilmiştir.
+                        </p>
                     </div>
                 </div>
-    
-                <div className="absolute bottom-4 left-1/2 -translate-x-1/2 text-sm text-gray-500">
-                    Tarih: {certificateData.issueDate} | Sertifika No: {certificateData.certificateNumber}
+                
+                <div className="w-full mt-4">
+                    <div className="grid grid-cols-2 gap-32 text-center max-w-4xl mx-auto">
+                        <div className="text-base">
+                            <p className="font-bold border-t-2 border-gray-400 pt-2">Tuğçe MAVİ BATTAL</p>
+                            <p className="text-sm text-gray-600 mt-1">Eğitmen</p>
+                        </div>
+                        <div className="text-base">
+                            <p className="font-bold border-t-2 border-gray-400 pt-2">Yusuf ÇAKIR</p>
+                            <p className="text-sm text-gray-600 mt-1">Genel Müdür</p>
+                        </div>
+                    </div>
+        
+                    <div className="text-center mt-3 text-xs text-gray-500">
+                        Tarih: {certificateData.issueDate} | Sertifika No: {certificateData.certificateNumber}
+                    </div>
                 </div>
             </div>
         </div>
@@ -658,7 +662,10 @@ import React, { useEffect, useState } from 'react';
                   transform: scale(0.9);
                 }
                 .page-landscape .print-container {
-                  transform: scale(0.75);
+                  transform: scale(0.8);
+                }
+                .certificate-layout {
+                  aspect-ratio: 297 / 210;
                 }
               }
               
@@ -675,11 +682,17 @@ import React, { useEffect, useState } from 'react';
                   }
 
                   .page-portrait {
-                    @page { size: A4 portrait; }
+                    @page { 
+                      size: A4 portrait;
+                      margin: 0;
+                    }
                   }
 
                   .page-landscape {
-                     @page { size: A4 landscape; }
+                    @page { 
+                      size: A4 landscape;
+                      margin: 0;
+                    }
                   }
               
                   .print-area {
@@ -701,6 +714,15 @@ import React, { useEffect, useState } from 'react';
                       border-radius: 0;
                       transform: scale(1);
                       overflow: hidden !important;
+                  }
+                  
+                  .certificate-layout {
+                      width: 100% !important;
+                      height: 100% !important;
+                      max-width: 100% !important;
+                      max-height: 100% !important;
+                      min-width: 100% !important;
+                      min-height: 100% !important;
                   }
               }
           `}</style>
