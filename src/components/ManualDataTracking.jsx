@@ -1331,8 +1331,13 @@ const ManualDataTracking = () => {
             uniqueLines: new Set([...manualResults.map(r => r.line_id), ...repairResults.map(r => r.repair_line_id)].filter(Boolean)).size
         };
         
-        setPartCodeSearchResults({ results: allResults, stats });
-        setShowPartCodeSearch(true);
+        if (allResults.length > 0) {
+            setPartCodeSearchResults({ results: allResults, stats });
+            setShowPartCodeSearch(true);
+        } else {
+            setPartCodeSearchResults(null);
+            toast({ title: "Sonuç Bulunamadı", description: "Arama kriterinize uygun kayıt bulunamadı.", variant: "default" });
+        }
     }, [partCodeSearch, allManualRecords, allRepairRecords, lines, employees, calculateCost, toast]);
     
     // Aylık/yıllık personel analizi
@@ -2475,32 +2480,32 @@ const ManualDataTracking = () => {
                             />
                             <Button onClick={handlePartCodeSearch}><Search className="h-4 w-4 mr-2" />Ara</Button>
                         </div>
-                        {partCodeSearchResults.results && partCodeSearchResults.results.length > 0 && (
+                        {partCodeSearchResults && partCodeSearchResults.results && partCodeSearchResults.results.length > 0 && (
                             <div className="mt-4 space-y-4">
                                 {/* İstatistikler */}
                                 <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                                     <Card className="bg-blue-50">
                                         <CardContent className="p-4">
                                             <p className="text-xs text-gray-600">Toplam Kayıt</p>
-                                            <p className="text-2xl font-bold text-blue-700">{partCodeSearchResults.stats.totalRecords}</p>
+                                            <p className="text-2xl font-bold text-blue-700">{partCodeSearchResults?.stats?.totalRecords || 0}</p>
                                         </CardContent>
                                     </Card>
                                     <Card className="bg-green-50">
                                         <CardContent className="p-4">
                                             <p className="text-xs text-gray-600">Toplam Adet</p>
-                                            <p className="text-2xl font-bold text-green-700">{partCodeSearchResults.stats.totalQuantity.toLocaleString('tr-TR')}</p>
+                                            <p className="text-2xl font-bold text-green-700">{(partCodeSearchResults?.stats?.totalQuantity || 0).toLocaleString('tr-TR')}</p>
                                         </CardContent>
                                     </Card>
                                     <Card className="bg-purple-50">
                                         <CardContent className="p-4">
                                             <p className="text-xs text-gray-600">Toplam Maliyet</p>
-                                            <p className="text-2xl font-bold text-purple-700">{formatCurrency(partCodeSearchResults.stats.totalCost)}</p>
+                                            <p className="text-2xl font-bold text-purple-700">{formatCurrency(partCodeSearchResults?.stats?.totalCost || 0)}</p>
                                         </CardContent>
                                     </Card>
                                     <Card className="bg-orange-50">
                                         <CardContent className="p-4">
                                             <p className="text-xs text-gray-600">Farklı Tarih</p>
-                                            <p className="text-2xl font-bold text-orange-700">{partCodeSearchResults.stats.uniqueDates}</p>
+                                            <p className="text-2xl font-bold text-orange-700">{partCodeSearchResults?.stats?.uniqueDates || 0}</p>
                                         </CardContent>
                                     </Card>
                                 </div>
@@ -2521,7 +2526,7 @@ const ManualDataTracking = () => {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {partCodeSearchResults.results.map((r, idx) => (
+                                            {(partCodeSearchResults?.results || []).map((r, idx) => (
                                                 <tr key={idx} className="border-b hover:bg-gray-50">
                                                     <td className="px-3 py-2">
                                                         <div className="flex flex-col">
