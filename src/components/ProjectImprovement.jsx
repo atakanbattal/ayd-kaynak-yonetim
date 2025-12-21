@@ -71,16 +71,24 @@ const ProjectImprovement = () => {
     setFilteredImprovements(results);
   }, [searchTerm, improvements, sortOrder]);
   
-  // Başarılı projeler grafik verisi
+  // Başarılı projeler grafik verisi - sadece pozitif değerleri göster
   const successfulProjectsData = useMemo(() => {
     return filteredImprovements
-      .map((item, index) => ({
-        name: item.subject.length > 20 ? item.subject.substring(0, 20) + '...' : item.subject,
-        fullName: item.subject,
-        annualGain: item.annual_impact || 0,
-        cost: item.improvement_cost || 0,
-        roi: item.improvement_cost > 0 ? ((item.annual_impact - item.improvement_cost) / item.improvement_cost) * 100 : 0
-      }))
+      .map((item, index) => {
+        const annualGain = item.annual_impact || 0;
+        const cost = item.improvement_cost || 0;
+        const roi = cost > 0 ? ((annualGain - cost) / cost) * 100 : 0;
+        
+        return {
+          name: item.subject.length > 25 ? item.subject.substring(0, 25) + '...' : item.subject,
+          fullName: item.subject,
+          annualGain: Math.max(0, annualGain), // Negatif değerleri 0 yap
+          cost: Math.max(0, cost), // Negatif değerleri 0 yap
+          roi: Math.max(0, roi), // Negatif ROI'leri 0 yap
+          netGain: Math.max(0, annualGain - cost) // Net kazanç
+        };
+      })
+      .filter(item => item.annualGain > 0 || item.cost > 0) // Sadece pozitif değerleri göster
       .sort((a, b) => b.annualGain - a.annualGain)
       .slice(0, 10); // Top 10
   }, [filteredImprovements]);
@@ -404,34 +412,144 @@ const ProjectImprovement = () => {
           
           {/* Başarılı Projeler Grafiği */}
           {successfulProjectsData.length > 0 && (
-            <Card className="mb-6">
-              <CardHeader>
-                <CardTitle>Başarılı Projeler ve Maliyetleri</CardTitle>
-                <CardDescription>En başarılıdan başarısıza doğru proje performansı</CardDescription>
-              </CardHeader>
-              <CardContent>
-                <ResponsiveContainer width="100%" height={400}>
-                  <BarChart data={successfulProjectsData}>
-                    <CartesianGrid strokeDasharray="3 3" />
-                    <XAxis dataKey="name" angle={-45} textAnchor="end" height={120} />
-                    <YAxis yAxisId="left" orientation="left" stroke="#8884d8" domain={[0, 'auto']} />
-                    <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" domain={[0, 'auto']} />
-                    <Tooltip 
-                      formatter={(value, name) => {
-                        if (name === 'annualGain' || name === 'cost') {
-                          return formatCurrency(value);
-                        }
-                        return `${value.toFixed(2)}%`;
-                      }}
-                    />
-                    <Legend />
-                    <Bar yAxisId="left" dataKey="annualGain" fill="#10b981" name="Yıllık Kazanç (₺)" />
-                    <Bar yAxisId="left" dataKey="cost" fill="#f97316" name="Maliyet (₺)" />
-                    <Bar yAxisId="right" dataKey="roi" fill="#3b82f6" name="ROI (%)" />
-                  </BarChart>
-                </ResponsiveContainer>
-              </CardContent>
-            </Card>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+              {/* Yıllık Kazanç ve Maliyet Grafiği */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>Proje Kazanç ve Maliyet Analizi</CardTitle>
+                  <CardDescription>Yıllık kazanç ve yatırım maliyetleri karşılaştırması</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart 
+                      data={successfulProjectsData}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        type="number" 
+                        stroke="#6b7280"
+                        tickFormatter={(value) => {
+                          if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
+                          if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
+                          return `${value} ₺`;
+                        }}
+                      />
+                      <YAxis 
+                        type="category" 
+                        dataKey="name" 
+                        width={90}
+                        stroke="#6b7280"
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => {
+                          if (name === 'Yıllık Kazanç') {
+                            return [formatCurrency(value), 'Yıllık Kazanç'];
+                          }
+                          if (name === 'Yatırım Maliyeti') {
+                            return [formatCurrency(value), 'Yatırım Maliyeti'];
+                          }
+                          return value;
+                        }}
+                        contentStyle={{ 
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          padding: '12px'
+                        }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ paddingTop: '20px' }}
+                        iconType="rect"
+                      />
+                      <Bar 
+                        dataKey="annualGain" 
+                        fill="#10b981" 
+                        name="Yıllık Kazanç"
+                        radius={[0, 4, 4, 0]}
+                      />
+                      <Bar 
+                        dataKey="cost" 
+                        fill="#f97316" 
+                        name="Yatırım Maliyeti"
+                        radius={[0, 4, 4, 0]}
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+              
+              {/* ROI ve Net Kazanç Grafiği */}
+              <Card>
+                <CardHeader>
+                  <CardTitle>ROI ve Net Kazanç Analizi</CardTitle>
+                  <CardDescription>Yatırım getirisi ve net kazanç performansı</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <ResponsiveContainer width="100%" height={400}>
+                    <BarChart 
+                      data={successfulProjectsData}
+                      layout="vertical"
+                      margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                    >
+                      <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                      <XAxis 
+                        type="number" 
+                        stroke="#6b7280"
+                        tickFormatter={(value) => {
+                          if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
+                          if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
+                          return `${value} ₺`;
+                        }}
+                      />
+                      <YAxis 
+                        type="category" 
+                        dataKey="name" 
+                        width={90}
+                        stroke="#6b7280"
+                        tick={{ fontSize: 12 }}
+                      />
+                      <Tooltip 
+                        formatter={(value, name) => {
+                          if (name === 'Net Kazanç') {
+                            return [formatCurrency(value), 'Net Kazanç'];
+                          }
+                          if (name === 'ROI') {
+                            return [`${value.toFixed(2)}%`, 'ROI'];
+                          }
+                          return value;
+                        }}
+                        contentStyle={{ 
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                          border: '1px solid #e5e7eb',
+                          borderRadius: '8px',
+                          padding: '12px'
+                        }}
+                      />
+                      <Legend 
+                        wrapperStyle={{ paddingTop: '20px' }}
+                        iconType="rect"
+                      />
+                      <Bar 
+                        dataKey="netGain" 
+                        fill="#3b82f6" 
+                        name="Net Kazanç"
+                        radius={[0, 4, 4, 0]}
+                      />
+                      <Bar 
+                        dataKey="roi" 
+                        fill="#8b5cf6" 
+                        name="ROI (%)"
+                        radius={[0, 4, 4, 0]}
+                        scale="linear"
+                      />
+                    </BarChart>
+                  </ResponsiveContainer>
+                </CardContent>
+              </Card>
+            </div>
           )}
           <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {filteredImprovements.map(item => (
