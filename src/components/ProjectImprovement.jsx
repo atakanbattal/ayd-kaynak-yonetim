@@ -503,7 +503,8 @@ const ProjectImprovement = () => {
                         stroke="#6b7280"
                         tick={{ fontSize: 12 }}
                         tickFormatter={(value) => {
-                          if (name === 'ROI') {
+                          // ROI için özel formatlama - eğer değer küçükse yüzde olarak göster
+                          if (value < 1000 && value > -1000) {
                             return `${value.toFixed(0)}%`;
                           }
                           if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
