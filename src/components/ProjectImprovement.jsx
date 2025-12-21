@@ -412,7 +412,7 @@ const ProjectImprovement = () => {
           
           {/* Başarılı Projeler Grafiği */}
           {successfulProjectsData.length > 0 && (
-            <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-6">
+            <div className="space-y-6 mb-6">
               {/* Yıllık Kazanç ve Maliyet Grafiği */}
               <Card>
                 <CardHeader>
@@ -420,16 +420,17 @@ const ProjectImprovement = () => {
                   <CardDescription>Yıllık kazanç ve yatırım maliyetleri karşılaştırması</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={400}>
+                  <ResponsiveContainer width="100%" height={500}>
                     <BarChart 
                       data={successfulProjectsData}
                       layout="vertical"
-                      margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                      margin={{ top: 5, right: 50, left: 120, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis 
                         type="number" 
                         stroke="#6b7280"
+                        tick={{ fontSize: 12 }}
                         tickFormatter={(value) => {
                           if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
                           if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
@@ -439,9 +440,9 @@ const ProjectImprovement = () => {
                       <YAxis 
                         type="category" 
                         dataKey="name" 
-                        width={90}
+                        width={110}
                         stroke="#6b7280"
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 13 }}
                       />
                       <Tooltip 
                         formatter={(value, name) => {
@@ -457,12 +458,14 @@ const ProjectImprovement = () => {
                           backgroundColor: 'rgba(255, 255, 255, 0.95)', 
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
-                          padding: '12px'
+                          padding: '12px',
+                          fontSize: '14px'
                         }}
                       />
                       <Legend 
                         wrapperStyle={{ paddingTop: '20px' }}
                         iconType="rect"
+                        iconSize={12}
                       />
                       <Bar 
                         dataKey="annualGain" 
@@ -488,17 +491,21 @@ const ProjectImprovement = () => {
                   <CardDescription>Yatırım getirisi ve net kazanç performansı</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <ResponsiveContainer width="100%" height={400}>
+                  <ResponsiveContainer width="100%" height={500}>
                     <BarChart 
                       data={successfulProjectsData}
                       layout="vertical"
-                      margin={{ top: 5, right: 30, left: 100, bottom: 5 }}
+                      margin={{ top: 5, right: 50, left: 120, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                       <XAxis 
                         type="number" 
                         stroke="#6b7280"
+                        tick={{ fontSize: 12 }}
                         tickFormatter={(value) => {
+                          if (name === 'ROI') {
+                            return `${value.toFixed(0)}%`;
+                          }
                           if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
                           if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
                           return `${value} ₺`;
@@ -507,16 +514,16 @@ const ProjectImprovement = () => {
                       <YAxis 
                         type="category" 
                         dataKey="name" 
-                        width={90}
+                        width={110}
                         stroke="#6b7280"
-                        tick={{ fontSize: 12 }}
+                        tick={{ fontSize: 13 }}
                       />
                       <Tooltip 
                         formatter={(value, name) => {
                           if (name === 'Net Kazanç') {
                             return [formatCurrency(value), 'Net Kazanç'];
                           }
-                          if (name === 'ROI') {
+                          if (name === 'ROI (%)') {
                             return [`${value.toFixed(2)}%`, 'ROI'];
                           }
                           return value;
@@ -525,12 +532,14 @@ const ProjectImprovement = () => {
                           backgroundColor: 'rgba(255, 255, 255, 0.95)', 
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
-                          padding: '12px'
+                          padding: '12px',
+                          fontSize: '14px'
                         }}
                       />
                       <Legend 
                         wrapperStyle={{ paddingTop: '20px' }}
                         iconType="rect"
+                        iconSize={12}
                       />
                       <Bar 
                         dataKey="netGain" 
@@ -543,7 +552,6 @@ const ProjectImprovement = () => {
                         fill="#8b5cf6" 
                         name="ROI (%)"
                         radius={[0, 4, 4, 0]}
-                        scale="linear"
                       />
                     </BarChart>
                   </ResponsiveContainer>
