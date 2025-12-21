@@ -1017,15 +1017,22 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
           return itemDate >= from && itemDate <= to;
         });
         
-        // Tip bazlı analiz
+        // Tip bazlı analiz - gerçek tip değerlerini kullan
         const byType = filtered.reduce((acc, item) => {
           const type = item.type || 'other';
-          if (!acc[type]) {
-            acc[type] = { count: 0, totalImpact: 0, avgImpact: 0 };
+          // Tip değerini normalize et
+          const normalizedType = type.trim().toLowerCase();
+          if (!acc[normalizedType]) {
+            acc[normalizedType] = { 
+              count: 0, 
+              totalImpact: 0, 
+              avgImpact: 0,
+              originalType: type // Orijinal tip değerini sakla
+            };
           }
-          acc[type].count += 1;
+          acc[normalizedType].count += 1;
           const impact = calculateImpact(item);
-          acc[type].totalImpact += impact;
+          acc[normalizedType].totalImpact += impact;
           return acc;
         }, {});
         
@@ -1207,14 +1214,24 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                         </CardHeader>
                         <CardContent>
                           <ResponsiveContainer width="100%" height={450}>
-                            <BarChart data={Object.entries(analysisData.byType).map(([type, data]) => ({
-                              tip: type === 'cycle_time' ? 'Çevrim Süresi' : 
-                                   type === 'quality' ? 'Kalite' :
-                                   type === 'cost' ? 'Maliyet' :
-                                   type === 'ergonomics' ? 'Ergonomi' : 'Diğer',
-                              sayi: data.count,
-                              etki: data.totalImpact
-                            }))}>
+                            <BarChart data={Object.entries(analysisData.byType).map(([type, data]) => {
+                              // Tip ismini belirle
+                              const getTypeName = (t) => {
+                                const normalized = t.trim().toLowerCase();
+                                if (normalized === 'cycle_time') return 'Çevrim Süresi';
+                                if (normalized === 'quality') return 'Kalite';
+                                if (normalized === 'cost') return 'Maliyet';
+                                if (normalized === 'ergonomics') return 'Ergonomi';
+                                if (normalized === 'other') return 'Diğer';
+                                // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
+                                return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
+                              };
+                              return {
+                                tip: getTypeName(type),
+                                sayi: data.count,
+                                etki: data.totalImpact
+                              };
+                            })}>
                               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                               <XAxis 
                                 dataKey="tip" 
@@ -1285,13 +1302,24 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                           <ResponsiveContainer width="100%" height={450}>
                             <PieChart>
                               <Pie
-                                data={Object.entries(analysisData.byType).map(([type, data]) => ({
-                                  name: type === 'cycle_time' ? 'Çevrim Süresi' : 
-                                        type === 'quality' ? 'Kalite' :
-                                        type === 'cost' ? 'Maliyet' :
-                                        type === 'ergonomics' ? 'Ergonomi' : 'Diğer',
-                                  value: data.count
-                                }))}
+                                data={Object.entries(analysisData.byType).map(([type, data]) => {
+                                  // Tip ismini belirle
+                                  const getTypeName = (t) => {
+                                    const normalized = t.trim().toLowerCase();
+                                    if (normalized === 'cycle_time') return 'Çevrim Süresi';
+                                    if (normalized === 'quality') return 'Kalite';
+                                    if (normalized === 'cost') return 'Maliyet';
+                                    if (normalized === 'ergonomics') return 'Ergonomi';
+                                    if (normalized === 'other') return 'Diğer';
+                                    // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
+                                    return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
+                                  };
+                                  return {
+                                    name: getTypeName(type),
+                                    value: data.count,
+                                    originalType: type
+                                  };
+                                })}
                                 cx="50%"
                                 cy="45%"
                                 labelLine={true}
@@ -1336,14 +1364,9 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                                 iconSize={12}
                                 formatter={(value, entry) => {
                                   const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
-                                  const item = Object.entries(analysisData.byType).find(([type]) => {
-                                    const typeName = type === 'cycle_time' ? 'Çevrim Süresi' : 
-                                                    type === 'quality' ? 'Kalite' :
-                                                    type === 'cost' ? 'Maliyet' :
-                                                    type === 'ergonomics' ? 'Ergonomi' : 'Diğer';
-                                    return typeName === value;
-                                  });
-                                  const count = item ? analysisData.byType[item[0]].count : 0;
+                                  // Entry'den tip bilgisini al
+                                  const pieData = entry.payload;
+                                  const count = pieData?.value || 0;
                                   const percent = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
                                   return `${value} (${percent}%)`;
                                 }}
