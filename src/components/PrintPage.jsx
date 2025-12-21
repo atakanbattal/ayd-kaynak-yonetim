@@ -421,17 +421,23 @@ import React, { useEffect, useState } from 'react';
             <section className="mb-8">
               <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detaylı Veriler</h2>
               <div className="space-y-8">
-                {reportData.sections.map((section, sectionIndex) => (
-                  <div key={sectionIndex} className="break-inside-avoid">
+                {reportData.sections.map((section, sectionIndex) => {
+                  // section.tableData formatını da destekle
+                  const headers = section.headers || (section.tableData && section.tableData.headers);
+                  const rows = section.rows || (section.tableData && section.tableData.rows);
+                  const hasTable = headers && rows && rows.length > 0;
+                  
+                  return (
+                  <div key={sectionIndex} className="break-inside-avoid mb-6">
                     <h3 className="text-base font-bold text-blue-900 bg-blue-50 px-4 py-2 border-l-4 border-blue-600 mb-3">
                       {section.title}
                     </h3>
-                    {section.type === 'table' && section.headers && (
+                    {hasTable && (
                       <div className="overflow-x-auto">
                         <table className="w-full border-collapse text-xs">
                           <thead>
                             <tr className="bg-gray-200">
-                              {section.headers.map((header, headerIndex) => (
+                              {headers.map((header, headerIndex) => (
                                 <th key={headerIndex} className="p-2 text-left font-semibold text-gray-700 border border-gray-300">
                                   {header}
                                 </th>
@@ -439,7 +445,7 @@ import React, { useEffect, useState } from 'react';
                             </tr>
                           </thead>
                           <tbody>
-                            {section.rows && section.rows.map((row, rowIndex) => (
+                            {rows.map((row, rowIndex) => (
                               <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50">
                                 {row.map((cell, cellIndex) => (
                                   <td key={cellIndex} className="p-2 border border-gray-200 text-gray-800">
@@ -469,7 +475,8 @@ import React, { useEffect, useState } from 'react';
                       </div>
                     )}
                   </div>
-                ))}
+                );
+                })}
               </div>
             </section>
           )}
