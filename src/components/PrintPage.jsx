@@ -5,71 +5,76 @@ import React, { useEffect, useState } from 'react';
     import { Printer } from 'lucide-react';
     
     const AydLogo = () => (
-      <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" className="h-12" />
+      <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" style={{ height: '70px' }} />
     );
     
     const CertificatePrintLayout = ({ certificateData }) => {
       return (
-        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans flex flex-col relative overflow-hidden" style={{ width: '297mm', height: '210mm', maxHeight: '210mm', padding: '8mm 15mm', boxSizing: 'border-box' }}>
-            {/* Decorative Elements - Smaller */}
-            <div className="absolute top-0 left-0 w-32 h-32 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
-            <div className="absolute bottom-0 right-0 w-32 h-32 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
+        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans flex flex-col relative overflow-hidden" style={{ width: '297mm', height: '210mm', maxHeight: '210mm', padding: '12mm 25mm', boxSizing: 'border-box' }}>
+            {/* Decorative Elements */}
+            <div className="absolute top-0 left-0 w-40 h-40 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
+            <div className="absolute bottom-0 right-0 w-40 h-40 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
             
-            <div className="absolute -top-8 -right-8 w-40 h-40 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -top-4 -right-14 w-40 h-40 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute -top-10 -right-10 w-48 h-48 bg-[#4A90E2] rounded-full opacity-80"></div>
+            <div className="absolute -top-5 -right-16 w-48 h-48 bg-[#357ABD] rounded-full opacity-70"></div>
     
-            <div className="absolute -bottom-8 -left-8 w-40 h-40 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -bottom-4 -left-14 w-40 h-40 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-[#4A90E2] rounded-full opacity-80"></div>
+            <div className="absolute -bottom-5 -left-16 w-48 h-48 bg-[#357ABD] rounded-full opacity-70"></div>
     
-            {/* Main Content - Compact single page layout */}
-            <div className="relative z-10 text-center w-full h-full flex flex-col items-center justify-center" style={{ gap: '4px' }}>
-                {/* Logo */}
-                <AydLogo />
-                
-                {/* Title */}
-                <h1 className="text-xl font-extrabold tracking-wider" style={{ fontFamily: "'Arial Black', sans-serif", margin: '4px 0' }}>
-                    BAŞARI SERTİFİKASI
-                </h1>
-    
-                {/* Subtitle */}
-                <p className="text-sm text-gray-600" style={{ fontFamily: "'Georgia', serif", margin: '2px 0' }}>
-                    Bu sertifika,
-                </p>
-    
-                {/* Name */}
-                <p className="text-3xl" style={{ fontFamily: "'Great Vibes', cursive", margin: '4px 0' }}>
-                    {certificateData.participantName}
-                </p>
-                
-                {/* Description - Compact */}
-                <div className="text-center text-xs text-[#333] leading-normal max-w-3xl mx-auto" style={{ fontFamily: "'Georgia', serif", margin: '6px 0' }}>
-                    <p style={{ margin: '0 0 3px 0' }}>
-                        "<span className="font-bold">{certificateData.trainingName}</span>" programına katılarak gerekli tüm bilgi, beceri ve yeterlilikleri başarıyla göstermiştir.
-                    </p>
-                    <p style={{ margin: '0 0 3px 0' }}>
-                        Görevine olan özverisi, öğrenmeye olan isteği ve gelişime açık yaklaşımıyla bu eğitimi başarıyla tamamlamış, kurumumuzun kalite ve mükemmeliyet hedeflerine değerli katkılarda bulunmuştur.
-                    </p>
-                    <p style={{ margin: '0' }}>
-                        Bu belge, göstermiş olduğu gayret ve başarıyı onurlandırmak amacıyla kendisine verilmiştir.
-                    </p>
+            {/* Main Content - Full page spread with justify-between */}
+            <div className="relative z-10 text-center w-full h-full flex flex-col items-center justify-between">
+                {/* Top Section: Logo */}
+                <div style={{ paddingTop: '5mm' }}>
+                    <AydLogo />
                 </div>
                 
-                {/* Signatures - Compact */}
-                <div className="w-full" style={{ marginTop: '8px' }}>
-                    <div className="grid grid-cols-2 gap-20 text-center max-w-xl mx-auto">
-                        <div>
-                            <div className="border-t border-gray-400" style={{ width: '120px', margin: '0 auto' }}></div>
-                            <p className="font-bold text-xs" style={{ margin: '3px 0 1px 0' }}>Tuğçe MAVİ BATTAL</p>
-                            <p className="text-gray-600" style={{ fontSize: '9px', margin: '0' }}>Eğitmen</p>
+                {/* Middle Section: Title, Name, Description */}
+                <div className="flex flex-col items-center">
+                    {/* Title */}
+                    <h1 style={{ fontFamily: "'Arial Black', sans-serif", fontSize: '28px', fontWeight: 800, letterSpacing: '3px', margin: '0 0 12px 0' }}>
+                        BAŞARI SERTİFİKASI
+                    </h1>
+        
+                    {/* Subtitle */}
+                    <p style={{ fontFamily: "'Georgia', serif", fontSize: '16px', color: '#666', margin: '0 0 8px 0' }}>
+                        Bu sertifika,
+                    </p>
+        
+                    {/* Name */}
+                    <p style={{ fontFamily: "'Great Vibes', cursive", fontSize: '48px', margin: '0 0 20px 0', color: '#0B2C5F' }}>
+                        {certificateData.participantName}
+                    </p>
+                    
+                    {/* Description */}
+                    <div style={{ fontFamily: "'Georgia', serif", fontSize: '14px', color: '#333', lineHeight: '1.6', maxWidth: '700px', textAlign: 'center' }}>
+                        <p style={{ margin: '0 0 8px 0' }}>
+                            "<span style={{ fontWeight: 'bold' }}>{certificateData.trainingName}</span>" programına katılarak gerekli tüm bilgi, beceri ve yeterlilikleri başarıyla göstermiştir.
+                        </p>
+                        <p style={{ margin: '0 0 8px 0' }}>
+                            Görevine olan özverisi, öğrenmeye olan isteği ve gelişime açık yaklaşımıyla bu eğitimi başarıyla tamamlamış, kurumumuzun kalite ve mükemmeliyet hedeflerine değerli katkılarda bulunmuştur.
+                        </p>
+                        <p style={{ margin: '0' }}>
+                            Bu belge, göstermiş olduğu gayret ve başarıyı onurlandırmak amacıyla kendisine verilmiştir.
+                        </p>
+                    </div>
+                </div>
+                
+                {/* Bottom Section: Signatures */}
+                <div className="w-full" style={{ paddingBottom: '5mm' }}>
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '120px' }}>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ width: '160px', borderTop: '2px solid #666', margin: '0 auto 8px auto' }}></div>
+                            <p style={{ fontWeight: 'bold', fontSize: '14px', margin: '0 0 4px 0' }}>Tuğçe MAVİ BATTAL</p>
+                            <p style={{ color: '#666', fontSize: '12px', margin: '0' }}>Eğitmen</p>
                         </div>
-                        <div>
-                            <div className="border-t border-gray-400" style={{ width: '120px', margin: '0 auto' }}></div>
-                            <p className="font-bold text-xs" style={{ margin: '3px 0 1px 0' }}>Yusuf ÇAKIR</p>
-                            <p className="text-gray-600" style={{ fontSize: '9px', margin: '0' }}>Genel Müdür</p>
+                        <div style={{ textAlign: 'center' }}>
+                            <div style={{ width: '160px', borderTop: '2px solid #666', margin: '0 auto 8px auto' }}></div>
+                            <p style={{ fontWeight: 'bold', fontSize: '14px', margin: '0 0 4px 0' }}>Yusuf ÇAKIR</p>
+                            <p style={{ color: '#666', fontSize: '12px', margin: '0' }}>Genel Müdür</p>
                         </div>
                     </div>
         
-                    <div className="text-center text-gray-500" style={{ marginTop: '6px', fontSize: '9px' }}>
+                    <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px', color: '#888' }}>
                         Tarih: {certificateData.issueDate} | Sertifika No: {certificateData.certificateNumber}
                     </div>
                 </div>
