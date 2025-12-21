@@ -1199,14 +1199,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                   
                   {/* Tip Bazlı Analiz */}
                   {Object.keys(analysisData.byType).length > 0 && (
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="space-y-6">
                       <Card>
                         <CardHeader>
                           <CardTitle>İyileştirme Tipi Bazlı Analiz</CardTitle>
                           <CardDescription>Tip bazında iyileştirme sayıları ve etkileri</CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <ResponsiveContainer width="100%" height={300}>
+                          <ResponsiveContainer width="100%" height={450}>
                             <BarChart data={Object.entries(analysisData.byType).map(([type, data]) => ({
                               tip: type === 'cycle_time' ? 'Çevrim Süresi' : 
                                    type === 'quality' ? 'Kalite' :
@@ -1215,14 +1215,62 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                               sayi: data.count,
                               etki: data.totalImpact
                             }))}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="tip" />
-                              <YAxis yAxisId="left" />
-                              <YAxis yAxisId="right" orientation="right" />
-                              <Tooltip />
-                              <Legend />
-                              <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
-                              <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                              <XAxis 
+                                dataKey="tip" 
+                                tick={{ fontSize: 13 }}
+                                stroke="#6b7280"
+                              />
+                              <YAxis 
+                                yAxisId="left" 
+                                tick={{ fontSize: 12 }}
+                                stroke="#6b7280"
+                              />
+                              <YAxis 
+                                yAxisId="right" 
+                                orientation="right"
+                                tick={{ fontSize: 12 }}
+                                stroke="#6b7280"
+                                tickFormatter={(value) => {
+                                  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
+                                  if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
+                                  return `${value} ₺`;
+                                }}
+                              />
+                              <Tooltip 
+                                formatter={(value, name) => {
+                                  if (name === 'Toplam Etki (₺)') {
+                                    return [formatCurrency(value), 'Toplam Etki'];
+                                  }
+                                  return value;
+                                }}
+                                contentStyle={{ 
+                                  backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                              <Legend 
+                                wrapperStyle={{ paddingTop: '20px' }}
+                                iconType="rect"
+                                iconSize={12}
+                              />
+                              <Bar 
+                                yAxisId="left" 
+                                dataKey="sayi" 
+                                fill="#3b82f6" 
+                                name="Kayıt Sayısı"
+                                radius={[4, 4, 0, 0]}
+                              />
+                              <Bar 
+                                yAxisId="right" 
+                                dataKey="etki" 
+                                fill="#10b981" 
+                                name="Toplam Etki (₺)"
+                                radius={[4, 4, 0, 0]}
+                              />
                             </BarChart>
                           </ResponsiveContainer>
                         </CardContent>
@@ -1234,7 +1282,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                           <CardDescription>Tip bazında yüzde dağılımı</CardDescription>
                         </CardHeader>
                         <CardContent>
-                          <ResponsiveContainer width="100%" height={300}>
+                          <ResponsiveContainer width="100%" height={450}>
                             <PieChart>
                               <Pie
                                 data={Object.entries(analysisData.byType).map(([type, data]) => ({
@@ -1248,7 +1296,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                                 cy="50%"
                                 labelLine={false}
                                 label={({ name, percent }) => `${name} ${(percent * 100).toFixed(0)}%`}
-                                outerRadius={80}
+                                outerRadius={120}
                                 fill="#8884d8"
                                 dataKey="value"
                               >
@@ -1256,7 +1304,23 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                                   <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
                                 ))}
                               </Pie>
-                              <Tooltip />
+                              <Tooltip 
+                                formatter={(value, name) => {
+                                  return [`${value} kayıt`, name];
+                                }}
+                                contentStyle={{ 
+                                  backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                                  border: '1px solid #e5e7eb',
+                                  borderRadius: '8px',
+                                  padding: '12px',
+                                  fontSize: '14px'
+                                }}
+                              />
+                              <Legend 
+                                wrapperStyle={{ paddingTop: '20px' }}
+                                iconType="rect"
+                                iconSize={12}
+                              />
                             </PieChart>
                           </ResponsiveContainer>
                         </CardContent>
