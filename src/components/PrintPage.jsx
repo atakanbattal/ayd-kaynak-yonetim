@@ -5,52 +5,52 @@ import React, { useEffect, useState } from 'react';
     import { Printer } from 'lucide-react';
     
     const AydLogo = () => (
-      <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" style={{ height: '70px' }} />
+      <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" style={{ height: '90px' }} />
     );
     
     const CertificatePrintLayout = ({ certificateData }) => {
       return (
-        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans flex flex-col relative overflow-hidden" style={{ width: '297mm', height: '210mm', maxHeight: '210mm', padding: '12mm 25mm', boxSizing: 'border-box' }}>
-            {/* Decorative Elements */}
-            <div className="absolute top-0 left-0 w-40 h-40 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
-            <div className="absolute bottom-0 right-0 w-40 h-40 bg-[#FFC107] opacity-90" style={{ clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
+        <div className="print-container certificate-layout bg-white text-[#0B2C5F] font-sans flex flex-col relative overflow-hidden" style={{ width: '297mm', height: '210mm', maxHeight: '210mm', padding: '8mm 20mm', boxSizing: 'border-box' }}>
+            {/* Decorative Elements - Larger */}
+            <div className="absolute top-0 left-0 bg-[#FFC107] opacity-90" style={{ width: '200px', height: '200px', clipPath: 'polygon(0 0, 100% 0, 0 40%)' }}></div>
+            <div className="absolute bottom-0 right-0 bg-[#FFC107] opacity-90" style={{ width: '200px', height: '200px', clipPath: 'polygon(100% 100%, 0 100%, 100% 60%)' }}></div>
             
-            <div className="absolute -top-10 -right-10 w-48 h-48 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -top-5 -right-16 w-48 h-48 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute bg-[#4A90E2] rounded-full opacity-80" style={{ top: '-60px', right: '-60px', width: '220px', height: '220px' }}></div>
+            <div className="absolute bg-[#357ABD] rounded-full opacity-70" style={{ top: '-30px', right: '-90px', width: '220px', height: '220px' }}></div>
     
-            <div className="absolute -bottom-10 -left-10 w-48 h-48 bg-[#4A90E2] rounded-full opacity-80"></div>
-            <div className="absolute -bottom-5 -left-16 w-48 h-48 bg-[#357ABD] rounded-full opacity-70"></div>
+            <div className="absolute bg-[#4A90E2] rounded-full opacity-80" style={{ bottom: '-60px', left: '-60px', width: '220px', height: '220px' }}></div>
+            <div className="absolute bg-[#357ABD] rounded-full opacity-70" style={{ bottom: '-30px', left: '-90px', width: '220px', height: '220px' }}></div>
     
-            {/* Main Content - Full page spread with justify-between */}
-            <div className="relative z-10 text-center w-full h-full flex flex-col items-center justify-between">
+            {/* Main Content - Full page spread */}
+            <div className="relative z-10 text-center w-full h-full flex flex-col items-center justify-between" style={{ padding: '0' }}>
                 {/* Top Section: Logo */}
-                <div style={{ paddingTop: '5mm' }}>
+                <div>
                     <AydLogo />
                 </div>
                 
                 {/* Middle Section: Title, Name, Description */}
-                <div className="flex flex-col items-center">
+                <div className="flex flex-col items-center" style={{ flex: 1, justifyContent: 'center', width: '100%' }}>
                     {/* Title */}
-                    <h1 style={{ fontFamily: "'Arial Black', sans-serif", fontSize: '28px', fontWeight: 800, letterSpacing: '3px', margin: '0 0 12px 0' }}>
+                    <h1 style={{ fontFamily: "'Arial Black', sans-serif", fontSize: '42px', fontWeight: 800, letterSpacing: '6px', margin: '0 0 15px 0', color: '#0B2C5F' }}>
                         BAŞARI SERTİFİKASI
                     </h1>
         
                     {/* Subtitle */}
-                    <p style={{ fontFamily: "'Georgia', serif", fontSize: '16px', color: '#666', margin: '0 0 8px 0' }}>
+                    <p style={{ fontFamily: "'Georgia', serif", fontSize: '20px', color: '#555', margin: '0 0 10px 0' }}>
                         Bu sertifika,
                     </p>
         
                     {/* Name */}
-                    <p style={{ fontFamily: "'Great Vibes', cursive", fontSize: '48px', margin: '0 0 20px 0', color: '#0B2C5F' }}>
+                    <p style={{ fontFamily: "'Great Vibes', cursive", fontSize: '64px', margin: '0 0 25px 0', color: '#0B2C5F', lineHeight: '1.2' }}>
                         {certificateData.participantName}
                     </p>
                     
                     {/* Description */}
-                    <div style={{ fontFamily: "'Georgia', serif", fontSize: '14px', color: '#333', lineHeight: '1.6', maxWidth: '700px', textAlign: 'center' }}>
-                        <p style={{ margin: '0 0 8px 0' }}>
+                    <div style={{ fontFamily: "'Georgia', serif", fontSize: '17px', color: '#333', lineHeight: '1.8', maxWidth: '850px', textAlign: 'center' }}>
+                        <p style={{ margin: '0 0 12px 0' }}>
                             "<span style={{ fontWeight: 'bold' }}>{certificateData.trainingName}</span>" programına katılarak gerekli tüm bilgi, beceri ve yeterlilikleri başarıyla göstermiştir.
                         </p>
-                        <p style={{ margin: '0 0 8px 0' }}>
+                        <p style={{ margin: '0 0 12px 0' }}>
                             Görevine olan özverisi, öğrenmeye olan isteği ve gelişime açık yaklaşımıyla bu eğitimi başarıyla tamamlamış, kurumumuzun kalite ve mükemmeliyet hedeflerine değerli katkılarda bulunmuştur.
                         </p>
                         <p style={{ margin: '0' }}>
@@ -60,21 +60,21 @@ import React, { useEffect, useState } from 'react';
                 </div>
                 
                 {/* Bottom Section: Signatures */}
-                <div className="w-full" style={{ paddingBottom: '5mm' }}>
-                    <div style={{ display: 'flex', justifyContent: 'center', gap: '120px' }}>
+                <div className="w-full">
+                    <div style={{ display: 'flex', justifyContent: 'center', gap: '180px' }}>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '160px', borderTop: '2px solid #666', margin: '0 auto 8px auto' }}></div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px', margin: '0 0 4px 0' }}>Tuğçe MAVİ BATTAL</p>
-                            <p style={{ color: '#666', fontSize: '12px', margin: '0' }}>Eğitmen</p>
+                            <div style={{ width: '200px', borderTop: '3px solid #555', margin: '0 auto 10px auto' }}></div>
+                            <p style={{ fontWeight: 'bold', fontSize: '18px', margin: '0 0 5px 0', color: '#0B2C5F' }}>Tuğçe MAVİ BATTAL</p>
+                            <p style={{ color: '#666', fontSize: '15px', margin: '0' }}>Eğitmen</p>
                         </div>
                         <div style={{ textAlign: 'center' }}>
-                            <div style={{ width: '160px', borderTop: '2px solid #666', margin: '0 auto 8px auto' }}></div>
-                            <p style={{ fontWeight: 'bold', fontSize: '14px', margin: '0 0 4px 0' }}>Yusuf ÇAKIR</p>
-                            <p style={{ color: '#666', fontSize: '12px', margin: '0' }}>Genel Müdür</p>
+                            <div style={{ width: '200px', borderTop: '3px solid #555', margin: '0 auto 10px auto' }}></div>
+                            <p style={{ fontWeight: 'bold', fontSize: '18px', margin: '0 0 5px 0', color: '#0B2C5F' }}>Yusuf ÇAKIR</p>
+                            <p style={{ color: '#666', fontSize: '15px', margin: '0' }}>Genel Müdür</p>
                         </div>
                     </div>
         
-                    <div style={{ textAlign: 'center', marginTop: '12px', fontSize: '11px', color: '#888' }}>
+                    <div style={{ textAlign: 'center', marginTop: '15px', fontSize: '14px', color: '#777' }}>
                         Tarih: {certificateData.issueDate} | Sertifika No: {certificateData.certificateNumber}
                     </div>
                 </div>
