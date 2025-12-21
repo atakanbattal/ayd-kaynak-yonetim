@@ -1214,24 +1214,37 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                         </CardHeader>
                         <CardContent>
                           <ResponsiveContainer width="100%" height={450}>
-                            <BarChart data={Object.entries(analysisData.byType).map(([type, data]) => {
-                              // Tip ismini belirle
-                              const getTypeName = (t) => {
-                                const normalized = t.trim().toLowerCase();
-                                if (normalized === 'cycle_time') return 'Çevrim Süresi';
-                                if (normalized === 'quality') return 'Kalite';
-                                if (normalized === 'cost') return 'Maliyet';
-                                if (normalized === 'ergonomics') return 'Ergonomi';
-                                if (normalized === 'other') return 'Diğer';
-                                // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
-                                return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
-                              };
-                              return {
-                                tip: getTypeName(type),
-                                sayi: data.count,
-                                etki: data.totalImpact
-                              };
-                            })}>
+                            <BarChart data={Object.entries(analysisData.byType)
+                              .map(([type, data]) => {
+                                // Tip ismini Türkçe'ye çevir
+                                const getTypeName = (t) => {
+                                  const normalized = t.trim().toLowerCase();
+                                  if (normalized === 'cycle_time') return 'Çevrim Süresi';
+                                  if (normalized === 'quality') return 'Kalite';
+                                  if (normalized === 'cost') return 'Maliyet';
+                                  if (normalized === 'ergonomics') return 'Ergonomi';
+                                  if (normalized === 'other') return 'Diğer';
+                                  // İngilizce kelimeleri Türkçe'ye çevir
+                                  if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
+                                  if (normalized === 'process' || normalized === 'processes') return 'Proses';
+                                  if (normalized === 'program' || normalized === 'programs') return 'Program';
+                                  if (normalized === 'method' || normalized === 'methods') return 'Metod';
+                                  if (normalized === 'tool' || normalized === 'tools') return 'Araç';
+                                  if (normalized === 'equipment' || normalized === 'equipments') return 'Ekipman';
+                                  if (normalized === 'material' || normalized === 'materials') return 'Malzeme';
+                                  if (normalized === 'technique' || normalized === 'techniques') return 'Teknik';
+                                  // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
+                                  return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
+                                };
+                                return {
+                                  tip: getTypeName(type),
+                                  sayi: data.count,
+                                  etki: data.totalImpact,
+                                  sortValue: data.count
+                                };
+                              })
+                              .sort((a, b) => b.sortValue - a.sortValue) // En çoktan aza doğru sırala
+                            }>
                               <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
                               <XAxis 
                                 dataKey="tip" 
@@ -1302,24 +1315,37 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                           <ResponsiveContainer width="100%" height={450}>
                             <PieChart>
                               <Pie
-                                data={Object.entries(analysisData.byType).map(([type, data]) => {
-                                  // Tip ismini belirle
-                                  const getTypeName = (t) => {
-                                    const normalized = t.trim().toLowerCase();
-                                    if (normalized === 'cycle_time') return 'Çevrim Süresi';
-                                    if (normalized === 'quality') return 'Kalite';
-                                    if (normalized === 'cost') return 'Maliyet';
-                                    if (normalized === 'ergonomics') return 'Ergonomi';
-                                    if (normalized === 'other') return 'Diğer';
-                                    // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
-                                    return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
-                                  };
-                                  return {
-                                    name: getTypeName(type),
-                                    value: data.count,
-                                    originalType: type
-                                  };
-                                })}
+                                data={Object.entries(analysisData.byType)
+                                  .map(([type, data]) => {
+                                    // Tip ismini Türkçe'ye çevir
+                                    const getTypeName = (t) => {
+                                      const normalized = t.trim().toLowerCase();
+                                      if (normalized === 'cycle_time') return 'Çevrim Süresi';
+                                      if (normalized === 'quality') return 'Kalite';
+                                      if (normalized === 'cost') return 'Maliyet';
+                                      if (normalized === 'ergonomics') return 'Ergonomi';
+                                      if (normalized === 'other') return 'Diğer';
+                                      // İngilizce kelimeleri Türkçe'ye çevir
+                                      if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
+                                      if (normalized === 'process' || normalized === 'processes') return 'Proses';
+                                      if (normalized === 'program' || normalized === 'programs') return 'Program';
+                                      if (normalized === 'method' || normalized === 'methods') return 'Metod';
+                                      if (normalized === 'tool' || normalized === 'tools') return 'Araç';
+                                      if (normalized === 'equipment' || normalized === 'equipments') return 'Ekipman';
+                                      if (normalized === 'material' || normalized === 'materials') return 'Malzeme';
+                                      if (normalized === 'technique' || normalized === 'techniques') return 'Teknik';
+                                      // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
+                                      return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
+                                    };
+                                    return {
+                                      name: getTypeName(type),
+                                      value: data.count,
+                                      originalType: type,
+                                      sortValue: data.count
+                                    };
+                                  })
+                                  .sort((a, b) => b.sortValue - a.sortValue) // En çoktan aza doğru sırala
+                                }
                                 cx="50%"
                                 cy="45%"
                                 labelLine={true}
