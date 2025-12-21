@@ -1509,12 +1509,16 @@ const ManualDataTracking = () => {
     
     // Aylık bazda tamir ve manuel maliyet grafik verisi
     const monthlyCostChartData = useMemo(() => {
-        // Tüm kayıtlardan yılları bul
+        // Analiz filtresinden tarih aralığını al
+        const from = analysisFilters.dateRange?.from ? format(analysisFilters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
+        const to = analysisFilters.dateRange?.to ? format(analysisFilters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        
+        // Tüm kayıtlardan yılları bul (filtrelenmiş verilerden)
         const allYears = new Set();
         
-        // Manuel kayıtlardan yılları çıkar
+        // Manuel kayıtlardan yılları çıkar (filtrelenmiş)
         allManualRecords.forEach(r => {
-            if (r.record_date) {
+            if (r.record_date && r.record_date >= from && r.record_date <= to) {
                 const year = r.record_date.substring(0, 4);
                 if (year && year.length === 4) {
                     allYears.add(year);
@@ -1522,9 +1526,9 @@ const ManualDataTracking = () => {
             }
         });
         
-        // Tamir kayıtlarından yılları çıkar
+        // Tamir kayıtlarından yılları çıkar (filtrelenmiş)
         allRepairRecords.forEach(r => {
-            if (r.record_date) {
+            if (r.record_date && r.record_date >= from && r.record_date <= to) {
                 const year = r.record_date.substring(0, 4);
                 if (year && year.length === 4) {
                     allYears.add(year);
@@ -1532,65 +1536,87 @@ const ManualDataTracking = () => {
             }
         });
         
-        // monthlyTotals'tan yılları çıkar
+        // monthlyTotals'tan yılları çıkar (filtrelenmiş)
         Object.keys(monthlyTotals).forEach(yearMonth => {
-            if (yearMonth && yearMonth.length >= 4) {
-                allYears.add(yearMonth.substring(0, 4));
+            if (yearMonth && yearMonth.length >= 7) {
+                const yearMonthDate = yearMonth + '-01';
+                if (yearMonthDate >= from.substring(0, 7) + '-01' && yearMonthDate <= to.substring(0, 7) + '-31') {
+                    allYears.add(yearMonth.substring(0, 4));
+                }
             }
         });
         
-        // En son yılı bul (veya mevcut yılı kullan)
         const yearsArray = Array.from(allYears).sort();
-        const targetYear = yearsArray.length > 0 ? yearsArray[yearsArray.length - 1] : format(new Date(), 'yyyy');
+        const hasMultipleYears = yearsArray.length > 1;
         
         const months = [];
         
+        // Her ay için tüm yılların verilerini birleştir
         for (let i = 0; i < 12; i++) {
-            const monthDate = new Date(parseInt(targetYear), i, 1);
-            const yearMonth = format(monthDate, 'yyyy-MM');
-            const monthName = format(monthDate, 'MMM', { locale: tr });
+            const monthName = format(new Date(2020, i, 1), 'MMM', { locale: tr });
             
-            // record_date formatını kontrol et - hem yyyy-MM-dd hem de yyyy-MM formatlarını destekle
-            const monthManuals = allManualRecords.filter(r => {
-                if (!r.record_date) return false;
-                // yyyy-MM-dd formatında ise
-                if (r.record_date.length >= 7) {
-                    return r.record_date.substring(0, 7) === yearMonth;
+            let manualCost = 0;
+            let repairCost = 0;
+            let manualQuantity = 0;
+            let repairQuantity = 0;
+            let totalProduction = 0;
+            
+            // Tüm yıllar için bu ayın verilerini topla
+            yearsArray.forEach(year => {
+                const yearMonth = `${year}-${String(i + 1).padStart(2, '0')}`;
+                
+                // Manuel kayıtları filtrele
+                const monthManuals = allManualRecords.filter(r => {
+                    if (!r.record_date) return false;
+                    if (r.record_date < from || r.record_date > to) return false;
+                    
+                    // yyyy-MM-dd formatında ise
+                    if (r.record_date.length >= 7) {
+                        return r.record_date.substring(0, 7) === yearMonth;
+                    }
+                    // yyyy-MM formatında ise
+                    return r.record_date === yearMonth;
+                });
+                
+                // Tamir kayıtlarını filtrele
+                const monthRepairs = allRepairRecords.filter(r => {
+                    if (!r.record_date) return false;
+                    if (r.record_date < from || r.record_date > to) return false;
+                    
+                    // yyyy-MM-dd formatında ise
+                    if (r.record_date.length >= 7) {
+                        return r.record_date.substring(0, 7) === yearMonth;
+                    }
+                    // yyyy-MM formatında ise
+                    return r.record_date === yearMonth;
+                });
+                
+                // Maliyetleri hesapla
+                manualCost += monthManuals.reduce((sum, r) => {
+                    const durationSeconds = r.duration_seconds || 0;
+                    return sum + calculateCost(r.quantity, r.line_id, durationSeconds);
+                }, 0);
+                
+                repairCost += monthRepairs.reduce((sum, r) => {
+                    const durationSeconds = r.duration_seconds || 0;
+                    return sum + calculateCost(r.quantity, r.repair_line_id, durationSeconds);
+                }, 0);
+                
+                // Miktarları hesapla
+                manualQuantity += monthManuals.reduce((sum, r) => sum + (r.quantity || 0), 0);
+                repairQuantity += monthRepairs.reduce((sum, r) => sum + (r.quantity || 0), 0);
+                
+                // Aylık toplam üretim
+                const monthlyTotal = monthlyTotals[yearMonth];
+                if (monthlyTotal?.total_production) {
+                    totalProduction += monthlyTotal.total_production;
                 }
-                // yyyy-MM formatında ise
-                return r.record_date === yearMonth;
             });
-            
-            const monthRepairs = allRepairRecords.filter(r => {
-                if (!r.record_date) return false;
-                // yyyy-MM-dd formatında ise
-                if (r.record_date.length >= 7) {
-                    return r.record_date.substring(0, 7) === yearMonth;
-                }
-                // yyyy-MM formatında ise
-                return r.record_date === yearMonth;
-            });
-            
-            const manualCost = monthManuals.reduce((sum, r) => {
-                const durationSeconds = r.duration_seconds || 0;
-                return sum + calculateCost(r.quantity, r.line_id, durationSeconds);
-            }, 0);
-            
-            const repairCost = monthRepairs.reduce((sum, r) => {
-                const durationSeconds = r.duration_seconds || 0;
-                return sum + calculateCost(r.quantity, r.repair_line_id, durationSeconds);
-            }, 0);
-            
-            const manualQuantity = monthManuals.reduce((sum, r) => sum + (r.quantity || 0), 0);
-            const repairQuantity = monthRepairs.reduce((sum, r) => sum + (r.quantity || 0), 0);
-            
-            const monthlyTotal = monthlyTotals[yearMonth];
-            const totalProduction = monthlyTotal?.total_production || 0;
             
             months.push({
                 month: monthName,
-                yearMonth,
-                year: targetYear,
+                yearMonth: `${yearsArray[0] || format(new Date(), 'yyyy')}-${String(i + 1).padStart(2, '0')}`,
+                year: hasMultipleYears ? `${yearsArray[0]}-${yearsArray[yearsArray.length - 1]}` : (yearsArray[0] || format(new Date(), 'yyyy')),
                 manualCost,
                 repairCost,
                 manualQuantity,
@@ -1602,7 +1628,7 @@ const ManualDataTracking = () => {
         }
         
         return months;
-    }, [allManualRecords, allRepairRecords, monthlyTotals, calculateCost]);
+    }, [allManualRecords, allRepairRecords, monthlyTotals, calculateCost, analysisFilters]);
     
     return (
         <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
