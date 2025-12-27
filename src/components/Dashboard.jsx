@@ -59,8 +59,19 @@ import React, { useState, useEffect, useMemo } from 'react';
         improvements: 0,
         totalTrainings: 0,
         totalParticipants: 0,
+        // Manuel veri takip özetleri
+        manualTotal: 0,
+        repairTotal: 0,
+        manualCost: 0,
+        repairCost: 0,
+        totalManualRecords: 0,
+        totalRepairRecords: 0,
+        activePersonnel: 0,
+        // Bu ay özetleri
+        monthlyManual: 0,
+        monthlyRepair: 0,
+        monthlyCost: 0,
       });
-      const [recentActivities, setRecentActivities] = useState([]);
       const [generatingReport, setGeneratingReport] = useState(false);
       const [showReportDialog, setShowReportDialog] = useState(false);
       const [reportDateRange, setReportDateRange] = useState({
@@ -75,6 +86,10 @@ import React, { useState, useEffect, useMemo } from 'react';
       const [linePerformance, setLinePerformance] = useState([]);
       const [taskStats, setTaskStats] = useState({ todo: 0, inProgress: 0, done: 0 });
       const [trainingStats, setTrainingStats] = useState({ planned: 0, completed: 0, participants: 0 });
+      const [manualTrend, setManualTrend] = useState([]);
+      const [topPersonnel, setTopPersonnel] = useState([]);
+      const [topLines, setTopLines] = useState([]);
+      const [employees, setEmployees] = useState([]);
       
       const { toast } = useToast();
       const navigate = useNavigate();
@@ -94,6 +109,12 @@ import React, { useState, useEffect, useMemo } from 'react';
           sixMonthsAgo.setMonth(sixMonthsAgo.getMonth() - 6);
           const sixMonthsAgoStr = sixMonthsAgo.toISOString().split('T')[0];
 
+          // Bu ay başı ve sonu
+          const monthStart = startOfMonth(today);
+          const monthEnd = endOfMonth(today);
+          const monthStartStr = format(monthStart, 'yyyy-MM-dd');
+          const monthEndStr = format(monthEnd, 'yyyy-MM-dd');
+
           try {
             const [
               improvementsRes,
@@ -104,11 +125,13 @@ import React, { useState, useEffect, useMemo } from 'react';
               weeklyProductionRes,
               monthlyProductionRes,
               wpsRes,
-              auditLogsRes,
               trainingsRes,
               participantsRes,
               tasksRes,
               linesRes,
+              manualRecordsRes,
+              repairRecordsRes,
+              employeesRes,
             ] = await Promise.all([
               supabase.from('improvements').select('*, line:lines(name), type').eq('deleted', false),
               supabase.from('scenarios').select('summary, scope, scenario_date').eq('deleted', false),
@@ -118,11 +141,13 @@ import React, { useState, useEffect, useMemo } from 'react';
               supabase.from('daily_production_summary').select('*').gte('production_date', weekAgoStr).lte('production_date', todayStr).order('production_date'),
               supabase.from('daily_production_summary').select('*').gte('production_date', sixMonthsAgoStr).lte('production_date', todayStr),
               supabase.from('wps').select('id', { count: 'exact' }),
-              supabase.from('audit_log').select('*').order('created_at', { ascending: false }).limit(10),
               supabase.from('trainings').select('*, status'),
               supabase.from('training_participants').select('*, participation_status'),
               supabase.from('tasks').select('*, status'),
-              supabase.from('lines').select('id, name').eq('deleted', false),
+              supabase.from('lines').select('id, name, costs').eq('deleted', false),
+              supabase.from('manual_production_records').select('*, line:lines(name, costs), operator_id').gte('record_date', monthStartStr).lte('record_date', monthEndStr),
+              supabase.from('repair_records').select('*, repair_line_id, source_line_id, operator_id').gte('record_date', monthStartStr).lte('record_date', monthEndStr),
+              supabase.from('employees').select('id, first_name, last_name, registration_number, is_active').eq('is_active', true),
             ]);
 
             const responses = {
@@ -157,6 +182,97 @@ import React, { useState, useEffect, useMemo } from 'react';
             const lines = linesRes.data || [];
             const weeklyProd = weeklyProductionRes.data || [];
             const monthlyProd = monthlyProductionRes.data || [];
+            const manualRecords = manualRecordsRes.data || [];
+            const repairRecords = repairRecordsRes.data || [];
+            const employeesData = employeesRes.data || [];
+            setEmployees(employeesData);
+            
+            // Maliyet hesaplama fonksiyonu
+            const calculateCost = (quantity, lineId, durationSeconds = 0) => {
+              const line = lines.find(l => l.id === lineId);
+              if (!line || !line.costs) return 0;
+              const costData = line.costs;
+              if (durationSeconds > 0 && costData.totalCostPerSecond) {
+                return quantity * durationSeconds * costData.totalCostPerSecond;
+              }
+              return 0;
+            };
+            
+            // Manuel veri takip özetleri
+            const manualTotal = manualRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const repairTotal = repairRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const manualCost = manualRecords.reduce((sum, r) => {
+              return sum + calculateCost(r.quantity || 0, r.line_id, r.duration_seconds || 0);
+            }, 0);
+            const repairCost = repairRecords.reduce((sum, r) => {
+              return sum + calculateCost(r.quantity || 0, r.repair_line_id, r.duration_seconds || 0);
+            }, 0);
+            
+            // Aktif personel sayısı (bu ay kayıt giren)
+            const activePersonnelSet = new Set();
+            manualRecords.forEach(r => { if (r.operator_id) activePersonnelSet.add(r.operator_id); });
+            repairRecords.forEach(r => { if (r.operator_id) activePersonnelSet.add(r.operator_id); });
+            
+            // Top 10 personel
+            const personnelStats = {};
+            [...manualRecords, ...repairRecords].forEach(record => {
+              const empId = record.operator_id || 'unknown';
+              if (empId === 'unknown') return;
+              if (!personnelStats[empId]) {
+                personnelStats[empId] = { quantity: 0, records: 0 };
+              }
+              personnelStats[empId].quantity += record.quantity || 0;
+              personnelStats[empId].records += 1;
+            });
+            const topPersonnelData = Object.entries(personnelStats)
+              .map(([id, data]) => {
+                const emp = employeesData.find(e => e.id === id);
+                return {
+                  id,
+                  name: emp ? `${emp.registration_number || ''} - ${emp.first_name || ''} ${emp.last_name || ''}`.trim() : 'Bilinmeyen',
+                  ...data
+                };
+              })
+              .filter(emp => emp.name !== 'Bilinmeyen' && !emp.name.includes('Bilinmeyen'))
+              .sort((a, b) => b.quantity - a.quantity)
+              .slice(0, 10);
+            setTopPersonnel(topPersonnelData);
+            
+            // Top 10 hatlar
+            const lineStats = {};
+            manualRecords.forEach(r => {
+              const lineId = r.line_id;
+              if (!lineId) return;
+              const line = lines.find(l => l.id === lineId);
+              const lineName = line?.name || 'Bilinmeyen';
+              if (!lineStats[lineName]) {
+                lineStats[lineName] = { quantity: 0, cost: 0 };
+              }
+              lineStats[lineName].quantity += r.quantity || 0;
+              lineStats[lineName].cost += calculateCost(r.quantity || 0, lineId, r.duration_seconds || 0);
+            });
+            const topLinesData = Object.entries(lineStats)
+              .map(([name, data]) => ({ name, ...data }))
+              .sort((a, b) => b.quantity - a.quantity)
+              .slice(0, 10);
+            setTopLines(topLinesData);
+            
+            // Son 7 gün manuel veri trendi
+            const manualTrendData = [];
+            for (let i = 6; i >= 0; i--) {
+              const date = new Date(today);
+              date.setDate(date.getDate() - i);
+              const dateStr = format(date, 'yyyy-MM-dd');
+              const dayManual = manualRecords.filter(r => r.record_date === dateStr).reduce((sum, r) => sum + (r.quantity || 0), 0);
+              const dayRepair = repairRecords.filter(r => r.record_date === dateStr).reduce((sum, r) => sum + (r.quantity || 0), 0);
+              manualTrendData.push({
+                date: format(date, 'dd MMM', { locale: tr }),
+                manual: dayManual,
+                repair: dayRepair,
+                total: dayManual + dayRepair
+              });
+            }
+            setManualTrend(manualTrendData);
             
             const improvementSavings = improvements.reduce((acc, i) => acc + (i.impact || 0), 0);
             const scenarioSavings = scenarios.reduce((acc, s) => acc + (s.summary?.annualImprovement || 0), 0);
@@ -175,6 +291,16 @@ import React, { useState, useEffect, useMemo } from 'react';
               improvements: totalImprovements,
               totalTrainings: trainings.length,
               totalParticipants: participants.length,
+              manualTotal: manualTotal,
+              repairTotal: repairTotal,
+              manualCost: manualCost,
+              repairCost: repairCost,
+              totalManualRecords: manualRecords.length,
+              totalRepairRecords: repairRecords.length,
+              activePersonnel: activePersonnelSet.size,
+              monthlyManual: manualTotal,
+              monthlyRepair: repairTotal,
+              monthlyCost: manualCost + repairCost,
             });
 
             // Haftalık üretim verileri
@@ -262,12 +388,14 @@ import React, { useState, useEffect, useMemo } from 'react';
       }, [toast]);
 
       const statCards = [
-        { title: 'Günlük Üretim', value: stats.dailyProduction.toLocaleString('tr-TR'), unit: 'adet', icon: Factory, path: '/part-cost' },
-        { title: 'Brüt Kâr', value: formatCurrency(stats.grossProfit), unit: 'Yıllık', icon: DollarSign, path: '/improvement' },
-        { title: 'Aktif WPS', value: stats.activeWPS, unit: 'adet', icon: CheckCircle, path: '/wps-creator' },
-        { title: 'Onaylı İyileştirmeler', value: stats.improvements, unit: 'adet', icon: TrendingUp, path: '/improvement' },
-        { title: 'Toplam Eğitim', value: stats.totalTrainings, unit: 'adet', icon: BookUser, path: '/trainings' },
-        { title: 'Toplam Katılımcı', value: stats.totalParticipants, unit: 'kişi', icon: Users, path: '/trainings' },
+        { title: 'Bu Ay Manuel Üretim', value: stats.monthlyManual.toLocaleString('tr-TR'), unit: 'adet', icon: Factory, path: '/manual-tracking', color: 'blue' },
+        { title: 'Bu Ay Tamir Üretim', value: stats.monthlyRepair.toLocaleString('tr-TR'), unit: 'adet', icon: Factory, path: '/manual-tracking', color: 'orange' },
+        { title: 'Bu Ay Toplam Maliyet', value: formatCurrency(stats.monthlyCost), unit: 'Manuel+Tamir', icon: DollarSign, path: '/manual-tracking', color: 'green' },
+        { title: 'Aktif Personel', value: stats.activePersonnel, unit: 'kişi', icon: Users, path: '/manual-tracking', color: 'purple' },
+        { title: 'Toplam Yıllık Etki', value: formatCurrency(stats.grossProfit), unit: 'İyileştirmeler', icon: TrendingUp, path: '/improvement', color: 'teal' },
+        { title: 'Toplam İyileştirme', value: stats.improvements, unit: 'adet', icon: Award, path: '/improvement', color: 'yellow' },
+        { title: 'Aktif WPS', value: stats.activeWPS, unit: 'adet', icon: CheckCircle, path: '/wps-creator', color: 'indigo' },
+        { title: 'Toplam Eğitim', value: stats.totalTrainings, unit: 'adet', icon: BookUser, path: '/trainings', color: 'pink' },
       ];
 
       const handleCardClick = (path) => {
@@ -1081,36 +1209,176 @@ import React, { useState, useEffect, useMemo } from 'react';
             </div>
           </motion.div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
             {statCards.map((stat, index) => {
               const Icon = stat.icon;
+              const colorClasses = {
+                blue: 'from-blue-50 to-blue-100 border-blue-200',
+                orange: 'from-orange-50 to-orange-100 border-orange-200',
+                green: 'from-green-50 to-green-100 border-green-200',
+                purple: 'from-purple-50 to-purple-100 border-purple-200',
+                teal: 'from-cyan-50 to-cyan-100 border-cyan-200',
+                yellow: 'from-yellow-50 to-yellow-100 border-yellow-200',
+                indigo: 'from-indigo-50 to-indigo-100 border-indigo-200',
+                pink: 'from-pink-50 to-pink-100 border-pink-200',
+              };
+              const iconColors = {
+                blue: 'text-blue-600',
+                orange: 'text-orange-600',
+                green: 'text-green-600',
+                purple: 'text-purple-600',
+                teal: 'text-cyan-600',
+                yellow: 'text-yellow-600',
+                indigo: 'text-indigo-600',
+                pink: 'text-pink-600',
+              };
               return (
-                <motion.div key={stat.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.1 }} onClick={() => handleCardClick(stat.path)} className="cursor-pointer">
-                  <Card className="card-hover h-full"><CardContent className="p-6 flex flex-col justify-between h-full"><div className="flex items-center justify-between"><div><p className="text-sm font-medium text-gray-600">{stat.title}</p><div className="flex items-baseline space-x-1"><p className="text-2xl font-bold text-gray-900">{stat.value}</p><span className="text-sm text-gray-500">{stat.unit}</span></div></div><div className="bg-gray-100 p-3 rounded-full"><Icon className="h-6 w-6 text-gray-600" /></div></div></CardContent></Card>
+                <motion.div key={stat.title} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: index * 0.05 }} onClick={() => handleCardClick(stat.path)} className="cursor-pointer">
+                  <Card className={`bg-gradient-to-br ${colorClasses[stat.color] || 'from-gray-50 to-gray-100'} border h-full hover:shadow-lg transition-shadow`}>
+                    <CardContent className="p-5">
+                      <div className="flex items-center justify-between mb-3">
+                        <p className="text-xs font-medium text-gray-700">{stat.title}</p>
+                        <div className={`bg-white p-2 rounded-lg ${iconColors[stat.color] || 'text-gray-600'}`}>
+                          <Icon className="h-5 w-5" />
+                        </div>
+                      </div>
+                      <div className="flex items-baseline space-x-2">
+                        <p className="text-2xl font-bold text-gray-900">{stat.value}</p>
+                        <span className="text-xs text-gray-600">{stat.unit}</span>
+                      </div>
+                    </CardContent>
+                  </Card>
                 </motion.div>
               );
             })}
           </div>
 
+          {/* Manuel Veri Takip Özeti */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
-            <motion.div initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.3 }}>
-              <Card><CardHeader><CardTitle className="flex items-center space-x-2"><AlertCircle className="h-5 w-5" /><span>Son Aktiviteler</span></CardTitle><CardDescription>Sistemdeki son işlemler ve güncellemeler</CardDescription></CardHeader>
-                <CardContent><div className="space-y-4">{recentActivities.length > 0 ? recentActivities.map((activity) => (<div key={activity.id} className="flex items-start space-x-3"><div className={`w-2 h-2 rounded-full mt-2 ${activity.status === 'success' ? 'bg-green-500' : activity.status === 'warning' ? 'bg-yellow-500' : 'bg-blue-500'}`} /><div className="flex-1 min-w-0"><p className="text-sm font-medium text-gray-900">{activity.message}</p><p className="text-xs text-gray-500">{activity.time}</p></div><span className={`inline-flex items-center px-2 py-1 rounded-full text-xs font-medium ${activity.status === 'success' ? 'bg-green-100 text-green-800' : activity.status === 'warning' ? 'bg-yellow-100 text-yellow-800' : 'bg-blue-100 text-blue-800'}`}>{activity.type}</span></div>)) : <p className="text-sm text-center text-gray-500 py-4">Henüz aktivite yok.</p>}</div></CardContent>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.4 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Factory className="h-5 w-5" />
+                    <span>Manuel Veri Takip Özeti (Bu Ay)</span>
+                  </CardTitle>
+                  <CardDescription>Manuel ve tamir hatları üretim özeti</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="grid grid-cols-2 gap-4">
+                    <div className="p-4 bg-blue-50 rounded-lg">
+                      <p className="text-sm text-blue-600 font-medium">Manuel Üretim</p>
+                      <p className="text-2xl font-bold text-blue-900">{stats.monthlyManual.toLocaleString('tr-TR')}</p>
+                      <p className="text-xs text-blue-700 mt-1">{stats.totalManualRecords} kayıt</p>
+                    </div>
+                    <div className="p-4 bg-orange-50 rounded-lg">
+                      <p className="text-sm text-orange-600 font-medium">Tamir Üretim</p>
+                      <p className="text-2xl font-bold text-orange-900">{stats.monthlyRepair.toLocaleString('tr-TR')}</p>
+                      <p className="text-xs text-orange-700 mt-1">{stats.totalRepairRecords} kayıt</p>
+                    </div>
+                    <div className="p-4 bg-green-50 rounded-lg col-span-2">
+                      <p className="text-sm text-green-600 font-medium">Toplam Maliyet</p>
+                      <p className="text-2xl font-bold text-green-900">{formatCurrency(stats.monthlyCost)}</p>
+                      <p className="text-xs text-green-700 mt-1">Manuel: {formatCurrency(stats.manualCost)} | Tamir: {formatCurrency(stats.repairCost)}</p>
+                    </div>
+                  </div>
+                </CardContent>
               </Card>
             </motion.div>
 
-            <motion.div initial={{ opacity: 0, x: 20 }} animate={{ opacity: 1, x: 0 }} transition={{ delay: 0.4 }}>
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.5 }}>
               <Card>
                 <CardHeader>
-                    <CardTitle className="flex items-center space-x-2"><Users className="h-5 w-5" /><span>Hızlı İşlemler</span></CardTitle>
-                    <CardDescription>Sık kullanılan işlemlere hızlı erişim</CardDescription>
+                  <CardTitle className="flex items-center space-x-2">
+                    <TrendingUp className="h-5 w-5" />
+                    <span>Son 7 Gün Manuel Veri Trendi</span>
+                  </CardTitle>
+                  <CardDescription>Günlük manuel ve tamir üretim trendi</CardDescription>
                 </CardHeader>
                 <CardContent>
-                  <div className="grid grid-cols-2 gap-3">
-                      <Button variant="outline" className="h-20 flex flex-col items-center justify-center space-y-2" onClick={() => handleCardClick('/wps-creator')}><CheckCircle className="h-6 w-6" /><span className="text-xs">Yeni WPS</span></Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center justify-center space-y-2" onClick={() => handleCardClick('/trainings')}><Award className="h-6 w-6" /><span className="text-xs">Yeni Eğitim</span></Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center justify-center space-y-2" onClick={() => handleCardClick('/part-cost')}><DollarSign className="h-6 w-6" /><span className="text-xs">Maliyet Hesapla</span></Button>
-                      <Button variant="outline" className="h-20 flex flex-col items-center justify-center space-y-2" onClick={() => handleCardClick('/manual-tracking')}><BookUser className="h-6 w-6" /><span className="text-xs">Manuel Kayıt</span></Button>
+                  {manualTrend.length > 0 ? (
+                    <ResponsiveContainer width="100%" height={200}>
+                      <AreaChart data={manualTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="date" fontSize={11} />
+                        <YAxis fontSize={11} tickFormatter={(v) => v >= 1000 ? `${(v/1000).toFixed(1)}K` : v} />
+                        <Tooltip formatter={(value) => value.toLocaleString('tr-TR')} />
+                        <Legend />
+                        <Area type="monotone" dataKey="manual" stackId="1" stroke="#3B82F6" fill="#3B82F6" fillOpacity={0.6} name="Manuel" />
+                        <Area type="monotone" dataKey="repair" stackId="1" stroke="#F59E0B" fill="#F59E0B" fillOpacity={0.6} name="Tamir" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  ) : (
+                    <div className="h-[200px] flex items-center justify-center text-gray-500">
+                      <p>Veri bulunamadı</p>
+                    </div>
+                  )}
+                </CardContent>
+              </Card>
+            </motion.div>
+          </div>
+
+          {/* Top 10 Personel ve Hatlar */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.6 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Users className="h-5 w-5" />
+                    <span>Top 10 Personel (Bu Ay)</span>
+                  </CardTitle>
+                  <CardDescription>En yüksek üretim yapan personeller</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {topPersonnel.length > 0 ? (
+                      topPersonnel.map((emp, index) => (
+                        <div key={emp.id} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold text-blue-600">#{index + 1}</span>
+                            <div>
+                              <p className="font-semibold text-sm">{emp.name}</p>
+                              <p className="text-xs text-gray-500">{emp.records} kayıt</p>
+                            </div>
+                          </div>
+                          <span className="text-lg font-bold text-green-600">{emp.quantity.toLocaleString('tr-TR')}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-center text-gray-500 py-4">Veri bulunamadı</p>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </motion.div>
+
+            <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.7 }}>
+              <Card>
+                <CardHeader>
+                  <CardTitle className="flex items-center space-x-2">
+                    <Target className="h-5 w-5" />
+                    <span>Top 10 Hatlar (Bu Ay)</span>
+                  </CardTitle>
+                  <CardDescription>En yüksek üretim yapan hatlar</CardDescription>
+                </CardHeader>
+                <CardContent>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {topLines.length > 0 ? (
+                      topLines.map((line, index) => (
+                        <div key={line.name} className="flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+                          <div className="flex items-center gap-3">
+                            <span className="text-lg font-bold text-purple-600">#{index + 1}</span>
+                            <div>
+                              <p className="font-semibold text-sm">{line.name}</p>
+                              <p className="text-xs text-gray-500">{formatCurrency(line.cost)} maliyet</p>
+                            </div>
+                          </div>
+                          <span className="text-lg font-bold text-green-600">{line.quantity.toLocaleString('tr-TR')}</span>
+                        </div>
+                      ))
+                    ) : (
+                      <p className="text-sm text-center text-gray-500 py-4">Veri bulunamadı</p>
+                    )}
                   </div>
                 </CardContent>
               </Card>
