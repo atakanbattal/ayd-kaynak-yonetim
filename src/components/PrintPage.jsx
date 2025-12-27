@@ -2,7 +2,9 @@ import React, { useEffect, useState } from 'react';
     import { useSearchParams, useNavigate } from 'react-router-dom';
     import { supabase } from '@/lib/customSupabaseClient';
     import { Button } from '@/components/ui/button';
-    import { Printer } from 'lucide-react';
+    import { Printer, Download } from 'lucide-react';
+    import jsPDF from 'jspdf';
+    import html2canvas from 'html2canvas';
     
     const AydLogo = () => (
       <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" style={{ height: '90px' }} />
@@ -674,11 +676,115 @@ import React, { useEffect, useState } from 'react';
         }
         return <GeneralReportLayout reportData={reportContent} />;
       };
+
+      const handleSaveAsPDF = async () => {
+        try {
+          const printArea = document.querySelector('.print-area');
+          if (!printArea) {
+            alert('PDF oluşturulacak içerik bulunamadı.');
+            return;
+          }
+
+          // Loading mesajı göster
+          const loadingToast = document.createElement('div');
+          loadingToast.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #4CAF50; color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+          loadingToast.textContent = 'PDF oluşturuluyor... Lütfen bekleyin.';
+          document.body.appendChild(loadingToast);
+
+          // Sayfa boyutları (A4)
+          const isLandscape = reportContent.certificateData;
+          const pageWidth = isLandscape ? 297 : 210; // mm
+          const pageHeight = isLandscape ? 210 : 297; // mm
+          const margin = 10; // mm
+          const contentWidth = pageWidth - (margin * 2);
+          const contentHeight = pageHeight - (margin * 2);
+
+          // PDF oluştur
+          const pdf = new jsPDF({
+            orientation: isLandscape ? 'landscape' : 'portrait',
+            unit: 'mm',
+            format: 'a4'
+          });
+
+          // Orijinal scroll pozisyonunu kaydet
+          const originalScrollTop = window.pageYOffset;
+          const originalScrollLeft = window.pageXOffset;
+
+          // Scroll'u sıfırla
+          window.scrollTo(0, 0);
+
+          // İçeriği yakala - yüksek kalite için scale artırıldı
+          const canvas = await html2canvas(printArea, {
+            scale: 2,
+            useCORS: true,
+            logging: false,
+            backgroundColor: '#ffffff',
+            windowWidth: printArea.scrollWidth,
+            windowHeight: printArea.scrollHeight,
+            allowTaint: false
+          });
+
+          // Scroll pozisyonunu geri yükle
+          window.scrollTo(originalScrollLeft, originalScrollTop);
+
+          const imgData = canvas.toDataURL('image/png', 1.0);
+          const imgWidth = contentWidth;
+          const imgHeight = (canvas.height * imgWidth) / canvas.width;
+
+          // Çok sayfalı PDF oluştur
+          let heightLeft = imgHeight;
+          let yPosition = 0;
+          let pageNumber = 1;
+
+          // İlk sayfa
+          pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
+          heightLeft -= contentHeight;
+          yPosition -= contentHeight;
+
+          // Ek sayfalar gerekirse
+          while (heightLeft > 0) {
+            pdf.addPage();
+            pageNumber++;
+            // Negatif yPosition kullanarak görüntünün devamını göster
+            pdf.addImage(imgData, 'PNG', margin, margin + yPosition, imgWidth, imgHeight, undefined, 'FAST');
+            heightLeft -= contentHeight;
+            yPosition -= contentHeight;
+          }
+
+          // Dosya adı oluştur
+          const reportTitle = reportContent.title || reportContent.wpsData?.wps_code || reportContent.reportId || 'Rapor';
+          const sanitizedTitle = reportTitle.replace(/[^a-z0-9çğıöşüÇĞIİÖŞÜ\s]/gi, '_').substring(0, 50);
+          const fileName = `${sanitizedTitle}_${new Date().toISOString().slice(0, 10)}.pdf`;
+
+          // PDF'i kaydet
+          pdf.save(fileName);
+
+          // Loading mesajını kaldır
+          if (document.body.contains(loadingToast)) {
+            document.body.removeChild(loadingToast);
+          }
+
+          // Başarı mesajı
+          const successToast = document.createElement('div');
+          successToast.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #4CAF50; color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
+          successToast.textContent = `PDF başarıyla kaydedildi! (${pageNumber} sayfa)`;
+          document.body.appendChild(successToast);
+          setTimeout(() => {
+            if (document.body.contains(successToast)) {
+              document.body.removeChild(successToast);
+            }
+          }, 3000);
+        } catch (error) {
+          console.error('PDF oluşturma hatası:', error);
+          alert('PDF oluşturulurken bir hata oluştu: ' + error.message);
+        }
+      };
     
       return (
         <>
           <div className="print-controls no-print fixed top-4 right-4 flex flex-col gap-2">
             <Button onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Yazdır</Button>
+            <Button onClick={handleSaveAsPDF} variant="default"><Download className="mr-2 h-4 w-4" /> PDF Olarak Kaydet</Button>
             <Button variant="secondary" onClick={() => window.close()}>Kapat</Button>
           </div>
           <div className={`print-area ${pageClass}`}>
@@ -704,12 +810,15 @@ import React, { useEffect, useState } from 'react';
                   transform-origin: top center;
                   box-shadow: 0 0 20px rgba(0,0,0,0.15);
                   border: 1px solid #ccc;
+                  min-height: auto;
                 }
                 .page-portrait .print-container {
                   transform: scale(0.9);
+                  width: 210mm;
                 }
                 .page-landscape .print-container {
                   transform: scale(0.85);
+                  width: 297mm;
                 }
                 .certificate-layout {
                   aspect-ratio: 297 / 210;
@@ -725,9 +834,7 @@ import React, { useEffect, useState } from 'react';
                   html, body {
                     margin: 0 !important;
                     padding: 0 !important;
-                    width: 297mm !important;
-                    height: 210mm !important;
-                    overflow: hidden !important;
+                    width: 210mm !important;
                     background: white !important;
                   }
                   
@@ -736,31 +843,25 @@ import React, { useEffect, useState } from 'react';
                   }
               
                   .print-area {
-                    width: 297mm !important;
-                    height: 210mm !important;
+                    width: 100% !important;
                     margin: 0 !important;
                     padding: 0 !important;
-                    overflow: hidden !important;
-                    position: absolute !important;
-                    top: 0 !important;
-                    left: 0 !important;
+                    overflow: visible !important;
+                    position: relative !important;
                   }
                   
                   .print-container {
-                      position: absolute !important;
-                      top: 0 !important;
-                      left: 0 !important;
-                      width: 297mm !important;
-                      height: 210mm !important;
-                      max-width: 297mm !important;
-                      max-height: 210mm !important;
+                      width: 210mm !important;
+                      min-height: 297mm !important;
+                      max-width: 210mm !important;
                       box-shadow: none !important;
                       border: none !important;
                       border-radius: 0 !important;
                       transform: none !important;
-                      overflow: hidden !important;
-                      page-break-after: avoid !important;
+                      overflow: visible !important;
+                      page-break-after: auto !important;
                       page-break-inside: avoid !important;
+                      break-inside: avoid !important;
                   }
                   
                   .certificate-layout {
@@ -774,6 +875,28 @@ import React, { useEffect, useState } from 'react';
                       box-sizing: border-box !important;
                       page-break-after: avoid !important;
                       page-break-inside: avoid !important;
+                      break-inside: avoid !important;
+                  }
+                  
+                  /* Sayfa bölünmesi için */
+                  .print-container section {
+                      page-break-inside: avoid !important;
+                      break-inside: avoid !important;
+                  }
+                  
+                  .print-container table {
+                      page-break-inside: auto !important;
+                      break-inside: auto !important;
+                  }
+                  
+                  .print-container tr {
+                      page-break-inside: avoid !important;
+                      break-inside: avoid !important;
+                  }
+                  
+                  .signature-section {
+                      page-break-inside: avoid !important;
+                      break-inside: avoid !important;
                   }
               }
           `}</style>
