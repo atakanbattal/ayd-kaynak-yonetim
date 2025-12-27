@@ -711,7 +711,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                 `${s.new_time || 0} sn`,
                 `${((s.prev_time || 0) - (s.new_time || 0)).toFixed(2)} sn`,
                 formatCurrency(calculateImpact(s)),
-                s.status || 'Belirtilmemiş'
+                getStatusStyle(s.status).label
               ])
             },
             signatureFields: [
@@ -734,7 +734,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
               imp.line?.name || 'N/A',
               formatCurrency(calculateImpact(imp)),
               `${((imp.prev_time || 0) - (imp.new_time || 0)).toFixed(2)} sn`,
-              imp.status || 'Belirtilmemiş',
+              getStatusStyle(imp.status).label,
               '', '', '', ''
             ])
           );
@@ -979,7 +979,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                 <div><p className="font-semibold text-gray-500">Sorumlu:</p><p>{getEmployeeName(viewingItem.responsible_id)}</p></div>
                 <div><p className="font-semibold text-gray-500">İyileştirme Tarihi:</p><p>{format(parseISO(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
                 <div><p className="font-semibold text-gray-500">Kayıt Tarihi/Saat:</p><p>{viewingItem.created_at ? format(new Date(viewingItem.created_at), 'dd.MM.yyyy HH:mm:ss') : '-'}</p></div>
-                <div><p className="font-semibold text-gray-500">Durum:</p><p className="capitalize">{viewingItem.status}</p></div>
+                <div><p className="font-semibold text-gray-500">Durum:</p><p>{getStatusStyle(viewingItem.status).label}</p></div>
             </div>
             {(viewingItem.before_image || viewingItem.after_image) && (
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
@@ -1072,7 +1072,8 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
         
         // Durum bazlı analiz
         const byStatus = filtered.reduce((acc, item) => {
-          const status = item.status || 'Belirtilmemiş';
+          const rawStatus = item.status || 'Belirtilmemiş';
+          const status = getStatusStyle(rawStatus).label; // Türkçe status label'ı kullan
           if (!acc[status]) {
             acc[status] = { count: 0, totalImpact: 0 };
           }
@@ -1505,7 +1506,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                           <ResponsiveContainer width="100%" height={300}>
                             <BarChart data={Object.entries(analysisData.byStatus).map(([status, data]) => ({
-                              durum: status,
+                              durum: getStatusStyle(status).label,
                               sayi: data.count,
                               etki: data.totalImpact
                             }))}>
@@ -1531,7 +1532,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                             {Object.entries(analysisData.byStatus).map(([status, data]) => (
                               <div key={status} className="p-3 bg-gray-50 rounded border-l-4 border-blue-500">
                                 <div className="flex justify-between items-center">
-                                  <span className="font-semibold">{status}</span>
+                                  <span className="font-semibold">{getStatusStyle(status).label}</span>
                                   <div className="text-right">
                                     <p className="text-lg font-bold text-blue-600">{data.count} kayıt</p>
                                     <p className="text-sm text-gray-600">{formatCurrency(data.totalImpact)}</p>
