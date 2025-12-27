@@ -102,8 +102,15 @@ const ExamResults = ({ trainingId, passingGrade }) => {
       .filter(r => r.score !== '' && r.score !== null && !isNaN(Number(r.score)))
       .map(r => {
         const scoreValue = Number(r.score);
-        // Yüzde hesaplama - maxScore 0'dan büyük olmalı
-        const percentage = maxScore > 0 ? (scoreValue / maxScore) * 100 : 0;
+        
+        // Yüzde hesaplama: maxScore > 0 ise normal hesapla, değilse girilen notu doğrudan yüzde olarak kabul et
+        let percentage = 0;
+        if (maxScore > 0) {
+          percentage = (scoreValue / maxScore) * 100;
+        } else {
+          // Soru yoksa girilen notu doğrudan yüzde olarak kabul et (100 üzerinden)
+          percentage = scoreValue;
+        }
         
         // Yüzde değerini kontrol et (0-100 arası olmalı)
         const validPercentage = Math.max(0, Math.min(100, percentage));
@@ -171,7 +178,17 @@ const ExamResults = ({ trainingId, passingGrade }) => {
                 {results.map(r => {
                   // Score'u number'a çevir ve validate et
                   const scoreValue = r.score !== '' && r.score !== null ? Number(r.score) : null;
-                  const percentage = maxScore > 0 && scoreValue !== null ? (scoreValue / maxScore) * 100 : 0;
+                  
+                  // Yüzde hesaplama: maxScore > 0 ise normal hesapla, değilse girilen notu doğrudan yüzde olarak kabul et
+                  let percentage = 0;
+                  if (scoreValue !== null) {
+                    if (maxScore > 0) {
+                      percentage = (scoreValue / maxScore) * 100;
+                    } else {
+                      // Soru yoksa girilen notu doğrudan yüzde olarak kabul et (100 üzerinden)
+                      percentage = scoreValue;
+                    }
+                  }
                   
                   // Yüzde değerini kontrol et (0-100 arası olmalı)
                   const validPercentage = Math.max(0, Math.min(100, percentage));
