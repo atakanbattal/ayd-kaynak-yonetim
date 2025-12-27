@@ -617,13 +617,90 @@ const TaskManager = ({ user }) => {
       });
 
       const reportId = `RPR-TASK-PROJ-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      
+      // Sections formatı kullan - her bölüm ayrı tablo olarak render edilir
+      const sections = [];
+      
+      // 1. Görev Listesi
+      if (enrichedTasks.length > 0) {
+        sections.push({
+          title: 'GÖREV LİSTESİ',
+          headers: ['Başlık', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi'],
+          rows: enrichedTasks.map(t => [
+            t.title || '-',
+            statusMap[t.status]?.label || t.status,
+            priorityMap[t.priority]?.label || t.priority,
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-'
+          ])
+        });
+      }
+      
+      // 2. Durum Bazlı Özet
+      sections.push({
+        title: 'DURUM BAZLI ÖZET',
+        headers: ['Durum', 'Görev Sayısı', 'Oran (%)'],
+        rows: [
+          ['Bekleyen', tasksByStatus.todo.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.todo.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0'],
+          ['Devam Eden', tasksByStatus.inProgress.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.inProgress.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0'],
+          ['Tamamlanan', tasksByStatus.done.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0']
+        ]
+      });
+      
+      // 3. Öncelik Bazlı Özet
+      if (Object.keys(tasksByPriority).length > 0) {
+        sections.push({
+          title: 'ÖNCELİK BAZLI ÖZET',
+          headers: ['Öncelik', 'Görev Sayısı', 'Oran (%)'],
+          rows: Object.entries(tasksByPriority).sort((a, b) => {
+            const priorityOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+            return (priorityOrder[b[0]] || 0) - (priorityOrder[a[0]] || 0);
+          }).map(([priority, count]) => [
+            priorityMap[priority]?.label || priority,
+            count.toString(),
+            `%${((count / enrichedTasks.length) * 100).toFixed(1)}`
+          ])
+        });
+      }
+      
+      // 4. Geciken Görevler
+      if (overdueTasks.length > 0) {
+        sections.push({
+          title: 'GECİKEN GÖREVLER',
+          headers: ['Başlık', 'Atanan', 'Termin Tarihi', 'Öncelik'],
+          rows: overdueTasks.map(t => [
+            t.title || '-',
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+            priorityMap[t.priority]?.label || t.priority
+          ])
+        });
+      }
+      
+      // 5. Atanan Bazlı Özet
+      if (Object.keys(tasksByAssignee).length > 1) {
+        sections.push({
+          title: 'ATANAN BAZLI ÖZET',
+          headers: ['Atanan', 'Toplam Görev', 'Tamamlanan', 'Tamamlanma Oranı'],
+          rows: Object.entries(tasksByAssignee).sort((a, b) => b[1] - a[1]).map(([assignee, count]) => {
+            const doneCount = enrichedTasks.filter(t => (t.assignee_name || 'Atanmamış') === assignee && t.status === 'done').length;
+            return [
+              assignee,
+              count.toString(),
+              doneCount.toString(),
+              `%${((doneCount / count) * 100).toFixed(0)}`
+            ];
+          })
+        });
+      }
+      
       const reportData = {
         title: `Proje Bazlı Görev Raporu: ${projectName}`,
         reportId,
         filters: {
           'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
           'Proje': projectName,
-          'Proje Açıklaması': project?.description || 'Yok'
+          'Açıklama': project?.description || '-'
         },
         kpiCards: [
           { title: 'Toplam Görev', value: enrichedTasks.length.toString() },
@@ -633,99 +710,12 @@ const TaskManager = ({ user }) => {
           { title: 'Geciken', value: overdueTasks.length.toString() },
           { title: 'Tamamlanma Oranı', value: enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0' }
         ],
-        tableData: {
-          headers: ['Başlık', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi'],
-          rows: []
-        },
+        sections,
         signatureFields: [
           { title: 'Hazırlayan', name: authUser?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
           { title: 'Kontrol Eden', name: '', role: '..................' },
           { title: 'Onaylayan', name: '', role: '..................' }
         ]
-      };
-
-      // Ana görev listesi - sadece önemli kolonlar
-      if (enrichedTasks.length > 0) {
-        reportData.tableData.rows.push(
-          ['', '', '', '', ''],
-          ['GÖREV LİSTESİ', '', '', '', ''],
-          ['', '', '', '', ''],
-          ['Başlık', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi'],
-          ...enrichedTasks.map(t => [
-            t.title || '-',
-            statusMap[t.status]?.label || t.status,
-            priorityMap[t.priority]?.label || t.priority,
-            t.assignee_name || 'Atanmamış',
-            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-'
-          ])
-        );
-      }
-
-      // Durum bazlı özet
-      reportData.tableData.rows.push(
-        ['', '', '', '', ''],
-        ['DURUM BAZLI ÖZET', '', '', '', ''],
-        ['', '', '', '', ''],
-        ['Durum', 'Görev Sayısı', 'Oran (%)', '', ''],
-        ['Bekleyen', tasksByStatus.todo.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.todo.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', ''],
-        ['Devam Eden', tasksByStatus.inProgress.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.inProgress.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', ''],
-        ['Tamamlanan', tasksByStatus.done.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', '']
-      );
-
-      // Öncelik bazlı özet
-      if (Object.keys(tasksByPriority).length > 0) {
-        reportData.tableData.rows.push(
-          ['', '', '', '', ''],
-          ['ÖNCELİK BAZLI ÖZET', '', '', '', ''],
-          ['', '', '', '', ''],
-          ['Öncelik', 'Görev Sayısı', 'Oran (%)', '', ''],
-          ...Object.entries(tasksByPriority).sort((a, b) => {
-            const priorityOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
-            return (priorityOrder[b[0]] || 0) - (priorityOrder[a[0]] || 0);
-          }).map(([priority, count]) => [
-            priorityMap[priority]?.label || priority,
-            count.toString(),
-            `%${((count / enrichedTasks.length) * 100).toFixed(1)}`,
-            '', ''
-          ])
-        );
-      }
-
-      // Geciken görevler (varsa)
-      if (overdueTasks.length > 0) {
-        reportData.tableData.rows.push(
-          ['', '', '', '', ''],
-          ['GECİKEN GÖREVLER', '', '', '', ''],
-          ['', '', '', '', ''],
-          ['Başlık', 'Atanan', 'Termin Tarihi', 'Öncelik', ''],
-          ...overdueTasks.map(t => [
-            t.title || '-',
-            t.assignee_name || 'Atanmamış',
-            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
-            priorityMap[t.priority]?.label || t.priority,
-            ''
-          ])
-        );
-      }
-
-      // Atanan bazlı özet (sadece birden fazla atanan varsa)
-      if (Object.keys(tasksByAssignee).length > 1) {
-        reportData.tableData.rows.push(
-          ['', '', '', '', ''],
-          ['ATANAN BAZLI ÖZET', '', '', '', ''],
-          ['', '', '', '', ''],
-          ['Atanan', 'Toplam', 'Tamamlanan', 'Oran (%)', ''],
-          ...Object.entries(tasksByAssignee).sort((a, b) => b[1] - a[1]).map(([assignee, count]) => {
-            const doneCount = enrichedTasks.filter(t => (t.assignee_name || 'Atanmamış') === assignee && t.status === 'done').length;
-            return [
-              assignee,
-              count.toString(),
-              doneCount.toString(),
-              `%${((doneCount / count) * 100).toFixed(0)}`,
-              ''
-            ];
-          })
-        );
       }
 
       await openPrintWindow(reportData, toast);
