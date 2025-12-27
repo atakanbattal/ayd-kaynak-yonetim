@@ -1285,22 +1285,33 @@ const ManualDataTracking = () => {
 
     // Analiz sekmesi için filtrelenmiş veriler
     const analysisData = useMemo(() => {
-        // Tarih aralığını güvenli bir şekilde al
+        // Tarih aralığını güvenli bir şekilde al - UTC kullanarak saat dilimi sorunlarını önle
         let from = '2000-01-01';
         let to = format(new Date(), 'yyyy-MM-dd');
         
         if (analysisFilters.dateRange?.from) {
             const fromDate = new Date(analysisFilters.dateRange.from);
             if (!isNaN(fromDate.getTime())) {
-                from = format(fromDate, 'yyyy-MM-dd');
+                // Yerel tarihi YYYY-MM-DD formatına dönüştür (saat dilimi etkisi olmadan)
+                const year = fromDate.getFullYear();
+                const month = String(fromDate.getMonth() + 1).padStart(2, '0');
+                const day = String(fromDate.getDate()).padStart(2, '0');
+                from = `${year}-${month}-${day}`;
             }
         }
         if (analysisFilters.dateRange?.to) {
             const toDate = new Date(analysisFilters.dateRange.to);
             if (!isNaN(toDate.getTime())) {
-                to = format(toDate, 'yyyy-MM-dd');
+                // Yerel tarihi YYYY-MM-DD formatına dönüştür (saat dilimi etkisi olmadan)
+                const year = toDate.getFullYear();
+                const month = String(toDate.getMonth() + 1).padStart(2, '0');
+                const day = String(toDate.getDate()).padStart(2, '0');
+                to = `${year}-${month}-${day}`;
             }
         }
+        
+        // Debug log - production'da kaldırılacak
+        console.log('Analiz Filtre Debug:', { from, to, allManualRecordsCount: allManualRecords.length, sampleDate: allManualRecords[0]?.record_date });
         
         
         // Vardiya otomatik hesaplama fonksiyonu (saat bazlı)
