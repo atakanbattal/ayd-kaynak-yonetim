@@ -1302,8 +1302,6 @@ const ManualDataTracking = () => {
             }
         }
         
-        // Debug için console log (production'da kaldırılacak)
-        console.log('Analiz Filtreleri:', { from, to, recordCount: allManualRecords.length });
         
         // Vardiya otomatik hesaplama fonksiyonu (saat bazlı)
         const getShiftFromTime = (recordDatetime) => {
@@ -2580,9 +2578,16 @@ const ManualDataTracking = () => {
                                 {(() => {
                                     const manual = analysisData.manual || [];
                                     const repair = analysisData.repair || [];
-                                    const totalCost = manual.reduce((sum, r) => sum + (r.manual_cost || 0), 0) + 
-                                                     repair.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
-                                    return formatCurrency(totalCost);
+                                    // calculateCost fonksiyonunu kullanarak maliyet hesapla
+                                    const manualCost = manual.reduce((sum, r) => {
+                                        const durationSeconds = r.duration_seconds || 0;
+                                        return sum + calculateCost(r.quantity || 0, r.line_id, durationSeconds);
+                                    }, 0);
+                                    const repairCost = repair.reduce((sum, r) => {
+                                        const durationSeconds = r.duration_seconds || 0;
+                                        return sum + calculateCost(r.quantity || 0, r.repair_line_id, durationSeconds);
+                                    }, 0);
+                                    return formatCurrency(manualCost + repairCost);
                                 })()}
                             </div>
                             <p className="text-xs text-muted-foreground">Manuel + Tamir</p>
@@ -2637,8 +2642,16 @@ const ManualDataTracking = () => {
                                     const repair = analysisData.repair || [];
                                     const allRecords = [...manual, ...repair];
                                     const uniqueMonths = new Set(allRecords.map(r => r.record_date?.substring(0, 7))).size;
-                                    const totalCost = manual.reduce((sum, r) => sum + (r.manual_cost || 0), 0) + 
-                                                     repair.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
+                                    // calculateCost fonksiyonunu kullanarak maliyet hesapla
+                                    const manualCost = manual.reduce((sum, r) => {
+                                        const durationSeconds = r.duration_seconds || 0;
+                                        return sum + calculateCost(r.quantity || 0, r.line_id, durationSeconds);
+                                    }, 0);
+                                    const repairCost = repair.reduce((sum, r) => {
+                                        const durationSeconds = r.duration_seconds || 0;
+                                        return sum + calculateCost(r.quantity || 0, r.repair_line_id, durationSeconds);
+                                    }, 0);
+                                    const totalCost = manualCost + repairCost;
                                     return uniqueMonths > 0 ? formatCurrency(totalCost / uniqueMonths) : '₺0';
                                 })()}
                             </div>
