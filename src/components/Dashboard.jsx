@@ -159,7 +159,6 @@ import React, { useState, useEffect, useMemo } from 'react';
               weeklyProduction: weeklyProductionRes,
               monthlyProduction: monthlyProductionRes,
               wps: wpsRes,
-              auditLogs: auditLogsRes,
               trainings: trainingsRes,
               participants: participantsRes,
               tasks: tasksRes,
@@ -370,14 +369,6 @@ import React, { useState, useEffect, useMemo } from 'react';
               completed: trainings.filter(t => t.status === 'Tamamlandı').length,
               participants: participants.filter(p => p.participation_status === 'Katıldı').length,
             });
-
-            setRecentActivities((auditLogsRes.data || []).map(log => ({
-              id: log.id,
-              type: log.action,
-              message: log.details,
-              time: new Date(log.created_at).toLocaleString('tr-TR'),
-              status: log.action.includes('CREATE') || log.action.includes('SAVE') || log.action.includes('UPDATE') ? 'success' : log.action.includes('DELETE') ? 'warning' : 'info'
-            })));
 
           } catch (error) {
             toast({ title: "Dashboard verileri yüklenemedi", description: error.message, variant: "destructive" });
