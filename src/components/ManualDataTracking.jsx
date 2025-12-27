@@ -995,6 +995,9 @@ const ManualDataTracking = () => {
                 const emp = employees.find(e => e.id === empId);
                 const empName = emp ? `${emp.registration_number} - ${emp.first_name} ${emp.last_name}` : 'Bilinmeyen';
                 
+                // Eğer personel bulunamadıysa (Bilinmeyen) atla
+                if (empName === 'Bilinmeyen' || empName.includes('Bilinmeyen')) return;
+                
                 if (!reportEmployeeStats[empId]) {
                     reportEmployeeStats[empId] = {
                         id: empId,
@@ -1020,7 +1023,11 @@ const ManualDataTracking = () => {
                 }
             });
             
-            const reportEmployeeArray = Object.values(reportEmployeeStats);
+            const reportEmployeeArray = Object.values(reportEmployeeStats).filter(e => 
+                e.id !== 'unknown' && 
+                e.name !== 'Bilinmeyen' && 
+                !e.name.includes('Bilinmeyen')
+            );
             const reportTop10 = [...reportEmployeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
             const reportBottom10 = [...reportEmployeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
 
@@ -1706,8 +1713,10 @@ const ManualDataTracking = () => {
             }
         });
         
-        // Bilinmeyen personelleri (unknown ID) hariç tut
-        const employeeArray = Object.values(employeeStats).filter(e => e.id !== 'unknown');
+        // Bilinmeyen personelleri (unknown ID veya Bilinmeyen ismi) hariç tut
+        const employeeArray = Object.values(employeeStats).filter(e => 
+            e.id !== 'unknown' && e.name !== 'Bilinmeyen' && !e.name.includes('Bilinmeyen')
+        );
         const top10 = [...employeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
         const bottom10 = [...employeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
         
@@ -3114,7 +3123,11 @@ const ManualDataTracking = () => {
                                     });
                                     
                                     return Object.entries(employeeStats)
-                                        .filter(([empId]) => empId !== 'unknown') // Bilinmeyen personelleri hariç tut
+                                        .filter(([empId, stats]) => 
+                                            empId !== 'unknown' && 
+                                            stats.name !== 'Bilinmeyen' && 
+                                            !stats.name.includes('Bilinmeyen')
+                                        ) // Bilinmeyen personelleri hariç tut
                                         .sort((a, b) => b[1].quantity - a[1].quantity)
                                         .slice(0, 10)
                                         .map(([empId, stats], index) => (
@@ -3161,7 +3174,11 @@ const ManualDataTracking = () => {
                                     });
                                     
                                     return Object.entries(employeeStats)
-                                        .filter(([empId]) => empId !== 'unknown') // Bilinmeyen personelleri hariç tut
+                                        .filter(([empId, stats]) => 
+                                            empId !== 'unknown' && 
+                                            stats.name !== 'Bilinmeyen' && 
+                                            !stats.name.includes('Bilinmeyen')
+                                        ) // Bilinmeyen personelleri hariç tut
                                         .sort((a, b) => a[1].quantity - b[1].quantity)
                                         .slice(0, 10)
                                         .map(([empId, stats], index) => (
@@ -3230,6 +3247,11 @@ const ManualDataTracking = () => {
                                         });
                                         
                                         return Object.entries(employeeStats)
+                                            .filter(([empId, stats]) => 
+                                                empId !== 'unknown' && 
+                                                stats.name !== 'Bilinmeyen' && 
+                                                !stats.name.includes('Bilinmeyen')
+                                            ) // Bilinmeyen personelleri hariç tut
                                             .sort((a, b) => b[1].total - a[1].total)
                                             .map(([empId, stats], index) => (
                                                 <tr key={empId} className="border-b hover:bg-gray-50">
