@@ -6,7 +6,7 @@ import { motion } from 'framer-motion';
 import { Plus, GripVertical, Calendar as CalendarIcon, User, AlertCircle, CheckCircle, Loader, Search, X as XIcon, Tag, Trash2, Edit, BarChart3, TrendingUp, Target, Clock, Download, Folder, FolderPlus, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
