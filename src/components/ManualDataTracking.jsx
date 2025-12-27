@@ -2649,13 +2649,13 @@ const ManualDataTracking = () => {
                 </Card>
                 
                 {/* Yönetici Özeti - Ana KPI Kartları */}
-                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
-                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-3">
+                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100 overflow-hidden">
                         <CardHeader className="pb-1 pt-3">
                             <CardTitle className="text-xs text-blue-600">Toplam Üretim</CardTitle>
                         </CardHeader>
                         <CardContent className="pb-3">
-                            <div className="text-2xl font-bold text-blue-700">
+                            <div className="text-lg md:text-xl font-bold text-blue-700 break-words leading-tight">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
@@ -2663,16 +2663,16 @@ const ManualDataTracking = () => {
                                            allRepair.reduce((sum, r) => sum + (r.quantity || 0), 0)).toLocaleString('tr-TR');
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground">adet</p>
+                            <p className="text-xs text-muted-foreground mt-1">adet</p>
                         </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                    <Card className="bg-gradient-to-br from-green-50 to-green-100 overflow-hidden">
                         <CardHeader className="pb-1 pt-3">
                             <CardTitle className="text-xs text-green-600">Toplam Maliyet</CardTitle>
                         </CardHeader>
                         <CardContent className="pb-3">
-                            <div className="text-2xl font-bold text-green-700">
+                            <div className="text-lg md:text-xl font-bold text-green-700 break-words leading-tight">
                                 {(() => {
                                     const manual = analysisData.manual || [];
                                     const repair = analysisData.repair || [];
@@ -2688,16 +2688,16 @@ const ManualDataTracking = () => {
                                     return formatCurrency(manualCost + repairCost);
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground">Manuel + Tamir</p>
+                            <p className="text-xs text-muted-foreground mt-1">Manuel + Tamir</p>
                         </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100 overflow-hidden">
                         <CardHeader className="pb-1 pt-3">
                             <CardTitle className="text-xs text-orange-600">Günlük Ortalama</CardTitle>
                         </CardHeader>
                         <CardContent className="pb-3">
-                            <div className="text-2xl font-bold text-orange-700">
+                            <div className="text-lg md:text-xl font-bold text-orange-700 break-words leading-tight">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
@@ -2706,16 +2706,16 @@ const ManualDataTracking = () => {
                                     return uniqueDays > 0 ? Math.round(totalQty / uniqueDays).toLocaleString('tr-TR') : 0;
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground">adet/gün</p>
+                            <p className="text-xs text-muted-foreground mt-1">adet/gün</p>
                         </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100 overflow-hidden">
                         <CardHeader className="pb-1 pt-3">
                             <CardTitle className="text-xs text-purple-600">Aktif Personel</CardTitle>
                         </CardHeader>
                         <CardContent className="pb-3">
-                            <div className="text-2xl font-bold text-purple-700">
+                            <div className="text-lg md:text-xl font-bold text-purple-700 break-words leading-tight">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
@@ -2725,16 +2725,16 @@ const ManualDataTracking = () => {
                                     return uniqueEmployees.size;
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground">kişi</p>
+                            <p className="text-xs text-muted-foreground mt-1">kişi</p>
                         </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100">
+                    <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100 overflow-hidden">
                         <CardHeader className="pb-1 pt-3">
                             <CardTitle className="text-xs text-cyan-600">Aylık Ort. Maliyet</CardTitle>
                         </CardHeader>
                         <CardContent className="pb-3">
-                            <div className="text-2xl font-bold text-cyan-700">
+                            <div className="text-lg md:text-xl font-bold text-cyan-700 break-words leading-tight">
                                 {(() => {
                                     const manual = analysisData.manual || [];
                                     const repair = analysisData.repair || [];
@@ -2753,23 +2753,23 @@ const ManualDataTracking = () => {
                                     return uniqueMonths > 0 ? formatCurrency(totalCost / uniqueMonths) : '₺0';
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground">aylık ortalama</p>
+                            <p className="text-xs text-muted-foreground mt-1">aylık ortalama</p>
                         </CardContent>
                     </Card>
                     
-                    <Card className="bg-gradient-to-br from-rose-50 to-rose-100">
+                    <Card className="bg-gradient-to-br from-rose-50 to-rose-100 overflow-hidden">
                         <CardHeader className="pb-1 pt-3">
                             <CardTitle className="text-xs text-rose-600">Toplam Kayıt</CardTitle>
                         </CardHeader>
                         <CardContent className="pb-3">
-                            <div className="text-2xl font-bold text-rose-700">
+                            <div className="text-lg md:text-xl font-bold text-rose-700 break-words leading-tight">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
                                     return (allManual.length + allRepair.length).toLocaleString('tr-TR');
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground">kayıt</p>
+                            <p className="text-xs text-muted-foreground mt-1">kayıt</p>
                         </CardContent>
                     </Card>
                 </div>
