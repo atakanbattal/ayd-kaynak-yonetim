@@ -267,8 +267,9 @@ const ManualDataTracking = () => {
             const [manualData, repairData, allManualData, allRepairData, linesData, employeesData, monthlyData, dailyData] = await Promise.all([
                 supabase.from('manual_production_records').select('*').gte('record_date', from).lte('record_date', to),
                 supabase.from('repair_records').select('*').gte('record_date', from).lte('record_date', to),
-                supabase.from('manual_production_records').select('*').order('record_date', { ascending: false }),
-                supabase.from('repair_records').select('*').order('record_date', { ascending: false }),
+                // Supabase varsayılan limiti 1000'dir, tüm kayıtları almak için limit artırılıyor
+                supabase.from('manual_production_records').select('*').order('record_date', { ascending: false }).limit(100000),
+                supabase.from('repair_records').select('*').order('record_date', { ascending: false }).limit(100000),
                 supabase.from('lines').select('*').eq('deleted', false),
                 supabase.from('employees').select('*').eq('is_active', true),
                 supabase.from('monthly_production_totals').select('*'), // Tüm aylık toplamları al (detaylı analiz için)
