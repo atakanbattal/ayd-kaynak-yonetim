@@ -264,16 +264,45 @@ const ManualDataTracking = () => {
             const fromMonth = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM') : '2000-01';
             const toMonth = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM') : format(new Date(), 'yyyy-MM');
             
-            const [manualData, repairData, allManualData, allRepairData, linesData, employeesData, monthlyData, dailyData] = await Promise.all([
+            // Tüm kayıtları almak için pagination ile fetch (Supabase max 1000 satır limiti var)
+            const fetchAllRecords = async (table, orderBy = 'record_date') => {
+                const pageSize = 1000;
+                let allData = [];
+                let page = 0;
+                let hasMore = true;
+                
+                while (hasMore) {
+                    const { data, error } = await supabase
+                        .from(table)
+                        .select('*')
+                        .order(orderBy, { ascending: false })
+                        .range(page * pageSize, (page + 1) * pageSize - 1);
+                    
+                    if (error) throw error;
+                    if (data.length === 0) {
+                        hasMore = false;
+                    } else {
+                        allData = [...allData, ...data];
+                        hasMore = data.length === pageSize;
+                        page++;
+                    }
+                }
+                return { data: allData, error: null };
+            };
+            
+            const [manualData, repairData, linesData, employeesData, monthlyData, dailyData] = await Promise.all([
                 supabase.from('manual_production_records').select('*').gte('record_date', from).lte('record_date', to),
                 supabase.from('repair_records').select('*').gte('record_date', from).lte('record_date', to),
-                // Supabase varsayılan limiti 1000'dir, tüm kayıtları almak için limit artırılıyor
-                supabase.from('manual_production_records').select('*').order('record_date', { ascending: false }).limit(100000),
-                supabase.from('repair_records').select('*').order('record_date', { ascending: false }).limit(100000),
                 supabase.from('lines').select('*').eq('deleted', false),
                 supabase.from('employees').select('*').eq('is_active', true),
                 supabase.from('monthly_production_totals').select('*'), // Tüm aylık toplamları al (detaylı analiz için)
                 supabase.from('daily_production_totals').select('*').gte('date', from).lte('date', to)
+            ]);
+            
+            // Tüm kayıtları pagination ile al (detaylı analiz için)
+            const [allManualData, allRepairData] = await Promise.all([
+                fetchAllRecords('manual_production_records'),
+                fetchAllRecords('repair_records')
             ]);
 
             if (manualData.error) throw manualData.error;
