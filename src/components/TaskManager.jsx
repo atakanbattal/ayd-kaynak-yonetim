@@ -618,7 +618,7 @@ const TaskManager = ({ user }) => {
 
       const reportId = `RPR-TASK-PROJ-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
       const reportData = {
-        title: `Aksiyon Takibi - Proje Bazlı Rapor: ${projectName}`,
+        title: `Proje Bazlı Görev Raporu: ${projectName}`,
         reportId,
         filters: {
           'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
@@ -627,25 +627,15 @@ const TaskManager = ({ user }) => {
         },
         kpiCards: [
           { title: 'Toplam Görev', value: enrichedTasks.length.toString() },
-          { title: 'Bekleyen Görevler', value: tasksByStatus.todo.length.toString() },
-          { title: 'Devam Eden Görevler', value: tasksByStatus.inProgress.length.toString() },
-          { title: 'Tamamlanan Görevler', value: tasksByStatus.done.length.toString() },
-          { title: 'Geciken Görevler', value: overdueTasks.length.toString() },
-          { title: 'Farklı Atanan', value: Object.keys(tasksByAssignee).length.toString() },
+          { title: 'Bekleyen', value: tasksByStatus.todo.length.toString() },
+          { title: 'Devam Eden', value: tasksByStatus.inProgress.length.toString() },
+          { title: 'Tamamlanan', value: tasksByStatus.done.length.toString() },
+          { title: 'Geciken', value: overdueTasks.length.toString() },
           { title: 'Tamamlanma Oranı', value: enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0' }
         ],
         tableData: {
-          headers: ['Başlık', 'Açıklama', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi', 'Etiketler', 'Oluşturulma'],
-          rows: enrichedTasks.map(t => [
-            t.title || '-',
-            t.description ? (t.description.length > 50 ? t.description.substring(0, 50) + '...' : t.description) : '-',
-            statusMap[t.status]?.label || t.status,
-            priorityMap[t.priority]?.label || t.priority,
-            t.assignee_name || 'Atanmamış',
-            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
-            t.tags || '-',
-            t.created_at ? format(new Date(t.created_at), 'dd.MM.yyyy', { locale: tr }) : '-'
-          ])
+          headers: ['Başlık', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi'],
+          rows: []
         },
         signatureFields: [
           { title: 'Hazırlayan', name: authUser?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
@@ -654,75 +644,81 @@ const TaskManager = ({ user }) => {
         ]
       };
 
-      // Öncelik bazlı analiz ekle
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '==='],
-        ['ÖNCELİK BAZLI ANALİZ', '', '', '', '', '', '', ''],
-        ['Öncelik', 'Görev Sayısı', 'Oran (%)', '', '', '', '', ''],
-        ...Object.entries(tasksByPriority).sort((a, b) => b[1] - a[1]).map(([priority, count]) => [
-          priorityMap[priority]?.label || priority,
-          count.toString(),
-          `%${((count / enrichedTasks.length) * 100).toFixed(1)}`,
-          '', '', '', '', ''
-        ])
-      );
-
-      // Atanan bazlı analiz ekle
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '==='],
-        ['ATANAN BAZLI ANALİZ', '', '', '', '', '', '', ''],
-        ['Atanan', 'Görev Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', '', '', '', ''],
-        ...Object.entries(tasksByAssignee).sort((a, b) => b[1] - a[1]).map(([assignee, count]) => {
-          const doneCount = enrichedTasks.filter(t => (t.assignee_name || 'Atanmamış') === assignee && t.status === 'done').length;
-          return [
-            assignee,
-            count.toString(),
-            doneCount.toString(),
-            `%${((doneCount / count) * 100).toFixed(0)}`,
-            '', '', '', ''
-          ];
-        })
-      );
-
-      // Geciken görevler listesi ekle
-      if (overdueTasks.length > 0) {
+      // Ana görev listesi - sadece önemli kolonlar
+      if (enrichedTasks.length > 0) {
         reportData.tableData.rows.push(
-          ['===', '===', '===', '===', '===', '===', '===', '==='],
-          ['GECİKEN GÖREVLER', '', '', '', '', '', '', ''],
-          ['Başlık', 'Atanan', 'Termin Tarihi', 'Durum', 'Öncelik', '', '', ''],
-          ...overdueTasks.map(t => [
+          ['GÖREV LİSTESİ', '', '', '', ''],
+          ['Başlık', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi'],
+          ...enrichedTasks.map(t => [
             t.title || '-',
-            t.assignee_name || 'Atanmamış',
-            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
             statusMap[t.status]?.label || t.status,
             priorityMap[t.priority]?.label || t.priority,
-            '', '', ''
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-'
           ])
         );
       }
 
-      // Etiket bazlı analiz
-      const tasksByTag = {};
-      enrichedTasks.forEach(t => {
-        if (t.tags) {
-          const tags = t.tags.split(',').map(tag => tag.trim());
-          tags.forEach(tag => {
-            if (!tasksByTag[tag]) tasksByTag[tag] = 0;
-            tasksByTag[tag]++;
-          });
-        }
-      });
+      // Durum bazlı özet
+      reportData.tableData.rows.push(
+        ['', '', '', '', ''],
+        ['DURUM BAZLI ÖZET', '', '', '', ''],
+        ['Durum', 'Görev Sayısı', 'Oran (%)', '', ''],
+        ['Bekleyen', tasksByStatus.todo.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.todo.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', ''],
+        ['Devam Eden', tasksByStatus.inProgress.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.inProgress.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', ''],
+        ['Tamamlanan', tasksByStatus.done.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', '']
+      );
 
-      if (Object.keys(tasksByTag).length > 0) {
+      // Öncelik bazlı özet
+      if (Object.keys(tasksByPriority).length > 0) {
         reportData.tableData.rows.push(
-          ['===', '===', '===', '===', '===', '===', '===', '==='],
-          ['ETİKET BAZLI ANALİZ', '', '', '', '', '', '', ''],
-          ['Etiket', 'Görev Sayısı', '', '', '', '', '', ''],
-          ...Object.entries(tasksByTag).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([tag, count]) => [
-            tag,
+          ['', '', '', '', ''],
+          ['ÖNCELİK BAZLI ÖZET', '', '', '', ''],
+          ['Öncelik', 'Görev Sayısı', 'Oran (%)', '', ''],
+          ...Object.entries(tasksByPriority).sort((a, b) => {
+            const priorityOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
+            return (priorityOrder[b[0]] || 0) - (priorityOrder[a[0]] || 0);
+          }).map(([priority, count]) => [
+            priorityMap[priority]?.label || priority,
             count.toString(),
-            '', '', '', '', '', ''
+            `%${((count / enrichedTasks.length) * 100).toFixed(1)}`,
+            '', ''
           ])
+        );
+      }
+
+      // Geciken görevler (varsa)
+      if (overdueTasks.length > 0) {
+        reportData.tableData.rows.push(
+          ['', '', '', '', ''],
+          ['GECİKEN GÖREVLER', '', '', '', ''],
+          ['Başlık', 'Atanan', 'Termin Tarihi', 'Öncelik', ''],
+          ...overdueTasks.map(t => [
+            t.title || '-',
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+            priorityMap[t.priority]?.label || t.priority,
+            ''
+          ])
+        );
+      }
+
+      // Atanan bazlı özet (sadece birden fazla atanan varsa)
+      if (Object.keys(tasksByAssignee).length > 1) {
+        reportData.tableData.rows.push(
+          ['', '', '', '', ''],
+          ['ATANAN BAZLI ÖZET', '', '', '', ''],
+          ['Atanan', 'Toplam', 'Tamamlanan', 'Oran (%)', ''],
+          ...Object.entries(tasksByAssignee).sort((a, b) => b[1] - a[1]).map(([assignee, count]) => {
+            const doneCount = enrichedTasks.filter(t => (t.assignee_name || 'Atanmamış') === assignee && t.status === 'done').length;
+            return [
+              assignee,
+              count.toString(),
+              doneCount.toString(),
+              `%${((doneCount / count) * 100).toFixed(0)}`,
+              ''
+            ];
+          })
         );
       }
 
