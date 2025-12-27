@@ -57,9 +57,21 @@ const ExamResults = ({ trainingId, passingGrade }) => {
   }, [fetchData]);
 
   const handleScoreChange = (participantId, score) => {
-    // Score'u number'a çevir ve maxScore'u aşmamasını sağla
-    const numScore = score === '' ? '' : Math.min(Math.max(0, Number(score)), maxScore);
-    setResults(prev => prev.map(r => r.participant_id === participantId ? { ...r, score: numScore } : r));
+    // Score'u string olarak tut, sadece kayıt sırasında number'a çevir
+    // Boş string veya geçerli sayı kabul et
+    let newScore = score;
+    
+    // Eğer değer girilmişse ve geçerli bir sayıysa
+    if (score !== '' && score !== null) {
+      const numericValue = parseFloat(score);
+      // NaN değilse ve 0'dan büyük veya eşitse işlem yap
+      if (!isNaN(numericValue)) {
+        // maxScore'u aşmasını engelle
+        newScore = Math.min(Math.max(0, numericValue), maxScore);
+      }
+    }
+    
+    setResults(prev => prev.map(r => r.participant_id === participantId ? { ...r, score: newScore } : r));
   };
 
   const handleSaveResults = async () => {
@@ -164,13 +176,13 @@ const ExamResults = ({ trainingId, passingGrade }) => {
                       <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{r.participant_name}</td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">
                         <Input
-                          type="number"
+                          type="text"
+                          inputMode="decimal"
+                          pattern="[0-9]*\.?[0-9]*"
                           className="w-24 h-8"
-                          value={r.score}
+                          value={r.score === '' || r.score === null ? '' : r.score}
                           onChange={e => handleScoreChange(r.participant_id, e.target.value)}
-                          min={0}
-                          max={maxScore}
-                          step="0.01"
+                          placeholder="0"
                         />
                       </td>
                       <td className="px-4 py-2 whitespace-nowrap text-sm">

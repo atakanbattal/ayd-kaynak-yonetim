@@ -232,41 +232,62 @@ const FixtureImprovement = () => {
         return searchMatch;
       });
 
+      // Dashboard verileri hesapla
       const byPartCode = filteredData.reduce((acc, f) => {
         const partCode = f.part_code || 'Belirtilmemiş';
-        if (!acc[partCode]) acc[partCode] = 0;
-        acc[partCode]++;
+        if (!acc[partCode]) acc[partCode] = { count: 0, withImages: 0 };
+        acc[partCode].count++;
+        if (f.before_image || f.after_image) acc[partCode].withImages++;
         return acc;
       }, {});
 
-      const withImages = filteredData.filter(f => f.before_image || f.after_image).length;
-      const withoutImages = filteredData.length - withImages;
+      const byMonth = filteredData.reduce((acc, f) => {
+        const month = format(new Date(f.improvement_date), 'MMMM yyyy', { locale: tr });
+        if (!acc[month]) acc[month] = 0;
+        acc[month]++;
+        return acc;
+      }, {});
+
+      const byResponsible = filteredData.reduce((acc, f) => {
+        const responsible = f.responsible || 'Belirtilmemiş';
+        if (!acc[responsible]) acc[responsible] = 0;
+        acc[responsible]++;
+        return acc;
+      }, {});
+
+      const withBefore = filteredData.filter(i => i.before_image).length;
+      const withAfter = filteredData.filter(i => i.after_image).length;
+      const withBoth = filteredData.filter(i => i.before_image && i.after_image).length;
+      const withNone = filteredData.filter(i => !i.before_image && !i.after_image).length;
 
       const reportId = `RPR-FIXTURE-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
       const reportData = {
-        title: 'Fikstür İyileştirme - Detaylı Rapor',
+        title: 'Fikstür İyileştirme - Detaylı Analiz Raporu',
         reportId,
         filters: {
           'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-          'Arama Terimi': searchTerm || 'Yok'
+          'Arama Terimi': searchTerm || 'Yok',
+          'Toplam Veri': filteredData.length + ' kayıt'
         },
         kpiCards: [
           { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
           { title: 'Farklı Parça Kodu', value: Object.keys(byPartCode).length.toString() },
-          { title: 'Resimli Kayıt', value: withImages.toString() },
-          { title: 'Resimsiz Kayıt', value: withoutImages.toString() }
+          { title: 'Resimli Kayıt', value: (filteredData.length - withNone).toString() },
+          { title: 'Resimsiz Kayıt', value: withNone.toString() },
+          { title: 'Önce-Sonra Tam', value: withBoth.toString() },
+          { title: 'Aktif Ay Sayısı', value: Object.keys(byMonth).length.toString() }
         ],
         tableData: {
-          headers: ['Kayıt Tarihi', 'İyileştirme Tarihi', 'Parça Kodu', 'İyileştirme Sebebi', 'Sonuç', 'Önce Resim', 'Sonra Resim'],
-          rows: filteredData.map(f => [
-            f.created_at ? format(new Date(f.created_at), 'dd.MM.yyyy HH:mm', { locale: tr }) : '-',
-            format(new Date(f.improvement_date), 'dd.MM.yyyy', { locale: tr }),
-            f.part_code || 'N/A',
-            f.improvement_reason ? (f.improvement_reason.length > 50 ? f.improvement_reason.substring(0, 50) + '...' : f.improvement_reason) : '-',
-            f.result ? (f.result.length > 50 ? f.result.substring(0, 50) + '...' : f.result) : '-',
-            f.before_image ? 'Var' : 'Yok',
-            f.after_image ? 'Var' : 'Yok'
-          ])
+          headers: ['Parça Kodu', 'İyileştirme Sayısı', 'Resimli Kayıt', 'Oran (%)'],
+          rows: Object.entries(byPartCode)
+            .sort((a, b) => b[1].count - a[1].count)
+            .slice(0, 20)
+            .map(([partCode, data]) => [
+              partCode,
+              data.count.toString(),
+              data.withImages.toString(),
+              `%${data.count > 0 ? ((data.withImages / data.count) * 100).toFixed(0) : 0}`
+            ])
         },
         signatureFields: [
           { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
@@ -275,25 +296,51 @@ const FixtureImprovement = () => {
         ]
       };
 
-      // Parça bazlı özet ekle
-      if (Object.keys(byPartCode).length > 0) {
+      // Aylık Trend Analizi ekle
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '==='],
+        ['AYLIK TREND ANALİZİ', '', '', ''],
+        ['Ay', 'İyileştirme Sayısı', '', ''],
+        ...Object.entries(byMonth)
+          .sort(([a], [b]) => new Date(a) - new Date(b))
+          .map(([month, count]) => [
+            month,
+            count.toString(),
+            '',
+            ''
+          ])
+      );
+
+      // Sorumlu Bazlı Analiz ekle
+      if (Object.keys(byResponsible).length > 0) {
         reportData.tableData.rows.push(
-          ['---', '---', '---', '---', '---', '---', '---'],
-          ...Object.entries(byPartCode)
+          ['===', '===', '===', '==='],
+          ['SORUMLU BAZLI ANALİZ', '', '', ''],
+          ['Sorumlu', 'İyileştirme Sayısı', 'Oran (%)', ''],
+          ...Object.entries(byResponsible)
             .sort((a, b) => b[1] - a[1])
-            .map(([partCode, count]) => [
-              'ÖZET',
-              '-',
-              partCode,
-              `${count} iyileştirme`,
-              '-',
-              '-',
-              '-'
+            .map(([responsible, count]) => [
+              responsible,
+              count.toString(),
+              `%${((count / filteredData.length) * 100).toFixed(1)}`,
+              ''
             ])
         );
       }
 
+      // Resim Durumu Analizi ekle
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '==='],
+        ['RESİM DURUMU ANALİZİ', '', '', ''],
+        ['Durum', 'Kayıt Sayısı', 'Oran (%)', ''],
+        ['Sadece Önce Resmi', (withBefore - withBoth).toString(), `%${(((withBefore - withBoth) / filteredData.length) * 100).toFixed(1)}`, ''],
+        ['Sadece Sonra Resmi', (withAfter - withBoth).toString(), `%${(((withAfter - withBoth) / filteredData.length) * 100).toFixed(1)}`, ''],
+        ['Her İkisi de Var', withBoth.toString(), `%${((withBoth / filteredData.length) * 100).toFixed(1)}`, ''],
+        ['Resim Yok', withNone.toString(), `%${((withNone / filteredData.length) * 100).toFixed(1)}`, '']
+      );
+
       await openPrintWindow(reportData, toast);
+      toast({ title: "Rapor Hazır", description: "Detaylı analiz raporu başarıyla oluşturuldu." });
     } catch (error) {
       console.error('Detaylı rapor hatası:', error);
       toast({

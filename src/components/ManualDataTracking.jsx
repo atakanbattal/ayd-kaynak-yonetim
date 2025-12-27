@@ -825,6 +825,200 @@ const ManualDataTracking = () => {
         }
     };
 
+    // Detaylı Analiz Raporu fonksiyonu
+    const handleGenerateDetailedAnalysisReport = async () => {
+        try {
+            toast({ title: "Detaylı analiz raporu hazırlanıyor...", description: "Tüm veriler ve grafikler toplanıyor, lütfen bekleyin." });
+
+            const from = analysisFilters.dateRange?.from ? format(analysisFilters.dateRange.from, 'yyyy-MM-dd') : format(startOfMonth(new Date()), 'yyyy-MM-dd');
+            const to = analysisFilters.dateRange?.to ? format(analysisFilters.dateRange.to, 'yyyy-MM-dd') : format(endOfMonth(new Date()), 'yyyy-MM-dd');
+
+            // Mevcut analysisData ve employeeAnalysisData'yı kullan
+            const manualRecords = analysisData.manual || [];
+            const repairRecords = analysisData.repair || [];
+
+            const totalManualQuantity = manualRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const totalManualCost = manualRecords.reduce((sum, r) => sum + (r.manual_cost || 0), 0);
+            const totalRepairQuantity = repairRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
+            const totalRepairCost = repairRecords.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
+            const totalDuration = manualRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0) + repairRecords.reduce((sum, r) => sum + (r.duration_seconds || 0), 0);
+
+            // Benzersiz personel sayısı (bilinmeyen hariç)
+            const uniqueEmployees = new Set([...manualRecords, ...repairRecords].map(r => r.operator_id).filter(id => id && id !== 'unknown'));
+            const totalEmployees = uniqueEmployees.size;
+
+            // Gün sayısı hesaplama
+            const daysDiff = Math.ceil((new Date(to) - new Date(from)) / (1000 * 60 * 60 * 24)) + 1;
+            const avgDailyManual = Math.round(totalManualQuantity / Math.max(1, daysDiff));
+            const avgDailyRepair = Math.round(totalRepairQuantity / Math.max(1, daysDiff));
+
+            // Aylık maliyet ve üretim özeti
+            const monthlyStats = {};
+            [...manualRecords, ...repairRecords].forEach(r => {
+                const month = format(new Date(r.record_date), 'yyyy-MM');
+                const monthName = format(new Date(r.record_date), 'MMMM yyyy', { locale: tr });
+                if (!monthlyStats[month]) {
+                    monthlyStats[month] = { 
+                        monthName, 
+                        manualQuantity: 0, 
+                        manualCost: 0, 
+                        repairQuantity: 0, 
+                        repairCost: 0,
+                        employees: new Set()
+                    };
+                }
+                if (r.line_id) {
+                    monthlyStats[month].manualQuantity += r.quantity || 0;
+                    monthlyStats[month].manualCost += r.manual_cost || 0;
+                } else if (r.repair_line_id) {
+                    monthlyStats[month].repairQuantity += r.quantity || 0;
+                    monthlyStats[month].repairCost += r.repair_cost || 0;
+                }
+                if (r.operator_id && r.operator_id !== 'unknown') {
+                    monthlyStats[month].employees.add(r.operator_id);
+                }
+            });
+
+            // Hat bazlı analiz - Manuel
+            const manualByLine = manualRecords.reduce((acc, r) => {
+                const lineName = r.line?.name || 'Belirtilmemiş';
+                if (!acc[lineName]) {
+                    acc[lineName] = { quantity: 0, cost: 0, records: 0, duration: 0 };
+                }
+                acc[lineName].quantity += r.quantity || 0;
+                acc[lineName].cost += r.manual_cost || 0;
+                acc[lineName].records++;
+                acc[lineName].duration += r.duration_seconds || 0;
+                return acc;
+            }, {});
+
+            // Top 10 Manuel Hat (adet)
+            const topManualLines = Object.entries(manualByLine)
+                .map(([name, data]) => ({ name, ...data }))
+                .sort((a, b) => b.quantity - a.quantity)
+                .slice(0, 10);
+
+            const reportId = `RPR-ANALIZ-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+            const reportData = {
+                title: 'Manuel Veri Takibi - Detaylı Analiz Raporu',
+                reportId,
+                filters: {
+                    'Rapor Dönemi': `${format(analysisFilters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(analysisFilters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
+                    'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+                    'Toplam Gün': daysDiff + ' gün',
+                    'Seçili Vardiya': analysisFilters.shift !== 'all' ? getShiftLabel(analysisFilters.shift) : 'Tümü'
+                },
+                kpiCards: [
+                    { title: 'Toplam Manuel Üretim', value: totalManualQuantity.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Toplam Manuel Maliyet', value: formatCurrency(totalManualCost) },
+                    { title: 'Toplam Tamir Adedi', value: totalRepairQuantity.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Toplam Tamir Maliyeti', value: formatCurrency(totalRepairCost) },
+                    { title: 'Toplam Maliyet', value: formatCurrency(totalManualCost + totalRepairCost) },
+                    { title: 'Toplam Süre', value: `${Math.floor(totalDuration / 3600)} saat ${Math.floor((totalDuration % 3600) / 60)} dakika` },
+                    { title: 'Toplam Kayıt', value: (manualRecords.length + repairRecords.length).toString() },
+                    { title: 'Ortalama Günlük Manuel', value: avgDailyManual.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Ortalama Günlük Tamir', value: avgDailyRepair.toLocaleString('tr-TR') + ' adet' },
+                    { title: 'Toplam Personel Sayısı', value: totalEmployees.toString() }
+                ],
+                tableData: {
+                    headers: ['Ay', 'Manuel Adet', 'Manuel Maliyet', 'Tamir Adet', 'Tamir Maliyet', 'Toplam Maliyet', 'Personel Sayısı'],
+                    rows: Object.entries(monthlyStats)
+                        .sort(([a], [b]) => a.localeCompare(b))
+                        .map(([, data]) => [
+                            data.monthName,
+                            data.manualQuantity.toLocaleString('tr-TR'),
+                            formatCurrency(data.manualCost),
+                            data.repairQuantity.toLocaleString('tr-TR'),
+                            formatCurrency(data.repairCost),
+                            formatCurrency(data.manualCost + data.repairCost),
+                            data.employees.size.toString()
+                        ])
+                },
+                signatureFields: [
+                    { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+                    { title: 'Kontrol Eden', name: '', role: '..................' },
+                    { title: 'Onaylayan', name: '', role: '..................' }
+                ]
+            };
+
+            // Top 10 Personel (bilinmeyen hariç)
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '==='],
+                ['TOP 10 PERSONEL (EN YÜKSEK ÜRETİM)', '', '', '', '', '', ''],
+                ['Sıra', 'Personel', 'Toplam Adet', 'Manuel', 'Tamir', 'Maliyet', 'Kayıt'],
+                ...employeeAnalysisData.top10.map((emp, index) => [
+                    (index + 1).toString(),
+                    emp.name,
+                    emp.quantity.toLocaleString('tr-TR'),
+                    emp.manualQuantity.toLocaleString('tr-TR'),
+                    emp.repairQuantity.toLocaleString('tr-TR'),
+                    formatCurrency(emp.cost),
+                    emp.records.toString()
+                ])
+            );
+
+            // Bottom 10 Personel (bilinmeyen hariç)
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '==='],
+                ['BOTTOM 10 PERSONEL (EN DÜŞÜK ÜRETİM)', '', '', '', '', '', ''],
+                ['Sıra', 'Personel', 'Toplam Adet', 'Manuel', 'Tamir', 'Maliyet', 'Kayıt'],
+                ...employeeAnalysisData.bottom10.map((emp, index) => [
+                    (index + 1).toString(),
+                    emp.name,
+                    emp.quantity.toLocaleString('tr-TR'),
+                    emp.manualQuantity.toLocaleString('tr-TR'),
+                    emp.repairQuantity.toLocaleString('tr-TR'),
+                    formatCurrency(emp.cost),
+                    emp.records.toString()
+                ])
+            );
+
+            // En çok manuele gönderen hatlar
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '==='],
+                ['EN ÇOK MANUELE GÖNDEREN HATLAR (TOP 10)', '', '', '', '', '', ''],
+                ['Sıra', 'Hat Adı', 'Adet', 'Maliyet', 'Kayıt Sayısı', 'Ort. Süre (sn)', ''],
+                ...topManualLines.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    line.quantity.toLocaleString('tr-TR'),
+                    formatCurrency(line.cost),
+                    line.records.toString(),
+                    Math.round(line.duration / Math.max(1, line.records)).toString(),
+                    ''
+                ])
+            );
+
+            // BH Kodu ile başlayan parçalar
+            if (bhTop10Parts.length > 0) {
+                reportData.tableData.rows.push(
+                    ['===', '===', '===', '===', '===', '===', '==='],
+                    ['BH KODU İLE BAŞLAYAN TOP 10 PARÇA', '', '', '', '', '', ''],
+                    ['Sıra', 'Parça Kodu', 'Adet', 'Kayıt Sayısı', 'Personel Sayısı', '', ''],
+                    ...bhTop10Parts.map((part, index) => [
+                        (index + 1).toString(),
+                        part.code,
+                        part.quantity.toLocaleString('tr-TR'),
+                        part.records.toString(),
+                        part.employeeCount.toString(),
+                        '',
+                        ''
+                    ])
+                );
+            }
+
+            await openPrintWindow(reportData, toast);
+            toast({ title: "Rapor Hazır", description: "Detaylı analiz raporu başarıyla oluşturuldu." });
+        } catch (error) {
+            console.error('Detaylı analiz raporu hatası:', error);
+            toast({
+                title: "Rapor Oluşturulamadı",
+                description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+                variant: "destructive"
+            });
+        }
+    };
+
     const handleEditSave = async (updatedRecord) => {
         const { recordType, ...dataToSave } = updatedRecord;
         const tableName = recordType === 'manual' ? 'manual_production_records' : 'repair_records';
@@ -1391,7 +1585,8 @@ const ManualDataTracking = () => {
             }
         });
         
-        const employeeArray = Object.values(employeeStats);
+        // Bilinmeyen personelleri (unknown ID) hariç tut
+        const employeeArray = Object.values(employeeStats).filter(e => e.id !== 'unknown');
         const top10 = [...employeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
         const bottom10 = [...employeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
         
@@ -2228,8 +2423,15 @@ const ManualDataTracking = () => {
                 {/* Filtre ve Personel Seçimi */}
                 <Card>
                     <CardHeader>
-                        <CardTitle>Filtreleme ve Arama</CardTitle>
-                        <CardDescription>Hızlı filtreler veya özel tarih aralığı seçin</CardDescription>
+                        <div className="flex justify-between items-center">
+                            <div>
+                                <CardTitle>Filtreleme ve Arama</CardTitle>
+                                <CardDescription>Hızlı filtreler veya özel tarih aralığı seçin</CardDescription>
+                            </div>
+                            <Button variant="outline" onClick={handleGenerateDetailedAnalysisReport}>
+                                <FileText className="h-4 w-4 mr-2" />Detaylı Analiz Raporu
+                            </Button>
+                        </div>
                     </CardHeader>
                     <CardContent className="space-y-4">
                         {/* Hızlı Filtre Butonları */}
@@ -2325,72 +2527,113 @@ const ManualDataTracking = () => {
                     </CardContent>
                 </Card>
                 
-                {/* Özet KPI Kartları */}
-                <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                {/* Yönetici Özeti - Ana KPI Kartları */}
+                <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
                     <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">Toplam Üretim</CardTitle>
+                        <CardHeader className="pb-1 pt-3">
+                            <CardTitle className="text-xs text-blue-600">Toplam Üretim</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-blue-700">
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-bold text-blue-700">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
-                                    return allManual.reduce((sum, r) => sum + (r.quantity || 0), 0) + 
-                                           allRepair.reduce((sum, r) => sum + (r.quantity || 0), 0);
-                                })()} adet
+                                    return (allManual.reduce((sum, r) => sum + (r.quantity || 0), 0) + 
+                                           allRepair.reduce((sum, r) => sum + (r.quantity || 0), 0)).toLocaleString('tr-TR');
+                                })()}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">Tüm veriler</p>
+                            <p className="text-xs text-muted-foreground">adet</p>
                         </CardContent>
                     </Card>
                     
                     <Card className="bg-gradient-to-br from-green-50 to-green-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">Toplam Kayıt</CardTitle>
+                        <CardHeader className="pb-1 pt-3">
+                            <CardTitle className="text-xs text-green-600">Toplam Maliyet</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-green-700">
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-bold text-green-700">
                                 {(() => {
-                                    const allManual = analysisData.allManualWithShift || [];
-                                    const allRepair = analysisData.allRepairWithShift || [];
-                                    return allManual.length + allRepair.length;
+                                    const manual = analysisData.manual || [];
+                                    const repair = analysisData.repair || [];
+                                    const totalCost = manual.reduce((sum, r) => sum + (r.manual_cost || 0), 0) + 
+                                                     repair.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
+                                    return formatCurrency(totalCost);
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">Manuel + Tamir</p>
+                            <p className="text-xs text-muted-foreground">Manuel + Tamir</p>
                         </CardContent>
                     </Card>
                     
                     <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">Ortalama Üretim/Gün</CardTitle>
+                        <CardHeader className="pb-1 pt-3">
+                            <CardTitle className="text-xs text-orange-600">Günlük Ortalama</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-orange-700">
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-bold text-orange-700">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
                                     const uniqueDays = new Set([...allManual.map(r => r.record_date), ...allRepair.map(r => r.record_date)]).size;
                                     const totalQty = allManual.reduce((sum, r) => sum + (r.quantity || 0), 0) + allRepair.reduce((sum, r) => sum + (r.quantity || 0), 0);
-                                    return uniqueDays > 0 ? Math.round(totalQty / uniqueDays) : 0;
-                                })()}  adet
+                                    return uniqueDays > 0 ? Math.round(totalQty / uniqueDays).toLocaleString('tr-TR') : 0;
+                                })()}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">Günlük ortalama</p>
+                            <p className="text-xs text-muted-foreground">adet/gün</p>
                         </CardContent>
                     </Card>
                     
                     <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
-                        <CardHeader className="pb-2">
-                            <CardTitle className="text-sm">Aktif Personel</CardTitle>
+                        <CardHeader className="pb-1 pt-3">
+                            <CardTitle className="text-xs text-purple-600">Aktif Personel</CardTitle>
                         </CardHeader>
-                        <CardContent>
-                            <div className="text-3xl font-bold text-purple-700">
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-bold text-purple-700">
                                 {(() => {
                                     const allManual = analysisData.allManualWithShift || [];
                                     const allRepair = analysisData.allRepairWithShift || [];
-                                    return new Set([...allManual.map(r => r.operator_id), ...allRepair.map(r => r.operator_id)]).size;
+                                    const uniqueEmployees = new Set([...allManual, ...allRepair]
+                                        .filter(r => r.operator_id && r.operator_id !== 'unknown')
+                                        .map(r => r.operator_id));
+                                    return uniqueEmployees.size;
                                 })()}
                             </div>
-                            <p className="text-xs text-muted-foreground mt-1">Üretim yapan</p>
+                            <p className="text-xs text-muted-foreground">kişi</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-gradient-to-br from-cyan-50 to-cyan-100">
+                        <CardHeader className="pb-1 pt-3">
+                            <CardTitle className="text-xs text-cyan-600">Aylık Ort. Maliyet</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-bold text-cyan-700">
+                                {(() => {
+                                    const manual = analysisData.manual || [];
+                                    const repair = analysisData.repair || [];
+                                    const allRecords = [...manual, ...repair];
+                                    const uniqueMonths = new Set(allRecords.map(r => r.record_date?.substring(0, 7))).size;
+                                    const totalCost = manual.reduce((sum, r) => sum + (r.manual_cost || 0), 0) + 
+                                                     repair.reduce((sum, r) => sum + (r.repair_cost || 0), 0);
+                                    return uniqueMonths > 0 ? formatCurrency(totalCost / uniqueMonths) : '₺0';
+                                })()}
+                            </div>
+                            <p className="text-xs text-muted-foreground">aylık ortalama</p>
+                        </CardContent>
+                    </Card>
+                    
+                    <Card className="bg-gradient-to-br from-rose-50 to-rose-100">
+                        <CardHeader className="pb-1 pt-3">
+                            <CardTitle className="text-xs text-rose-600">Toplam Kayıt</CardTitle>
+                        </CardHeader>
+                        <CardContent className="pb-3">
+                            <div className="text-2xl font-bold text-rose-700">
+                                {(() => {
+                                    const allManual = analysisData.allManualWithShift || [];
+                                    const allRepair = analysisData.allRepairWithShift || [];
+                                    return (allManual.length + allRepair.length).toLocaleString('tr-TR');
+                                })()}
+                            </div>
+                            <p className="text-xs text-muted-foreground">kayıt</p>
                         </CardContent>
                     </Card>
                 </div>
@@ -2735,6 +2978,7 @@ const ManualDataTracking = () => {
                                     });
                                     
                                     return Object.entries(employeeStats)
+                                        .filter(([empId]) => empId !== 'unknown') // Bilinmeyen personelleri hariç tut
                                         .sort((a, b) => b[1].quantity - a[1].quantity)
                                         .slice(0, 10)
                                         .map(([empId, stats], index) => (
@@ -2781,6 +3025,7 @@ const ManualDataTracking = () => {
                                     });
                                     
                                     return Object.entries(employeeStats)
+                                        .filter(([empId]) => empId !== 'unknown') // Bilinmeyen personelleri hariç tut
                                         .sort((a, b) => a[1].quantity - b[1].quantity)
                                         .slice(0, 10)
                                         .map(([empId, stats], index) => (
