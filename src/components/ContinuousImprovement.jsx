@@ -531,6 +531,18 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
         await openPrintWindow(reportData, toast);
       };
 
+      // Tip isimlerini Türkçeleştir
+      const getTypeNameTR = (type) => {
+        const normalized = (type || '').trim().toLowerCase();
+        if (normalized === 'cycle_time') return 'Çevrim Süresi';
+        if (normalized === 'quality') return 'Kalite';
+        if (normalized === 'cost') return 'Maliyet';
+        if (normalized === 'ergonomics') return 'Ergonomi';
+        if (normalized === 'other') return 'Diğer';
+        if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
+        return type || 'Diğer';
+      };
+
       const handleGenerateDetailedReport = async () => {
         try {
           toast({ title: "Detaylı rapor hazırlanıyor...", description: "Tüm veriler toplanıyor, lütfen bekleyin." });
@@ -694,7 +706,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
                 s.line?.name || 'N/A',
                 s.robot?.name || 'N/A',
                 s.responsible ? `${s.responsible.first_name} ${s.responsible.last_name}` : 'N/A',
-                s.type || 'Diğer',
+                getTypeNameTR(s.type),
                 `${s.prev_time || 0} sn`,
                 `${s.new_time || 0} sn`,
                 `${((s.prev_time || 0) - (s.new_time || 0)).toFixed(2)} sn`,
@@ -766,7 +778,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
             ['İYİLEŞTİRME TİPİ BAZLI ANALİZ', '', '', '', '', '', '', '', '', '', '', ''],
             ['Tip', 'Sayı', 'Toplam Etki', 'Ortalama Etki', '', '', '', '', '', '', '', ''],
             ...Object.entries(byType).map(([type, data]) => [
-              type,
+              getTypeNameTR(type),
               data.count.toString(),
               formatCurrency(data.impact),
               formatCurrency(data.avgImpact),

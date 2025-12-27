@@ -96,7 +96,7 @@ const TaskManager = ({ user }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterTag, setFilterTag] = useState('');
-  const [filterProject, setFilterProject] = useState('');
+  const [filterProject, setFilterProject] = useState('all');
 
   // Analiz verileri
   const analysisData = useMemo(() => {
@@ -256,7 +256,7 @@ const TaskManager = ({ user }) => {
       const searchMatch = searchTerm === '' || task.title.toLowerCase().includes(searchTerm.toLowerCase()) || (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()));
       const assigneeMatch = filterAssignee === '' || (task.assignee_name && task.assignee_name.toLowerCase().includes(filterAssignee.toLowerCase()));
       const tagMatch = filterTag === '' || (task.tags && task.tags.toLowerCase().includes(filterTag.toLowerCase()));
-      const projectMatch = filterProject === '' || task.project_id === filterProject || (filterProject === 'no-project' && !task.project_id);
+      const projectMatch = filterProject === '' || filterProject === 'all' || task.project_id === filterProject || (filterProject === 'no-project' && !task.project_id);
       return searchMatch && assigneeMatch && tagMatch && projectMatch;
     });
   }, [tasks, searchTerm, filterAssignee, filterTag, filterProject]);
@@ -564,7 +564,7 @@ const TaskManager = ({ user }) => {
         <div className="space-y-2"><Label>Başlık</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} /></div>
         <div className="space-y-2"><Label>Açıklama</Label><Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2"><Label>Proje</Label><Select value={formData.project_id || ''} onValueChange={project_id => setFormData({...formData, project_id: project_id || null})}><SelectTrigger><SelectValue placeholder="Proje seçin..." /></SelectTrigger><SelectContent><SelectItem value="">Proje Yok</SelectItem>{projects.map(p => <SelectItem key={p.id} value={p.id}><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{backgroundColor: p.color}}></div>{p.name}</div></SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><Label>Proje</Label><Select value={formData.project_id || 'none'} onValueChange={project_id => setFormData({...formData, project_id: project_id === 'none' ? null : project_id})}><SelectTrigger><SelectValue placeholder="Proje seçin..." /></SelectTrigger><SelectContent><SelectItem value="none">Proje Yok</SelectItem>{projects.map(p => <SelectItem key={p.id} value={p.id}><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{backgroundColor: p.color}}></div>{p.name}</div></SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>Öncelik</Label><Select value={formData.priority} onValueChange={priority => setFormData({...formData, priority})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Düşük</SelectItem><SelectItem value="medium">Orta</SelectItem><SelectItem value="high">Yüksek</SelectItem><SelectItem value="critical">Kritik</SelectItem></SelectContent></Select></div>
           <div className="space-y-2"><Label>Atanan</Label><Combobox options={employeeOptions} value={formData.assignee_id} onSelect={(value) => setFormData({...formData, assignee_id: value})} placeholder="Personel Seç" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı."/></div>
           <div className="space-y-2"><Label>Termin Tarihi</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start", !formData.due_date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formData.due_date ? format(new Date(formData.due_date), 'PPP', { locale: tr }) : <span>Tarih seçin</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.due_date ? new Date(formData.due_date) : null} onSelect={date => setFormData({...formData, due_date: date?.toISOString()})} initialFocus /></PopoverContent></Popover></div>
@@ -768,7 +768,7 @@ const TaskManager = ({ user }) => {
                 <Select value={filterProject} onValueChange={setFilterProject}>
                   <SelectTrigger className="w-full sm:w-[180px]"><SelectValue placeholder="Proje filtrele..." /></SelectTrigger>
                   <SelectContent>
-                    <SelectItem value="">Tüm Projeler</SelectItem>
+                    <SelectItem value="all">Tüm Projeler</SelectItem>
                     <SelectItem value="no-project">Projesiz</SelectItem>
                     {projects.map(p => <SelectItem key={p.id} value={p.id}>{p.name}</SelectItem>)}
                   </SelectContent>

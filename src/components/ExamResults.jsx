@@ -57,17 +57,28 @@ const ExamResults = ({ trainingId, passingGrade }) => {
   }, [fetchData]);
 
   const handleScoreChange = (participantId, score) => {
-    // Score'u string olarak tut, sadece kayıt sırasında number'a çevir
-    // Boş string veya geçerli sayı kabul et
+    // Score'u string olarak tut, böylece kullanıcı rahatça yazabilir
+    // Sadece kayıt sırasında validasyon yap
     let newScore = score;
     
-    // Eğer değer girilmişse ve geçerli bir sayıysa
-    if (score !== '' && score !== null) {
-      const numericValue = parseFloat(score);
-      // NaN değilse ve 0'dan büyük veya eşitse işlem yap
+    // Boş string'i olduğu gibi kabul et
+    if (score === '' || score === null) {
+      newScore = '';
+    } else {
+      // Sadece sayısal karakterleri ve nokta/virgülü kabul et
+      const cleanedScore = score.replace(',', '.').replace(/[^0-9.]/g, '');
+      const numericValue = parseFloat(cleanedScore);
+      
       if (!isNaN(numericValue)) {
-        // maxScore'u aşmasını engelle
-        newScore = Math.min(Math.max(0, numericValue), maxScore);
+        // maxScore 0'dan büyükse sınırla, değilse sadece 0 veya pozitif olmasını kontrol et
+        if (maxScore > 0) {
+          newScore = Math.min(Math.max(0, numericValue), maxScore);
+        } else {
+          // maxScore 0 veya tanımsızsa, sadece pozitif değerleri kabul et (üst sınır yok)
+          newScore = Math.max(0, numericValue);
+        }
+      } else {
+        newScore = '';
       }
     }
     

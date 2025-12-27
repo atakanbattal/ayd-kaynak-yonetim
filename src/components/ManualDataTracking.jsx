@@ -271,7 +271,7 @@ const ManualDataTracking = () => {
                 supabase.from('repair_records').select('*').order('record_date', { ascending: false }),
                 supabase.from('lines').select('*').eq('deleted', false),
                 supabase.from('employees').select('*').eq('is_active', true),
-                supabase.from('monthly_production_totals').select('*').gte('year_month', fromMonth).lte('year_month', toMonth),
+                supabase.from('monthly_production_totals').select('*'), // Tüm aylık toplamları al (detaylı analiz için)
                 supabase.from('daily_production_totals').select('*').gte('date', from).lte('date', to)
             ]);
 
@@ -1175,9 +1175,9 @@ const ManualDataTracking = () => {
                 return;
             }
 
-            // Bu ay için manuel ve tamir kayıtlarını hesapla
-            const monthRecords = manualRecords.filter(r => r.record_date.startsWith(year_month));
-            const monthRepairs = repairRecords.filter(r => r.record_date.startsWith(year_month));
+            // Bu ay için manuel ve tamir kayıtlarını hesapla (TÜM kayıtlardan)
+            const monthRecords = allManualRecords.filter(r => r.record_date && r.record_date.startsWith(year_month));
+            const monthRepairs = allRepairRecords.filter(r => r.record_date && r.record_date.startsWith(year_month));
             
             const totalManual = monthRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
             const totalRepair = monthRepairs.reduce((sum, r) => sum + (r.quantity || 0), 0);
