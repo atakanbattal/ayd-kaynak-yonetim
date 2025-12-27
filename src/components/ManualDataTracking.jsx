@@ -1087,7 +1087,7 @@ const ManualDataTracking = () => {
             if (bhTop10Parts.length > 0) {
                 reportData.tableData.rows.push(
                     ['===', '===', '===', '===', '===', '===', '==='],
-                    ['BH KODU İLE BAŞLAYAN TOP 10 PARÇA', '', '', '', '', '', ''],
+                    ['BH KODU İLE BAŞLAYAN TOP 20 PARÇA', '', '', '', '', '', ''],
                     ['Sıra', 'Parça Kodu', 'Adet', 'Kayıt Sayısı', 'Personel Sayısı', '', ''],
                     ...bhTop10Parts.map((part, index) => [
                         (index + 1).toString(),
@@ -1723,7 +1723,7 @@ const ManualDataTracking = () => {
         return { top10, bottom10, period: employeeAnalysisPeriod };
     }, [employeeAnalysisPeriod, analysisFilters.dateRange, allManualRecords, allRepairRecords, employees, calculateCost]);
     
-    // BH kodu ile başlayan top10 parça (BT ve YK hariç)
+    // BH kodu ile başlayan top20 parça (BT ve YK hariç)
     const bhTop10Parts = useMemo(() => {
         const bhParts = allManualRecords
             .filter(r => {
@@ -1749,7 +1749,7 @@ const ManualDataTracking = () => {
         return Object.values(bhParts)
             .map(p => ({ ...p, employeeCount: p.employees.size }))
             .sort((a, b) => b.quantity - a.quantity)
-            .slice(0, 10);
+            .slice(0, 20);
     }, [allManualRecords]);
     
     
@@ -2962,11 +2962,11 @@ const ManualDataTracking = () => {
                     </CardContent>
                 </Card>
                 
-                {/* BH Kodu ile Başlayan Top10 Parça */}
+                {/* BH Kodu ile Başlayan Top20 Parça */}
                 {bhTop10Parts.length > 0 && (
                     <Card>
                         <CardHeader>
-                            <CardTitle>BH Kodu ile Başlayan Top 10 Parça</CardTitle>
+                            <CardTitle>BH Kodu ile Başlayan Top 20 Parça</CardTitle>
                             <CardDescription>BT ve YK kodları hariç, manuel yazılan BH kodlu parçalar</CardDescription>
                         </CardHeader>
                         <CardContent>
