@@ -1285,8 +1285,25 @@ const ManualDataTracking = () => {
 
     // Analiz sekmesi için filtrelenmiş veriler
     const analysisData = useMemo(() => {
-        const from = analysisFilters.dateRange?.from ? format(analysisFilters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
-        const to = analysisFilters.dateRange?.to ? format(analysisFilters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+        // Tarih aralığını güvenli bir şekilde al
+        let from = '2000-01-01';
+        let to = format(new Date(), 'yyyy-MM-dd');
+        
+        if (analysisFilters.dateRange?.from) {
+            const fromDate = new Date(analysisFilters.dateRange.from);
+            if (!isNaN(fromDate.getTime())) {
+                from = format(fromDate, 'yyyy-MM-dd');
+            }
+        }
+        if (analysisFilters.dateRange?.to) {
+            const toDate = new Date(analysisFilters.dateRange.to);
+            if (!isNaN(toDate.getTime())) {
+                to = format(toDate, 'yyyy-MM-dd');
+            }
+        }
+        
+        // Debug için console log (production'da kaldırılacak)
+        console.log('Analiz Filtreleri:', { from, to, recordCount: allManualRecords.length });
         
         // Vardiya otomatik hesaplama fonksiyonu (saat bazlı)
         const getShiftFromTime = (recordDatetime) => {
@@ -1314,7 +1331,11 @@ const ManualDataTracking = () => {
         
         // Önce tüm kayıtları map'le ve calculatedShift ekle
         const allManualWithShift = allManualRecords
-            .filter(r => r.record_date >= from && r.record_date <= to)
+            .filter(r => {
+                if (!r.record_date) return false;
+                const recordDate = String(r.record_date).substring(0, 10); // YYYY-MM-DD formatına dönüştür
+                return recordDate >= from && recordDate <= to;
+            })
             .map(r => {
                 // Shift değerini number'a dönüştür
                 let shiftValue = null;
@@ -1332,7 +1353,11 @@ const ManualDataTracking = () => {
             });
         
         const allRepairWithShift = allRepairRecords
-            .filter(r => r.record_date >= from && r.record_date <= to)
+            .filter(r => {
+                if (!r.record_date) return false;
+                const recordDate = String(r.record_date).substring(0, 10); // YYYY-MM-DD formatına dönüştür
+                return recordDate >= from && recordDate <= to;
+            })
             .map(r => {
                 // Shift değerini number'a dönüştür
                 let shiftValue = null;
@@ -2500,10 +2525,10 @@ const ManualDataTracking = () => {
                                             {analysisFilters.dateRange?.from ? (
                                                 analysisFilters.dateRange.to ? (
                                                     <>
-                                                    {format(analysisFilters.dateRange.from, "dd MMM", { locale: tr })} - {format(analysisFilters.dateRange.to, "dd MMM", { locale: tr })}
+                                                    {format(analysisFilters.dateRange.from, "dd MMM yyyy", { locale: tr })} - {format(analysisFilters.dateRange.to, "dd MMM yyyy", { locale: tr })}
                                                     </>
                                                 ) : (
-                                                    format(analysisFilters.dateRange.from, "dd MMM", { locale: tr })
+                                                    format(analysisFilters.dateRange.from, "dd MMM yyyy", { locale: tr })
                                                 )
                                             ) : (
                                                 <span>Tarih Seçin</span>
