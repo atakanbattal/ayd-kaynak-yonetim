@@ -243,7 +243,7 @@ const ManualDataTracking = () => {
     });
     
     const [analysisFilters, setAnalysisFilters] = useState({
-        dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) },
+        dateRange: { from: new Date(new Date().getFullYear(), 0, 1), to: endOfMonth(new Date()) }, // Yıl başından bugüne
         shift: 'all',
         employee: 'all'
     });
