@@ -647,7 +647,9 @@ const TaskManager = ({ user }) => {
       // Ana görev listesi - sadece önemli kolonlar
       if (enrichedTasks.length > 0) {
         reportData.tableData.rows.push(
+          ['===', '===', '===', '===', '==='],
           ['GÖREV LİSTESİ', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['Başlık', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi'],
           ...enrichedTasks.map(t => [
             t.title || '-',
@@ -661,8 +663,9 @@ const TaskManager = ({ user }) => {
 
       // Durum bazlı özet
       reportData.tableData.rows.push(
-        ['', '', '', '', ''],
+        ['===', '===', '===', '===', '==='],
         ['DURUM BAZLI ÖZET', '', '', '', ''],
+        ['===', '===', '===', '===', '==='],
         ['Durum', 'Görev Sayısı', 'Oran (%)', '', ''],
         ['Bekleyen', tasksByStatus.todo.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.todo.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', ''],
         ['Devam Eden', tasksByStatus.inProgress.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.inProgress.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0', '', ''],
@@ -672,8 +675,9 @@ const TaskManager = ({ user }) => {
       // Öncelik bazlı özet
       if (Object.keys(tasksByPriority).length > 0) {
         reportData.tableData.rows.push(
-          ['', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['ÖNCELİK BAZLI ÖZET', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['Öncelik', 'Görev Sayısı', 'Oran (%)', '', ''],
           ...Object.entries(tasksByPriority).sort((a, b) => {
             const priorityOrder = { 'critical': 4, 'high': 3, 'medium': 2, 'low': 1 };
@@ -690,8 +694,9 @@ const TaskManager = ({ user }) => {
       // Geciken görevler (varsa)
       if (overdueTasks.length > 0) {
         reportData.tableData.rows.push(
-          ['', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['GECİKEN GÖREVLER', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['Başlık', 'Atanan', 'Termin Tarihi', 'Öncelik', ''],
           ...overdueTasks.map(t => [
             t.title || '-',
@@ -706,8 +711,9 @@ const TaskManager = ({ user }) => {
       // Atanan bazlı özet (sadece birden fazla atanan varsa)
       if (Object.keys(tasksByAssignee).length > 1) {
         reportData.tableData.rows.push(
-          ['', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['ATANAN BAZLI ÖZET', '', '', '', ''],
+          ['===', '===', '===', '===', '==='],
           ['Atanan', 'Toplam', 'Tamamlanan', 'Oran (%)', ''],
           ...Object.entries(tasksByAssignee).sort((a, b) => b[1] - a[1]).map(([assignee, count]) => {
             const doneCount = enrichedTasks.filter(t => (t.assignee_name || 'Atanmamış') === assignee && t.status === 'done').length;
