@@ -360,13 +360,15 @@ const TaskManager = ({ user }) => {
     const saveData = { ...taskData };
     if(saveData.assignee_id === '') saveData.assignee_id = null;
 
+    // UI için eklenen alanları temizle (veritabanında yok)
+    const { assignee_name, project_name, project_color, ...cleanData } = saveData;
+
     let response;
     if (editingTask) {
-      const { id, assignee_name, ...updateData } = saveData;
+      const { id, ...updateData } = cleanData;
       response = await supabase.from('tasks').update(updateData).eq('id', id).select();
     } else {
-      const { assignee_name, ...insertData } = saveData;
-      response = await supabase.from('tasks').insert(insertData).select();
+      response = await supabase.from('tasks').insert(cleanData).select();
     }
 
     if (response.error) {
