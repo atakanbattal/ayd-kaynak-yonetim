@@ -3,7 +3,7 @@ import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from 
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
-import { Plus, GripVertical, Calendar as CalendarIcon, User, AlertCircle, CheckCircle, Loader, Search, X as XIcon, Tag, Trash2, Edit, BarChart3, TrendingUp, Target, Clock, Download, Folder, FolderPlus, ChevronDown, ChevronRight } from 'lucide-react';
+import { Plus, GripVertical, Calendar as CalendarIcon, User, AlertCircle, CheckCircle, Loader, Search, X as XIcon, Tag, Trash2, Edit, BarChart3, TrendingUp, Target, Clock, Download, Folder, FolderPlus, ChevronDown, ChevronRight, FileText } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
@@ -97,6 +97,8 @@ const TaskManager = ({ user }) => {
   const [filterAssignee, setFilterAssignee] = useState('');
   const [filterTag, setFilterTag] = useState('');
   const [filterProject, setFilterProject] = useState('all');
+  const [showProjectReportDialog, setShowProjectReportDialog] = useState(false);
+  const [selectedProjectForReport, setSelectedProjectForReport] = useState(null);
 
   // Analiz verileri
   const analysisData = useMemo(() => {
@@ -559,6 +561,184 @@ const TaskManager = ({ user }) => {
     }
   };
 
+  const handleGenerateProjectReport = async () => {
+    if (!selectedProjectForReport) {
+      toast({ title: "Hata", description: "Lütfen bir proje seçin.", variant: "destructive" });
+      return;
+    }
+
+    try {
+      setShowProjectReportDialog(false);
+      toast({ title: "Proje bazlı rapor hazırlanıyor...", description: "Seçilen proje için görev verileri toplanıyor." });
+
+      const project = projects.find(p => p.id === selectedProjectForReport);
+      const projectName = project ? project.name : 'Bilinmeyen Proje';
+
+      const { data: allTasks, error: tasksError } = await supabase
+        .from('tasks')
+        .select('*, assignee:employees(first_name, last_name, registration_number), project:projects(name, description)')
+        .eq('project_id', selectedProjectForReport)
+        .order('created_at', { ascending: false });
+
+      if (tasksError) throw tasksError;
+
+      const enrichedTasks = allTasks.map(task => {
+        const assignee = task.assignee;
+        return {
+          ...task,
+          assignee_name: assignee ? `${assignee.registration_number || ''} - ${assignee.first_name} ${assignee.last_name}`.trim() : 'Atanmamış',
+          project_name: task.project?.name || 'Proje Yok'
+        };
+      });
+
+      const tasksByStatus = {
+        todo: enrichedTasks.filter(t => t.status === 'todo'),
+        inProgress: enrichedTasks.filter(t => t.status === 'in-progress'),
+        done: enrichedTasks.filter(t => t.status === 'done')
+      };
+
+      const tasksByPriority = enrichedTasks.reduce((acc, t) => {
+        const priority = t.priority || 'medium';
+        if (!acc[priority]) acc[priority] = 0;
+        acc[priority]++;
+        return acc;
+      }, {});
+
+      const tasksByAssignee = enrichedTasks.reduce((acc, t) => {
+        const assignee = t.assignee_name || 'Atanmamış';
+        if (!acc[assignee]) acc[assignee] = 0;
+        acc[assignee]++;
+        return acc;
+      }, {});
+
+      const overdueTasks = enrichedTasks.filter(t => {
+        if (!t.due_date) return false;
+        return new Date(t.due_date) < new Date() && t.status !== 'done';
+      });
+
+      const reportId = `RPR-TASK-PROJ-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const reportData = {
+        title: `Aksiyon Takibi - Proje Bazlı Rapor: ${projectName}`,
+        reportId,
+        filters: {
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+          'Proje': projectName,
+          'Proje Açıklaması': project?.description || 'Yok'
+        },
+        kpiCards: [
+          { title: 'Toplam Görev', value: enrichedTasks.length.toString() },
+          { title: 'Bekleyen Görevler', value: tasksByStatus.todo.length.toString() },
+          { title: 'Devam Eden Görevler', value: tasksByStatus.inProgress.length.toString() },
+          { title: 'Tamamlanan Görevler', value: tasksByStatus.done.length.toString() },
+          { title: 'Geciken Görevler', value: overdueTasks.length.toString() },
+          { title: 'Farklı Atanan', value: Object.keys(tasksByAssignee).length.toString() },
+          { title: 'Tamamlanma Oranı', value: enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0' }
+        ],
+        tableData: {
+          headers: ['Başlık', 'Açıklama', 'Durum', 'Öncelik', 'Atanan', 'Termin Tarihi', 'Etiketler', 'Oluşturulma'],
+          rows: enrichedTasks.map(t => [
+            t.title || '-',
+            t.description ? (t.description.length > 50 ? t.description.substring(0, 50) + '...' : t.description) : '-',
+            statusMap[t.status]?.label || t.status,
+            priorityMap[t.priority]?.label || t.priority,
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+            t.tags || '-',
+            t.created_at ? format(new Date(t.created_at), 'dd.MM.yyyy', { locale: tr }) : '-'
+          ])
+        },
+        signatureFields: [
+          { title: 'Hazırlayan', name: authUser?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+          { title: 'Kontrol Eden', name: '', role: '..................' },
+          { title: 'Onaylayan', name: '', role: '..................' }
+        ]
+      };
+
+      // Öncelik bazlı analiz ekle
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '==='],
+        ['ÖNCELİK BAZLI ANALİZ', '', '', '', '', '', '', ''],
+        ['Öncelik', 'Görev Sayısı', 'Oran (%)', '', '', '', '', ''],
+        ...Object.entries(tasksByPriority).sort((a, b) => b[1] - a[1]).map(([priority, count]) => [
+          priorityMap[priority]?.label || priority,
+          count.toString(),
+          `%${((count / enrichedTasks.length) * 100).toFixed(1)}`,
+          '', '', '', '', ''
+        ])
+      );
+
+      // Atanan bazlı analiz ekle
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '==='],
+        ['ATANAN BAZLI ANALİZ', '', '', '', '', '', '', ''],
+        ['Atanan', 'Görev Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', '', '', '', ''],
+        ...Object.entries(tasksByAssignee).sort((a, b) => b[1] - a[1]).map(([assignee, count]) => {
+          const doneCount = enrichedTasks.filter(t => (t.assignee_name || 'Atanmamış') === assignee && t.status === 'done').length;
+          return [
+            assignee,
+            count.toString(),
+            doneCount.toString(),
+            `%${((doneCount / count) * 100).toFixed(0)}`,
+            '', '', '', ''
+          ];
+        })
+      );
+
+      // Geciken görevler listesi ekle
+      if (overdueTasks.length > 0) {
+        reportData.tableData.rows.push(
+          ['===', '===', '===', '===', '===', '===', '===', '==='],
+          ['GECİKEN GÖREVLER', '', '', '', '', '', '', ''],
+          ['Başlık', 'Atanan', 'Termin Tarihi', 'Durum', 'Öncelik', '', '', ''],
+          ...overdueTasks.map(t => [
+            t.title || '-',
+            t.assignee_name || 'Atanmamış',
+            t.due_date ? format(new Date(t.due_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+            statusMap[t.status]?.label || t.status,
+            priorityMap[t.priority]?.label || t.priority,
+            '', '', ''
+          ])
+        );
+      }
+
+      // Etiket bazlı analiz
+      const tasksByTag = {};
+      enrichedTasks.forEach(t => {
+        if (t.tags) {
+          const tags = t.tags.split(',').map(tag => tag.trim());
+          tags.forEach(tag => {
+            if (!tasksByTag[tag]) tasksByTag[tag] = 0;
+            tasksByTag[tag]++;
+          });
+        }
+      });
+
+      if (Object.keys(tasksByTag).length > 0) {
+        reportData.tableData.rows.push(
+          ['===', '===', '===', '===', '===', '===', '===', '==='],
+          ['ETİKET BAZLI ANALİZ', '', '', '', '', '', '', ''],
+          ['Etiket', 'Görev Sayısı', '', '', '', '', '', ''],
+          ...Object.entries(tasksByTag).sort((a, b) => b[1] - a[1]).slice(0, 15).map(([tag, count]) => [
+            tag,
+            count.toString(),
+            '', '', '', '', '', ''
+          ])
+        );
+      }
+
+      await openPrintWindow(reportData, toast);
+      toast({ title: "Rapor Hazır", description: `${projectName} projesi için rapor başarıyla oluşturuldu.` });
+      setSelectedProjectForReport(null);
+    } catch (error) {
+      console.error('Proje bazlı rapor hatası:', error);
+      toast({
+        title: "Rapor Oluşturulamadı",
+        description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+        variant: "destructive"
+      });
+    }
+  };
+
   const TaskForm = ({ task, onSave }) => {
     const [formData, setFormData] = useState(task || { ...initialFormState, project_id: selectedProject });
     return (
@@ -606,6 +786,7 @@ const TaskManager = ({ user }) => {
             <div className="flex space-x-2">
               <Button variant="outline" onClick={() => { setEditingProject(null); setIsProjectFormOpen(true); }}><FolderPlus className="mr-2 h-4 w-4" />Yeni Proje</Button>
               <Button onClick={() => { setEditingTask(null); setIsFormOpen(true); }}><Plus className="mr-2 h-4 w-4" />Yeni Görev</Button>
+              <Button variant="outline" onClick={() => setShowProjectReportDialog(true)}><FileText className="h-4 w-4 mr-2" />Proje Bazlı Rapor</Button>
               <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
             </div>
           </div>
@@ -984,6 +1165,59 @@ const TaskManager = ({ user }) => {
       </Card>
       <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if(!open) setSelectedProject(null); }}><DialogContent className="sm:max-w-3xl"><DialogHeader><DialogTitle>{editingTask ? 'Görevi Düzenle' : 'Yeni Görev Oluştur'}</DialogTitle></DialogHeader><TaskForm task={editingTask} onSave={handleSaveTask} /></DialogContent></Dialog>
       <Dialog open={isProjectFormOpen} onOpenChange={setIsProjectFormOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{editingProject ? 'Projeyi Düzenle' : 'Yeni Proje Oluştur'}</DialogTitle><DialogDescription>Projeler, görevlerinizi düzenli ve organize tutmanıza yardımcı olur.</DialogDescription></DialogHeader><ProjectForm project={editingProject} onSave={handleSaveProject} /></DialogContent></Dialog>
+      <Dialog open={showProjectReportDialog} onOpenChange={setShowProjectReportDialog}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Proje Bazlı Rapor</DialogTitle>
+            <DialogDescription>Rapor oluşturmak istediğiniz projeyi seçin.</DialogDescription>
+          </DialogHeader>
+          <div className="py-4 space-y-4">
+            <div className="space-y-2">
+              <label className="text-sm font-medium">Proje Seçin</label>
+              <Select value={selectedProjectForReport || ''} onValueChange={setSelectedProjectForReport}>
+                <SelectTrigger>
+                  <SelectValue placeholder="Proje seçin..." />
+                </SelectTrigger>
+                <SelectContent>
+                  {projects.length > 0 ? (
+                    projects.map(project => (
+                      <SelectItem key={project.id} value={project.id}>
+                        <div className="flex items-center gap-2">
+                          <div className="w-3 h-3 rounded-full" style={{ backgroundColor: project.color || '#3B82F6' }}></div>
+                          {project.name}
+                        </div>
+                      </SelectItem>
+                    ))
+                  ) : (
+                    <SelectItem value="no-projects" disabled>Henüz proje yok</SelectItem>
+                  )}
+                </SelectContent>
+              </Select>
+            </div>
+            {selectedProjectForReport && (
+              <div className="p-3 bg-blue-50 rounded-lg">
+                <p className="text-sm text-blue-900">
+                  <strong>Seçilen Proje:</strong> {projects.find(p => p.id === selectedProjectForReport)?.name || 'Bilinmeyen'}
+                </p>
+                {projects.find(p => p.id === selectedProjectForReport)?.description && (
+                  <p className="text-xs text-blue-700 mt-1">
+                    {projects.find(p => p.id === selectedProjectForReport)?.description}
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => { setShowProjectReportDialog(false); setSelectedProjectForReport(null); }}>
+              İptal
+            </Button>
+            <Button onClick={handleGenerateProjectReport} disabled={!selectedProjectForReport}>
+              <FileText className="h-4 w-4 mr-2" />
+              Rapor Oluştur
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
       <Dialog open={!!viewingTask} onOpenChange={() => setViewingTask(null)}>
         <DialogContent className="max-w-2xl">
           {viewingTask && <>
