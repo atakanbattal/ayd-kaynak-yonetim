@@ -135,8 +135,8 @@ import React, { useState, useEffect, useMemo } from 'react';
             ] = await Promise.all([
               supabase.from('improvements').select('*, line:lines(name), type').eq('deleted', false),
               supabase.from('scenarios').select('summary, scope, scenario_date').eq('deleted', false),
-              supabase.from('project_improvements').select('annual_impact, improvement_date, name'),
-              supabase.from('fixture_improvements').select('*').eq('deleted', false),
+              supabase.from('project_improvements').select('annual_impact, improvement_date, subject'),
+              supabase.from('fixture_improvements').select('*'),
               supabase.from('production_records').select('quantity').eq('record_date', todayStr),
               supabase.from('daily_production_summary').select('*').gte('production_date', weekAgoStr).lte('production_date', todayStr).order('production_date'),
               supabase.from('daily_production_summary').select('*').gte('production_date', sixMonthsAgoStr).lte('production_date', todayStr),
@@ -448,7 +448,7 @@ import React, { useState, useEffect, useMemo } from 'react';
             supabase.from('improvements').select('*, line:lines(name), robot:robots(name), responsible:employees(first_name, last_name), type').eq('deleted', false),
             supabase.from('scenarios').select('*, scope, line:lines(name), robot:robots(name)').eq('deleted', false),
             supabase.from('project_improvements').select('*'),
-            supabase.from('fixture_improvements').select('*, responsible:employees(first_name, last_name)').eq('deleted', false),
+            supabase.from('fixture_improvements').select('*'),
             supabase.from('production_records').select('*, robot:robots(name), employee:employees(first_name, last_name), wps:wps(wps_code), line:lines(name)').gte('record_date', dateFrom).lte('record_date', dateTo),
             supabase.from('wps').select('*, welding_process, welding_position, joint_type, material_1').order('created_at', { ascending: false }),
             supabase.from('trainings').select('*, trainer:employees(first_name, last_name), status'),
@@ -546,9 +546,9 @@ import React, { useState, useEffect, useMemo } from 'react';
 
           // 3. PROJE BAZLI İYİLEŞTİRME DETAYLI ANALİZ
           const projectImprovementSavings = projectImprovements.reduce((acc, p) => acc + (Number(p.annual_impact) || 0), 0);
-          const totalProjectCost = projectImprovements.reduce((acc, p) => acc + (Number(p.cost) || 0), 0);
+          const totalProjectCost = projectImprovements.reduce((acc, p) => acc + (Number(p.improvement_cost) || 0), 0);
           const totalProjectROI = projectImprovements.reduce((acc, p) => {
-            const cost = Number(p.cost) || 0;
+            const cost = Number(p.improvement_cost) || 0;
             const impact = Number(p.annual_impact) || 0;
             return acc + (cost > 0 ? ((impact - cost) / cost) * 100 : 0);
           }, 0);
@@ -561,7 +561,7 @@ import React, { useState, useEffect, useMemo } from 'react';
 
           // 4. FİKSTÜR İYİLEŞTİRME DETAYLI ANALİZ
           const fixturesByResponsible = fixtureImprovements.reduce((acc, f) => {
-            const name = f.responsible ? `${f.responsible.first_name} ${f.responsible.last_name}` : 'Belirtilmemiş';
+            const name = f.responsible || 'Belirtilmemiş';
             if (!acc[name]) acc[name] = 0;
             acc[name]++;
             return acc;
@@ -929,11 +929,11 @@ import React, { useState, useEffect, useMemo } from 'react';
                 tableData: {
                   headers: ['Proje Adı', 'Maliyet (₺)', 'Yıllık Kazanç (₺)', 'Net Kazanç (₺)', 'ROI (%)'],
                   rows: top5Projects.map(p => {
-                    const cost = Number(p.cost) || 0;
+                    const cost = Number(p.improvement_cost) || 0;
                     const impact = Number(p.annual_impact) || 0;
                     const roi = cost > 0 ? ((impact - cost) / cost) * 100 : 0;
                     return [
-                      (p.name || '-').substring(0, 40),
+                      (p.subject || '-').substring(0, 40),
                       formatCurrency(cost),
                 formatCurrency(impact),
                       formatCurrency(impact - cost),
