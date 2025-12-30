@@ -597,8 +597,15 @@ const ManualDataTracking = () => {
 
             // Top 10 ve Bottom 10 personel
             const employeeArray = Object.entries(employeeStats).map(([id, stats]) => ({ id, ...stats }));
+
+            // Top 10: En çok üretim yapanlar
             const top10Employees = [...employeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
-            const bottom10Employees = [...employeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
+
+            // Bottom 10: En az üretim yapanlar (ANCAK maliyeti 5.000 TL üzeri olanlar arasından)
+            const bottom10Employees = [...employeeArray]
+                .filter(e => e.cost > 5000) // Sadece 5.000 TL üstü maliyeti olanlar
+                .sort((a, b) => a.quantity - b.quantity) // En az üretimden en çoğa
+                .slice(0, 10);
 
             // En çok manuele gönderen hatlar (adet ve maliyet)
             const topManualLines = Object.entries(manualByLine)
@@ -779,13 +786,110 @@ const ManualDataTracking = () => {
                 ])
             );
 
+            // Personel detayları ve özeti
+
+            // Tüm personeli isme göre sıralayıp ekle
+            const allEmployeesSortedByName = [...employeeArray].sort((a, b) => a.name.localeCompare(b.name));
+
+            // TÜM PERSONEL ÖZET LİSTESİ
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['TÜM PERSONEL PERFORMANS ÖZETİ', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Personel', 'Toplam Adet', 'Manuel Adet', 'Tamir Adet', 'Toplam Maliyet', 'Kayıt Sayısı', 'Ort. Süre (sn)', '', ''],
+                ...allEmployeesSortedByName.map((emp, index) => [
+                    (index + 1).toString(),
+                    emp.name,
+                    emp.quantity.toLocaleString('tr-TR'),
+                    emp.manualQuantity.toLocaleString('tr-TR'),
+                    emp.repairQuantity.toLocaleString('tr-TR'),
+                    formatCurrency(emp.cost),
+                    emp.records.toString(),
+                    Math.round(emp.duration / Math.max(1, emp.records)).toString(), // Ort. Süre
+                    '', ''
+                ])
+            );
+
+            // HAT BAZLI KALİTE ANALİZİ (Tamir Oranları)
+            const lineQualityStats = {};
+            // Manuel kayıtlar
+            manualRecords.forEach(r => {
+                const lineName = r.line?.name || 'Belirtilmemiş';
+                if (!lineQualityStats[lineName]) lineQualityStats[lineName] = { manual: 0, repair: 0 };
+                lineQualityStats[lineName].manual += r.quantity || 0;
+            });
+            // Tamir kayıtları (Kaynak Hat)
+            repairRecords.forEach(r => {
+                const lineName = r.source_line?.name || 'Belirtilmemiş';
+                if (!lineQualityStats[lineName]) lineQualityStats[lineName] = { manual: 0, repair: 0 };
+                lineQualityStats[lineName].repair += r.quantity || 0;
+            });
+
+            const qualityAnalysis = Object.entries(lineQualityStats)
+                .map(([name, data]) => {
+                    const total = data.manual + data.repair;
+                    const rate = total > 0 ? (data.repair / total) * 100 : 0;
+                    return { name, ...data, total, rate };
+                })
+                .sort((a, b) => b.rate - a.rate); // En yüksek tamir oranı en üstte
+
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['HAT BAZLI KALİTE ANALİZİ (TAMİR ORANLARI)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Hat Adı', 'Toplam Üretim', 'Tamir Adedi', 'Tamir Oranı (%)', '', '', '', '', ''],
+                ...qualityAnalysis.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    line.total.toLocaleString('tr-TR'),
+                    line.repair.toLocaleString('tr-TR'),
+                    `%${line.rate.toFixed(2)}`,
+                    '', '', '', '', ''
+                ])
+            );
+
+            // PARÇA BAZLI VERİMLİLİK (Ortalama Süreler)
+            const partEfficiency = Object.entries(partStats)
+                .map(([code, data]) => ({ code, ...data, avgDuration: data.records > 0 ? (data.duration || 0) / data.records : 0 })) // data.duration manually added below? NO partStats didn't have duration. FIX: Need to aggregate duration properly
+                .sort((a, b) => b.avgDuration - a.avgDuration) // En uzun süren işler
+                .slice(0, 20);
+
+            // Re-aggregate part stats to include duration properly if not present
+            const partStatsEnhanced = {};
+            manualRecords.forEach(r => {
+                const partCode = r.part_code || 'Belirtilmemiş';
+                if (!partStatsEnhanced[partCode]) {
+                    partStatsEnhanced[partCode] = { quantity: 0, records: 0, duration: 0 };
+                }
+                partStatsEnhanced[partCode].quantity += r.quantity || 0;
+                partStatsEnhanced[partCode].records++;
+                partStatsEnhanced[partCode].duration += r.duration_seconds || 0;
+            });
+            const partEfficiencyEnhanced = Object.entries(partStatsEnhanced)
+                .map(([code, data]) => ({ code, ...data, avgDuration: data.quantity > 0 ? (data.duration / data.quantity) : 0 })) // Avg per PIECE (duration/quantity) or per RECORD? Usually per piece is efficiency. Let's do per piece.
+                .sort((a, b) => b.avgDuration - a.avgDuration)
+                .slice(0, 20);
+
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['PARÇA BAZLI VERİMLİLİK (ORTALAMA SÜRELER)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Parça Kodu', 'Toplam Adet', 'Ort. Süre (sn/adet)', 'Toplam Süre (sn)', '', '', '', '', ''],
+                ...partEfficiencyEnhanced.map((part, index) => [
+                    (index + 1).toString(),
+                    part.code,
+                    part.quantity.toLocaleString('tr-TR'),
+                    part.avgDuration.toFixed(1),
+                    part.duration.toString(),
+                    '', '', '', '', ''
+                ])
+            );
+
             // Personel bazlı parça detayları
             reportData.tableData.rows.push(
                 ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-                ['PERSONEL BAZLI PARÇA ADETLERİ', '', '', '', '', '', '', '', '', ''],
+                ['TÜM PERSONEL DETAYLI PERFORMANS (Parça Bazlı)', '', '', '', '', '', '', '', '', ''],
                 ['Personel', 'Parça Kodu', 'Adet', '', '', '', '', '', '', '']
             );
-            top10Employees.forEach(emp => {
+
+            allEmployeesSortedByName.forEach(emp => {
                 const partEntries = Object.entries(emp.parts).sort((a, b) => b[1] - a[1]);
                 partEntries.forEach(([partCode, qty]) => {
                     reportData.tableData.rows.push([
@@ -1029,7 +1133,11 @@ const ManualDataTracking = () => {
                 !e.name.includes('Bilinmeyen')
             );
             const reportTop10 = [...reportEmployeeArray].sort((a, b) => b.quantity - a.quantity).slice(0, 10);
-            const reportBottom10 = [...reportEmployeeArray].sort((a, b) => a.quantity - b.quantity).slice(0, 10);
+            // Bottom 10: En az üretim yapanlar (ANCAK maliyeti 5.000 TL üzeri olanlar arasından)
+            const reportBottom10 = [...reportEmployeeArray]
+                .filter(e => e.cost > 5000) // Sadece 5.000 TL üstü maliyeti olanlar
+                .sort((a, b) => a.quantity - b.quantity) // En az üretimden en çoğa
+                .slice(0, 10);
 
             // Top 10 Personel (bilinmeyen hariç)
             if (reportTop10.length > 0) {
@@ -1066,6 +1174,94 @@ const ManualDataTracking = () => {
                     ])
                 );
             }
+
+            // TÜM PERSONEL ÖZET LİSTESİ
+            const allEmployeesSorted = [...reportEmployeeArray].sort((a, b) => a.name.localeCompare(b.name));
+
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['TÜM PERSONEL PERFORMANS ÖZETİ', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Personel', 'Toplam Adet', 'Manuel Adet', 'Tamir Adet', 'Toplam Maliyet', 'Kayıt Sayısı', 'Ort. Süre (sn)', '', ''],
+                ...allEmployeesSorted.map((emp, index) => [
+                    (index + 1).toString(),
+                    emp.name,
+                    emp.quantity.toLocaleString('tr-TR'),
+                    emp.manualQuantity.toLocaleString('tr-TR'),
+                    emp.repairQuantity.toLocaleString('tr-TR'),
+                    formatCurrency(emp.cost),
+                    emp.records.toString(),
+                    Math.round(emp.duration / Math.max(1, emp.records)).toString(), // Ort. Süre
+                    '', ''
+                ])
+            );
+
+            // HAT BAZLI KALİTE ANALİZİ (Tamir Oranları)
+            const lineQualityStats = {};
+            // Manuel kayıtlar
+            manualRecords.forEach(r => {
+                const lineName = lines.find(l => l.id === r.line_id)?.name || 'Belirtilmemiş';
+                if (!lineQualityStats[lineName]) lineQualityStats[lineName] = { manual: 0, repair: 0 };
+                lineQualityStats[lineName].manual += r.quantity || 0;
+            });
+            // Tamir kayıtları (Kaynak Hat)
+            repairRecords.forEach(r => {
+                const lineName = lines.find(l => l.id === r.source_line_id)?.name || 'Belirtilmemiş';
+                if (!lineQualityStats[lineName]) lineQualityStats[lineName] = { manual: 0, repair: 0 };
+                lineQualityStats[lineName].repair += r.quantity || 0;
+            });
+
+            const qualityAnalysis = Object.entries(lineQualityStats)
+                .map(([name, data]) => {
+                    const total = data.manual + data.repair;
+                    const rate = total > 0 ? (data.repair / total) * 100 : 0;
+                    return { name, ...data, total, rate };
+                })
+                .sort((a, b) => b.rate - a.rate); // En yüksek tamir oranı en üstte
+
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['HAT BAZLI KALİTE ANALİZİ (TAMİR ORANLARI)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Hat Adı', 'Toplam Üretim', 'Tamir Adedi', 'Tamir Oranı (%)', '', '', '', '', ''],
+                ...qualityAnalysis.map((line, index) => [
+                    (index + 1).toString(),
+                    line.name,
+                    line.total.toLocaleString('tr-TR'),
+                    line.repair.toLocaleString('tr-TR'),
+                    `%${line.rate.toFixed(2)}`,
+                    '', '', '', '', ''
+                ])
+            );
+
+            // PARÇA BAZLI VERİMLİLİK (Ortalama Süreler)
+            const partStatsEnhanced = {};
+            manualRecords.forEach(r => {
+                const partCode = r.part_code || 'Belirtilmemiş';
+                if (!partStatsEnhanced[partCode]) {
+                    partStatsEnhanced[partCode] = { quantity: 0, records: 0, duration: 0 };
+                }
+                partStatsEnhanced[partCode].quantity += r.quantity || 0;
+                partStatsEnhanced[partCode].records++;
+                partStatsEnhanced[partCode].duration += r.duration_seconds || 0;
+            });
+
+            const partEfficiencyEnhanced = Object.entries(partStatsEnhanced)
+                .map(([code, data]) => ({ code, ...data, avgDuration: data.quantity > 0 ? (data.duration / data.quantity) : 0 }))
+                .sort((a, b) => b.avgDuration - a.avgDuration)
+                .slice(0, 20);
+
+            reportData.tableData.rows.push(
+                ['===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+                ['PARÇA BAZLI VERİMLİLİK (ORTALAMA SÜRELER)', '', '', '', '', '', '', '', '', ''],
+                ['Sıra', 'Parça Kodu', 'Toplam Adet', 'Ort. Süre (sn/adet)', 'Toplam Süre (sn)', '', '', '', '', ''],
+                ...partEfficiencyEnhanced.map((part, index) => [
+                    (index + 1).toString(),
+                    part.code,
+                    part.quantity.toLocaleString('tr-TR'),
+                    part.avgDuration.toFixed(1),
+                    part.duration.toString(),
+                    '', '', '', '', ''
+                ])
+            );
 
             // En çok manuele gönderen hatlar
             reportData.tableData.rows.push(
