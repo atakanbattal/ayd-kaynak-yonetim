@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DndContext, closestCorners, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
+import { DndContext, closestCorners, PointerSensor, useSensor, useSensors, useDroppable, DragOverlay } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
@@ -422,6 +422,12 @@ const TaskManager = ({ user }) => {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  const handleDragStart = (event) => {
+    const { active } = event;
+    const task = tasks.find(t => t.id === active.id);
+    setActiveTask(task);
+  };
+
   const handleDragOver = (event) => {
     const { over } = event;
     if (!over) {
@@ -493,6 +499,7 @@ const TaskManager = ({ user }) => {
     const { active, over } = event;
     if (!over) {
       setOverColumnId(null);
+      setActiveTask(null);
       return;
     }
     
@@ -508,35 +515,24 @@ const TaskManager = ({ user }) => {
     }
     // 2. DOM'dan data-status attribute'unu kontrol et
     else {
-      // Önce overId ile kolonu bul - özel karakterler için escape et
+      // Önce overId ile kolonu bul - özel karakterler için tüm kolonları kontrol et
       let columnElement = null;
-      try {
-        // QuerySelector için özel karakterleri escape et
-        const escapedOverId = CSS.escape(overId);
-        columnElement = document.querySelector(`[data-column-id="${escapedOverId}"]`);
-      } catch (e) {
-        // Escape başarısız olursa, tüm kolonları kontrol et
-        const allColumns = document.querySelectorAll('[data-column-id]');
-        for (const col of allColumns) {
-          if (col.getAttribute('data-column-id') === overId) {
-            columnElement = col;
-            break;
-          }
+      const allColumns = document.querySelectorAll('[data-column-id]');
+      for (const col of allColumns) {
+        const colId = col.getAttribute('data-column-id');
+        if (colId === overId) {
+          columnElement = col;
+          break;
         }
       }
       
       // Eğer bulunamadıysa, overColumnId ile dene
       if (!columnElement && overColumnId) {
-        try {
-          const escapedOverColumnId = CSS.escape(overColumnId);
-          columnElement = document.querySelector(`[data-column-id="${escapedOverColumnId}"]`);
-        } catch (e) {
-          const allColumns = document.querySelectorAll('[data-column-id]');
-          for (const col of allColumns) {
-            if (col.getAttribute('data-column-id') === overColumnId) {
-              columnElement = col;
-              break;
-            }
+        for (const col of allColumns) {
+          const colId = col.getAttribute('data-column-id');
+          if (colId === overColumnId) {
+            columnElement = col;
+            break;
           }
         }
       }
@@ -618,10 +614,12 @@ const TaskManager = ({ user }) => {
     }
     
     setOverColumnId(null);
+    setActiveTask(null);
     
     // Eğer kolon bulunamadıysa veya aynı kolona bırakıldıysa işlem yapma
     if (!overContainer) {
       console.log('Kolon bulunamadı:', { overId, overData, activeId, overColumnId });
+      setActiveTask(null);
       return;
     }
     
@@ -1118,7 +1116,17 @@ const TaskManager = ({ user }) => {
                 {(searchTerm || filterAssignee) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
               
-              <DndContext sensors={sensors} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+                <DragOverlay>
+                  {activeTask ? (
+                    <Card className="bg-white shadow-2xl ring-2 ring-blue-400 opacity-95 rotate-2" style={{ zIndex: 10000, minWidth: '200px' }}>
+                      <CardContent className="p-3">
+                        <p className="font-medium text-sm leading-snug text-gray-900">{activeTask.title}</p>
+                        <p className="text-xs text-gray-700 mt-1">{activeTask.assignee_name}</p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </DragOverlay>
                 <div className="space-y-4">
                   {/* Projeler ve Görevler */}
                   {projects.map(project => (
@@ -1251,7 +1259,17 @@ const TaskManager = ({ user }) => {
                 <Input placeholder="Etiket filtrele..." value={filterTag} onChange={e => setFilterTag(e.target.value)} className="w-full sm:w-[180px]" />
                 {(searchTerm || filterAssignee || filterTag) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); setFilterTag(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
-              <DndContext sensors={sensors} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+              <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+                <DragOverlay>
+                  {activeTask ? (
+                    <Card className="bg-white shadow-2xl ring-2 ring-blue-400 opacity-95 rotate-2" style={{ zIndex: 10000, minWidth: '200px' }}>
+                      <CardContent className="p-3">
+                        <p className="font-medium text-sm leading-snug text-gray-900">{activeTask.title}</p>
+                        <p className="text-xs text-gray-700 mt-1">{activeTask.assignee_name}</p>
+                      </CardContent>
+                    </Card>
+                  ) : null}
+                </DragOverlay>
                 <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
                   <TaskColumn id="todo" title={statusMap['todo']} tasks={columns.todo} onSelectTask={setViewingTask} />
                   <TaskColumn id="in-progress" title={statusMap['in-progress']} tasks={columns['in-progress']} onSelectTask={setViewingTask} />
