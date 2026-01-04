@@ -111,6 +111,14 @@ import React, { useState, useEffect, useCallback } from 'react';
              return;
         }
 
+        // Eğitmen adını formatla: İsim camel case (ilk harf büyük), soyisim tamamen büyük
+        const formatTrainerName = (trainer) => {
+          if (!trainer) return 'Eğitmen';
+          const firstName = trainer.first_name ? trainer.first_name.charAt(0).toUpperCase() + trainer.first_name.slice(1).toLowerCase() : '';
+          const lastName = trainer.last_name ? trainer.last_name.toUpperCase() : '';
+          return `${firstName} ${lastName}`.trim();
+        };
+
         const reportData = {
           title: `Sertifika - ${employee.first_name} ${employee.last_name}`,
           certificateData: {
@@ -118,7 +126,7 @@ import React, { useState, useEffect, useCallback } from 'react';
             trainingName: trainingName,
             issueDate: new Date(certificate.issue_date).toLocaleDateString('tr-TR'),
             certificateNumber: certificate.certificate_number,
-            trainerName: trainer ? `${trainer.first_name} ${trainer.last_name}`.toUpperCase() : 'Eğitmen',
+            trainerName: formatTrainerName(trainer),
           }
         };
         openPrintWindow(reportData, toast);
