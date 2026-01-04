@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
+import { DndContext, closestCorners, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
@@ -93,17 +93,30 @@ const TaskCard = ({ task, onSelect, compact = false }) => {
 };
 
 const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
-  const { setNodeRef, isOver } = useDroppable({ id });
+  const { setNodeRef, isOver } = useDroppable({ 
+    id,
+    data: {
+      type: 'column',
+      status: id
+    }
+  });
   
   return (
     <div 
       ref={setNodeRef} 
-      className={`bg-gray-100 rounded-lg p-3 w-full md:w-1/3 transition-colors ${isOver ? 'bg-gray-200 ring-2 ring-blue-400' : ''}`}
+      className={`bg-gray-100 rounded-lg p-3 w-full md:w-1/3 transition-colors ${isOver ? 'bg-blue-50 ring-2 ring-blue-400' : ''}`}
       data-column-id={id}
+      style={{ minHeight: '300px' }}
     >
       <h3 className="font-semibold text-gray-700 mb-4 px-1">{title} ({tasks.length})</h3>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="min-h-[200px]">{tasks.map(task => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />)}</div>
+        <div className="min-h-[250px]">
+          {tasks.length > 0 ? (
+            tasks.map(task => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />)
+          ) : (
+            <div className="text-sm text-gray-400 text-center py-8">Görevleri buraya sürükleyin</div>
+          )}
+        </div>
       </SortableContext>
     </div>
   );
@@ -111,14 +124,22 @@ const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
 
 const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
   const columnId = `${projectId}-${id}`;
-  const { setNodeRef, isOver } = useDroppable({ id: columnId });
+  const { setNodeRef, isOver } = useDroppable({ 
+    id: columnId,
+    data: {
+      type: 'column',
+      status: id,
+      projectId: projectId
+    }
+  });
   
   return (
     <div 
       ref={setNodeRef} 
-      className={`bg-white rounded-lg p-2 transition-colors ${isOver ? 'bg-gray-100 ring-2 ring-blue-400' : ''}`}
+      className={`bg-white rounded-lg p-2 transition-colors ${isOver ? 'bg-blue-50 ring-2 ring-blue-400' : ''}`}
       data-column-id={columnId}
       data-status={id}
+      style={{ minHeight: '150px' }}
     >
       <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
         {id === 'todo' && <Clock className="h-4 w-4 text-blue-600" />}
@@ -129,10 +150,14 @@ const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
         </span>
       </h4>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="min-h-[100px] space-y-1">
-          {tasks.map(task => (
-            <TaskCard key={task.id} task={task} onSelect={onSelectTask} compact={true} />
-          ))}
+        <div className="min-h-[120px] space-y-1">
+          {tasks.length > 0 ? (
+            tasks.map(task => (
+              <TaskCard key={task.id} task={task} onSelect={onSelectTask} compact={true} />
+            ))
+          ) : (
+            <div className="text-xs text-gray-400 text-center py-4">Görevleri buraya sürükleyin</div>
+          )}
         </div>
       </SortableContext>
     </div>
@@ -395,38 +420,65 @@ const TaskManager = ({ user }) => {
     
     const activeId = active.id;
     const overId = over.id;
+    const overData = over.data.current;
     
-    // Eğer over bir kolon ise (todo, in-progress, done veya projectId-status formatında)
+    // Eğer over bir kolon ise, data'dan status'ü al
     let overContainer = null;
     
-    // Direkt kolon ID'leri (Kanban sekmesi için)
-    if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
-      overContainer = overId;
-    } 
-    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için: projectId-status)
-    else if (typeof overId === 'string' && overId.includes('-')) {
-      const parts = overId.split('-');
-      const lastPart = parts[parts.length - 1];
-      if (lastPart === 'todo' || lastPart === 'in-progress' || lastPart === 'done') {
-        overContainer = lastPart;
-      }
+    // Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
+    if (overData?.type === 'column' && overData?.status) {
+      overContainer = overData.status;
     }
-    // Eğer over bir görev kartı ise, o görevin bulunduğu kolonu bul
-    else {
-      const task = tasks.find(t => t.id === overId);
-      if (task) {
-        overContainer = task.status;
-      } else {
-        // Kolon container'ını bulmaya çalış
-        overContainer = findContainer(overId);
+    // Direkt kolon ID'leri (Kanban sekmesi için)
+    else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
+      overContainer = overId;
+    }
+    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için: projectId-status)
+    else if (typeof overId === 'string') {
+      // in-progress için özel kontrol (tire içerdiği için split ile sorun çıkarabilir)
+      if (overId.includes('-in-progress') && overId.endsWith('-in-progress')) {
+        overContainer = 'in-progress';
+      } 
+      // todo ve done için kontrol
+      else if (overId.endsWith('-todo')) {
+        overContainer = 'todo';
+      } 
+      else if (overId.endsWith('-done')) {
+        overContainer = 'done';
+      }
+      // Eğer over bir görev kartı ise, o görevin bulunduğu kolonu bul
+      else {
+        const task = tasks.find(t => t.id === overId);
+        if (task) {
+          overContainer = task.status;
+        } else {
+          // DOM'dan data-status attribute'unu kontrol et
+          const element = document.querySelector(`[data-column-id="${overId}"]`);
+          if (element) {
+            const status = element.getAttribute('data-status');
+            if (status && (status === 'todo' || status === 'in-progress' || status === 'done')) {
+              overContainer = status;
+            }
+          }
+        }
       }
     }
     
     // Eğer kolon bulunamadıysa veya aynı kolona bırakıldıysa işlem yapma
-    if (!overContainer) return;
+    if (!overContainer) {
+      console.log('Kolon bulunamadı:', { overId, overData });
+      return;
+    }
     
     const activeTask = tasks.find(t => t.id === activeId);
-    if (!activeTask || activeTask.status === overContainer) return;
+    if (!activeTask) {
+      console.log('Aktif görev bulunamadı:', activeId);
+      return;
+    }
+    
+    if (activeTask.status === overContainer) {
+      return; // Aynı kolona bırakıldı, işlem yapma
+    }
     
     // Durumu güncelle
     const { error } = await supabase
@@ -440,6 +492,7 @@ const TaskManager = ({ user }) => {
         description: "Görev durumu güncellenirken bir hata oluştu.", 
         variant: "destructive" 
       });
+      console.error('Görev güncelleme hatası:', error);
       return;
     }
     
@@ -451,24 +504,6 @@ const TaskManager = ({ user }) => {
     });
     
     logAction('UPDATE_TASK_STATUS', `Görev durumu güncellendi: ${activeId} -> ${overContainer}`, authUser);
-  };
-  
-  const findContainer = (id) => {
-    // Kolon ID'lerini kontrol et
-    if (id === 'todo' || id === 'in-progress' || id === 'done') {
-      return id;
-    }
-    // Proje bazlı kolon ID'leri için
-    if (typeof id === 'string' && id.includes('-')) {
-      const parts = id.split('-');
-      const lastPart = parts[parts.length - 1];
-      if (lastPart === 'todo' || lastPart === 'in-progress' || lastPart === 'done') {
-        return lastPart;
-      }
-    }
-    // Görev ID'si ise, görevin bulunduğu kolonu bul
-    const task = tasks.find(t => t.id === id);
-    return task ? task.status : null;
   };
 
   const handleSaveTask = async (taskData) => {
@@ -923,7 +958,7 @@ const TaskManager = ({ user }) => {
                 {(searchTerm || filterAssignee) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
               
-              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
+              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
                 <div className="space-y-4">
                   {/* Projeler ve Görevler */}
                   {projects.map(project => (
@@ -1056,7 +1091,7 @@ const TaskManager = ({ user }) => {
                 <Input placeholder="Etiket filtrele..." value={filterTag} onChange={e => setFilterTag(e.target.value)} className="w-full sm:w-[180px]" />
                 {(searchTerm || filterAssignee || filterTag) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); setFilterTag(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
-              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
+              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
                 <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
                   <TaskColumn id="todo" title={statusMap['todo']} tasks={columns.todo} onSelectTask={setViewingTask} />
                   <TaskColumn id="in-progress" title={statusMap['in-progress']} tasks={columns['in-progress']} onSelectTask={setViewingTask} />
