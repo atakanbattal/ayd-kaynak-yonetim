@@ -429,23 +429,37 @@ const TaskManager = ({ user }) => {
     // Kolon ID'sini bul
     let columnId = null;
     
+    // Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
     if (overData?.type === 'column' && overData?.status) {
-      // Kolonun kendisi
       columnId = overId;
-    } else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
+    }
+    // Direkt kolon ID'leri (Kanban sekmesi için)
+    else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
       columnId = overId;
-    } else if (typeof overId === 'string') {
-      // Proje bazlı kolon ID'leri
-      if (overId.endsWith('-todo') || overId.endsWith('-in-progress') || overId.endsWith('-done')) {
+    }
+    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için)
+    else if (typeof overId === 'string') {
+      // in-progress için özel kontrol (tire içerdiği için)
+      if (overId.includes('-in-progress') && (overId.endsWith('-in-progress') || overId === 'in-progress')) {
         columnId = overId;
-      } else {
-        // Görev kartı üzerindeyse, parent kolonu bul
+      }
+      // todo için kontrol
+      else if (overId.endsWith('-todo') || overId === 'todo') {
+        columnId = overId;
+      }
+      // done için kontrol
+      else if (overId.endsWith('-done') || overId === 'done') {
+        columnId = overId;
+      }
+      // Görev kartı üzerindeyse, parent kolonu bul
+      else {
         const task = tasks.find(t => t.id === overId);
         if (task) {
-          // Görevin bulunduğu kolonu bul
-          const element = document.querySelector(`[data-column-id*="${task.status}"]`);
+          // Görevin bulunduğu kolonu bul - data-status kullanarak
+          const status = task.status;
+          const element = document.querySelector(`[data-status="${status}"]`);
           if (element) {
-            columnId = element.getAttribute('data-column-id');
+            columnId = element.getAttribute('data-column-id') || overId;
           }
         }
       }
@@ -465,78 +479,68 @@ const TaskManager = ({ user }) => {
     const overId = over.id;
     const overData = over.data.current;
     
-    // Önce overColumnId state'ini kullan (handleDragOver'dan gelen)
     let overContainer = null;
-    let columnIdToCheck = overColumnId || overId;
     
-    // Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
+    // 1. Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
     if (overData?.type === 'column' && overData?.status) {
       overContainer = overData.status;
     }
-    // Direkt kolon ID'leri (Kanban sekmesi için)
-    else if (columnIdToCheck === 'todo' || columnIdToCheck === 'in-progress' || columnIdToCheck === 'done') {
-      overContainer = columnIdToCheck;
-    }
-    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için: projectId-status)
-    else if (typeof columnIdToCheck === 'string') {
-      // in-progress için özel kontrol
-      if (columnIdToCheck.endsWith('-in-progress')) {
-        overContainer = 'in-progress';
-      } 
-      // todo için kontrol
-      else if (columnIdToCheck.endsWith('-todo')) {
-        overContainer = 'todo';
-      } 
-      // done için kontrol
-      else if (columnIdToCheck.endsWith('-done')) {
-        overContainer = 'done';
+    // 2. DOM'dan data-status attribute'unu kontrol et
+    else {
+      // Önce overId ile kolonu bul
+      let columnElement = document.querySelector(`[data-column-id="${overId}"]`);
+      
+      // Eğer bulunamadıysa, overColumnId ile dene
+      if (!columnElement && overColumnId) {
+        columnElement = document.querySelector(`[data-column-id="${overColumnId}"]`);
       }
-      // Eğer over bir görev kartı ise, DOM'dan parent kolonu bul
-      else {
-        const task = tasks.find(t => t.id === overId);
-        if (task) {
-          // Görev kartının üzerine bırakıldıysa, parent kolonu bul
-          const taskElement = document.querySelector(`[data-task-id="${overId}"]`) || 
-                             document.querySelector(`[data-id="${overId}"]`);
-          if (taskElement) {
-            const columnElement = taskElement.closest('[data-column-id]');
-            if (columnElement) {
-              const status = columnElement.getAttribute('data-status');
-              if (status) {
-                overContainer = status;
-              } else {
-                // Fallback: görevin mevcut status'ünü kullan (aynı kolona bırakıldı demektir)
-                overContainer = task.status;
-              }
-            } else {
-              overContainer = task.status;
-            }
-          } else {
-            overContainer = task.status;
-          }
-        } else {
-          // DOM'dan data-status attribute'unu kontrol et
-          const element = document.querySelector(`[data-column-id="${columnIdToCheck}"]`);
-          if (element) {
-            const status = element.getAttribute('data-status');
-            if (status && (status === 'todo' || status === 'in-progress' || status === 'done')) {
-              overContainer = status;
-            }
-          }
+      
+      // Eğer hala bulunamadıysa, görev kartının parent kolonunu bul
+      if (!columnElement) {
+        const taskElement = document.querySelector(`[data-task-id="${overId}"]`);
+        if (taskElement) {
+          columnElement = taskElement.closest('[data-column-id]');
+        }
+      }
+      
+      // Kolon elementinden data-status'ü al
+      if (columnElement) {
+        const status = columnElement.getAttribute('data-status');
+        if (status && (status === 'todo' || status === 'in-progress' || status === 'done')) {
+          overContainer = status;
         }
       }
     }
     
-    // Eğer hala kolon bulunamadıysa, overId'yi direkt kontrol et
-    if (!overContainer && typeof overId === 'string') {
-      if (overId.endsWith('-todo')) {
-        overContainer = 'todo';
-      } else if (overId.endsWith('-in-progress')) {
-        overContainer = 'in-progress';
-      } else if (overId.endsWith('-done')) {
-        overContainer = 'done';
-      } else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
-        overContainer = overId;
+    // 3. Fallback: Direkt ID kontrolü
+    if (!overContainer) {
+      const idToCheck = overColumnId || overId;
+      
+      // Direkt kolon ID'leri
+      if (idToCheck === 'todo' || idToCheck === 'in-progress' || idToCheck === 'done') {
+        overContainer = idToCheck;
+      }
+      // Proje bazlı kolon ID'leri
+      else if (typeof idToCheck === 'string') {
+        // in-progress için özel kontrol
+        if (idToCheck.includes('-in-progress') && (idToCheck.endsWith('-in-progress') || idToCheck === 'in-progress')) {
+          overContainer = 'in-progress';
+        }
+        // todo için kontrol
+        else if (idToCheck.endsWith('-todo') || idToCheck === 'todo') {
+          overContainer = 'todo';
+        }
+        // done için kontrol
+        else if (idToCheck.endsWith('-done') || idToCheck === 'done') {
+          overContainer = 'done';
+        }
+        // Görev kartı üzerindeyse, görevin status'ünü kullan (aynı kolona bırakıldı demektir)
+        else {
+          const task = tasks.find(t => t.id === overId);
+          if (task) {
+            overContainer = task.status;
+          }
+        }
       }
     }
     
