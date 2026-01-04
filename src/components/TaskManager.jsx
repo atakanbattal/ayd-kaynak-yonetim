@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useMemo } from 'react';
-import { DndContext, closestCenter, PointerSensor, useSensor, useSensors } from '@dnd-kit/core';
+import { DndContext, closestCenter, PointerSensor, useSensor, useSensors, useDroppable } from '@dnd-kit/core';
 import { SortableContext, useSortable, verticalListSortingStrategy, arrayMove } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { motion } from 'framer-motion';
@@ -39,26 +39,32 @@ const statusMap = {
 };
 
 const TaskCard = ({ task, onSelect }) => {
-  const { attributes, listeners, setNodeRef, transform, transition } = useSortable({ id: task.id });
-  const style = { transform: CSS.Transform.toString(transform), transition };
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
+  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const priority = priorityMap[task.priority] || priorityMap.medium;
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
-      <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onSelect(task)}>
+      <Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-3">
           <div className="flex items-start justify-between">
-            <p className="font-medium text-sm leading-snug">{task.title}</p>
-            <div {...listeners} className="cursor-grab p-1 text-gray-400 hover:text-gray-600"><GripVertical className="h-4 w-4" /></div>
-          </div>
-          {task.description && <p className="text-xs text-gray-600 mt-2 line-clamp-2">{task.description}</p>}
-          <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
-            <div className="flex items-center space-x-2 overflow-hidden">
-              <div className={`flex items-center space-x-1 ${priority.color}`}>{React.cloneElement(priority.icon, {})}<span>{priority.label}</span></div>
-              {task.due_date && <div className="flex items-center space-x-1"><CalendarIcon className="h-3 w-3" /><span>{format(new Date(task.due_date), 'dd MMM', { locale: tr })}</span></div>}
-              {task.tags && task.tags.split(',').map(tag => tag.trim() && <div key={tag} className="flex items-center space-x-1 bg-gray-200 px-1.5 py-0.5 rounded"><Tag className="h-3 w-3" /><span>{tag}</span></div>)}
+            <div className="flex-1 cursor-pointer" onClick={() => onSelect(task)}>
+              <p className="font-medium text-sm leading-snug">{task.title}</p>
             </div>
-            <div className="flex items-center space-x-1 flex-shrink-0"><User className="h-3 w-3" /><span>{task.assignee_name}</span></div>
+            <div {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 touch-none">
+              <GripVertical className="h-4 w-4" />
+            </div>
+          </div>
+          <div className="cursor-pointer" onClick={() => onSelect(task)}>
+            {task.description && <p className="text-xs text-gray-600 mt-2 line-clamp-2">{task.description}</p>}
+            <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+              <div className="flex items-center space-x-2 overflow-hidden">
+                <div className={`flex items-center space-x-1 ${priority.color}`}>{React.cloneElement(priority.icon, {})}<span>{priority.label}</span></div>
+                {task.due_date && <div className="flex items-center space-x-1"><CalendarIcon className="h-3 w-3" /><span>{format(new Date(task.due_date), 'dd MMM', { locale: tr })}</span></div>}
+                {task.tags && task.tags.split(',').map(tag => tag.trim() && <div key={tag} className="flex items-center space-x-1 bg-gray-200 px-1.5 py-0.5 rounded"><Tag className="h-3 w-3" /><span>{tag}</span></div>)}
+              </div>
+              <div className="flex items-center space-x-1 flex-shrink-0"><User className="h-3 w-3" /><span>{task.assignee_name}</span></div>
+            </div>
           </div>
         </CardContent>
       </Card>
@@ -67,9 +73,14 @@ const TaskCard = ({ task, onSelect }) => {
 };
 
 const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
-  const { setNodeRef } = useSortable({ id });
+  const { setNodeRef, isOver } = useDroppable({ id });
+  
   return (
-    <div ref={setNodeRef} className="bg-gray-100 rounded-lg p-3 w-full md:w-1/3">
+    <div 
+      ref={setNodeRef} 
+      className={`bg-gray-100 rounded-lg p-3 w-full md:w-1/3 transition-colors ${isOver ? 'bg-gray-200 ring-2 ring-blue-400' : ''}`}
+      data-column-id={id}
+    >
       <h3 className="font-semibold text-gray-700 mb-4 px-1">{title} ({tasks.length})</h3>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
         <div className="min-h-[200px]">{tasks.map(task => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />)}</div>
@@ -331,26 +342,64 @@ const TaskManager = ({ user }) => {
   const handleDragEnd = async (event) => {
     const { active, over } = event;
     if (!over) return;
+    
     const activeId = active.id;
-    const overContainer = findContainer(over.id);
+    const overId = over.id;
+    
+    // Eğer over bir kolon ise (todo, in-progress, done)
+    let overContainer = null;
+    if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
+      overContainer = overId;
+    } else {
+      // Eğer over bir görev kartı ise, o görevin bulunduğu kolonu bul
+      const task = tasks.find(t => t.id === overId);
+      if (task) {
+        overContainer = task.status;
+      } else {
+        // Kolon container'ını bulmaya çalış
+        overContainer = findContainer(overId);
+      }
+    }
+    
+    // Eğer kolon bulunamadıysa veya aynı kolona bırakıldıysa işlem yapma
     if (!overContainer) return;
+    
+    const activeTask = tasks.find(t => t.id === activeId);
+    if (!activeTask || activeTask.status === overContainer) return;
+    
+    // Durumu güncelle
+    const { error } = await supabase
+      .from('tasks')
+      .update({ status: overContainer })
+      .eq('id', activeId);
+    
+    if (error) {
+      toast({ 
+        title: "Hata", 
+        description: "Görev durumu güncellenirken bir hata oluştu.", 
+        variant: "destructive" 
+      });
+      return;
+    }
+    
+    // UI'ı güncelle
     setTasks((prevTasks) => {
-      const activeIndex = prevTasks.findIndex((t) => t.id === activeId);
-      if (activeIndex === -1) return prevTasks;
-      const newTasks = [...prevTasks];
-      newTasks[activeIndex].status = overContainer;
-      return arrayMove(newTasks, activeIndex, newTasks.length -1);
+      return prevTasks.map(task => 
+        task.id === activeId ? { ...task, status: overContainer } : task
+      );
     });
-    await supabase.from('tasks').update({ status: overContainer }).eq('id', activeId);
-    fetchTasks();
+    
+    logAction('UPDATE_TASK_STATUS', `Görev durumu güncellendi: ${activeId} -> ${overContainer}`, authUser);
   };
   
   const findContainer = (id) => {
-    if (id in columns) return id;
-    for (const containerId of Object.keys(columns)) {
-      if (columns[containerId].find((item) => item.id === id)) return containerId;
+    // Kolon ID'lerini kontrol et
+    if (id === 'todo' || id === 'in-progress' || id === 'done') {
+      return id;
     }
-    return null;
+    // Görev ID'si ise, görevin bulunduğu kolonu bul
+    const task = tasks.find(t => t.id === id);
+    return task ? task.status : null;
   };
 
   const handleSaveTask = async (taskData) => {
