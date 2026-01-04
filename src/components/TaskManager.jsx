@@ -184,6 +184,7 @@ const TaskManager = ({ user }) => {
   const [expandedProjects, setExpandedProjects] = useState({});
   const [selectedProject, setSelectedProject] = useState(null);
   const [overColumnId, setOverColumnId] = useState(null);
+  const [activeTask, setActiveTask] = useState(null);
   const { toast } = useToast();
   const { user: authUser } = useAuth();
 
