@@ -40,18 +40,24 @@ const statusMap = {
 
 const TaskCard = ({ task, onSelect, compact = false }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
-  const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
+  const style = { 
+    transform: CSS.Transform.toString(transform), 
+    transition, 
+    opacity: isDragging ? 0.8 : 1,
+    zIndex: isDragging ? 9999 : 1,
+    position: 'relative'
+  };
   const priority = priorityMap[task.priority] || priorityMap.medium;
 
   if (compact) {
     return (
-      <div ref={setNodeRef} style={style} {...attributes} data-task-id={task.id}>
-        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onSelect(task)}>
+      <div ref={setNodeRef} style={style} {...attributes} data-task-id={task.id} className={isDragging ? 'z-[9999]' : ''}>
+        <Card className={`hover:shadow-md transition-shadow cursor-pointer ${isDragging ? 'shadow-2xl ring-2 ring-blue-400' : ''}`} onClick={() => onSelect(task)}>
           <CardContent className="p-2">
             <div className="flex items-start justify-between gap-2">
               <div className="flex-1 min-w-0">
-                <p className="font-medium text-xs leading-snug">{task.title}</p>
-                <p className="text-xs text-gray-500 mt-1 truncate">{task.assignee_name}</p>
+                <p className={`font-medium text-xs leading-snug ${isDragging ? 'text-gray-900' : ''}`}>{task.title}</p>
+                <p className={`text-xs mt-1 truncate ${isDragging ? 'text-gray-700' : 'text-gray-500'}`}>{task.assignee_name}</p>
               </div>
               <div {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 touch-none flex-shrink-0" onClick={(e) => e.stopPropagation()}>
                 <GripVertical className="h-3 w-3" />
@@ -64,20 +70,20 @@ const TaskCard = ({ task, onSelect, compact = false }) => {
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} className="mb-3" data-task-id={task.id}>
-      <Card className="hover:shadow-md transition-shadow">
+    <div ref={setNodeRef} style={style} {...attributes} className={`mb-3 ${isDragging ? 'z-[9999]' : ''}`} data-task-id={task.id}>
+      <Card className={`hover:shadow-md transition-shadow ${isDragging ? 'shadow-2xl ring-2 ring-blue-400' : ''}`}>
         <CardContent className="p-3">
           <div className="flex items-start justify-between">
             <div className="flex-1 cursor-pointer" onClick={() => onSelect(task)}>
-              <p className="font-medium text-sm leading-snug">{task.title}</p>
+              <p className={`font-medium text-sm leading-snug ${isDragging ? 'text-gray-900' : ''}`}>{task.title}</p>
             </div>
             <div {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 touch-none">
               <GripVertical className="h-4 w-4" />
             </div>
           </div>
           <div className="cursor-pointer" onClick={() => onSelect(task)}>
-            {task.description && <p className="text-xs text-gray-600 mt-2 line-clamp-2">{task.description}</p>}
-            <div className="flex items-center justify-between mt-3 text-xs text-gray-500">
+            {task.description && <p className={`text-xs mt-2 line-clamp-2 ${isDragging ? 'text-gray-700' : 'text-gray-600'}`}>{task.description}</p>}
+            <div className={`flex items-center justify-between mt-3 text-xs ${isDragging ? 'text-gray-700' : 'text-gray-500'}`}>
               <div className="flex items-center space-x-2 overflow-hidden">
                 <div className={`flex items-center space-x-1 ${priority.color}`}>{React.cloneElement(priority.icon, {})}<span>{priority.label}</span></div>
                 {task.due_date && <div className="flex items-center space-x-1"><CalendarIcon className="h-3 w-3" /><span>{format(new Date(task.due_date), 'dd MMM', { locale: tr })}</span></div>}
@@ -437,18 +443,18 @@ const TaskManager = ({ user }) => {
     else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
       columnId = overId;
     }
-    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için)
+    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için) - regex ile kontrol
     else if (typeof overId === 'string') {
-      // in-progress için özel kontrol (tire içerdiği için)
-      if (overId.includes('-in-progress') && (overId.endsWith('-in-progress') || overId === 'in-progress')) {
+      // in-progress için özel kontrol - regex ile
+      if (/in-progress$/.test(overId) || overId === 'in-progress') {
         columnId = overId;
       }
       // todo için kontrol
-      else if (overId.endsWith('-todo') || overId === 'todo') {
+      else if (/todo$/.test(overId) || overId === 'todo') {
         columnId = overId;
       }
       // done için kontrol
-      else if (overId.endsWith('-done') || overId === 'done') {
+      else if (/done$/.test(overId) || overId === 'done') {
         columnId = overId;
       }
       // Görev kartı üzerindeyse, parent kolonu bul
@@ -457,9 +463,24 @@ const TaskManager = ({ user }) => {
         if (task) {
           // Görevin bulunduğu kolonu bul - data-status kullanarak
           const status = task.status;
-          const element = document.querySelector(`[data-status="${status}"]`);
-          if (element) {
-            columnId = element.getAttribute('data-column-id') || overId;
+          const elements = document.querySelectorAll(`[data-status="${status}"]`);
+          if (elements.length > 0) {
+            // Aktif görevin projesine göre kolonu bul
+            const activeId = event.active?.id;
+            const activeTask = tasks.find(t => t.id === activeId);
+            if (activeTask && activeTask.project_id) {
+              for (const element of elements) {
+                const colId = element.getAttribute('data-column-id');
+                if (colId && colId.startsWith(activeTask.project_id + '-')) {
+                  columnId = colId;
+                  break;
+                }
+              }
+            }
+            // Bulunamazsa ilk kolonu kullan
+            if (!columnId && elements.length > 0) {
+              columnId = elements[0].getAttribute('data-column-id') || overId;
+            }
           }
         }
       }
@@ -487,19 +508,71 @@ const TaskManager = ({ user }) => {
     }
     // 2. DOM'dan data-status attribute'unu kontrol et
     else {
-      // Önce overId ile kolonu bul
-      let columnElement = document.querySelector(`[data-column-id="${overId}"]`);
+      // Önce overId ile kolonu bul - özel karakterler için escape et
+      let columnElement = null;
+      try {
+        // QuerySelector için özel karakterleri escape et
+        const escapedOverId = CSS.escape(overId);
+        columnElement = document.querySelector(`[data-column-id="${escapedOverId}"]`);
+      } catch (e) {
+        // Escape başarısız olursa, tüm kolonları kontrol et
+        const allColumns = document.querySelectorAll('[data-column-id]');
+        for (const col of allColumns) {
+          if (col.getAttribute('data-column-id') === overId) {
+            columnElement = col;
+            break;
+          }
+        }
+      }
       
       // Eğer bulunamadıysa, overColumnId ile dene
       if (!columnElement && overColumnId) {
-        columnElement = document.querySelector(`[data-column-id="${overColumnId}"]`);
+        try {
+          const escapedOverColumnId = CSS.escape(overColumnId);
+          columnElement = document.querySelector(`[data-column-id="${escapedOverColumnId}"]`);
+        } catch (e) {
+          const allColumns = document.querySelectorAll('[data-column-id]');
+          for (const col of allColumns) {
+            if (col.getAttribute('data-column-id') === overColumnId) {
+              columnElement = col;
+              break;
+            }
+          }
+        }
       }
       
       // Eğer hala bulunamadıysa, görev kartının parent kolonunu bul
       if (!columnElement) {
-        const taskElement = document.querySelector(`[data-task-id="${overId}"]`);
+        const taskElement = document.querySelector(`[data-task-id="${activeId}"]`);
         if (taskElement) {
           columnElement = taskElement.closest('[data-column-id]');
+        }
+      }
+      
+      // Eğer hala bulunamadıysa, overId'nin bir görev ID'si olup olmadığını kontrol et
+      if (!columnElement) {
+        const task = tasks.find(t => t.id === overId);
+        if (task) {
+          // Görevin bulunduğu kolonu bul - data-status kullanarak
+          const status = task.status;
+          const statusColumns = document.querySelectorAll(`[data-status="${status}"]`);
+          if (statusColumns.length > 0) {
+            // Aktif görevin projesine göre kolonu bul
+            const activeTask = tasks.find(t => t.id === activeId);
+            if (activeTask && activeTask.project_id) {
+              for (const col of statusColumns) {
+                const colId = col.getAttribute('data-column-id');
+                if (colId && colId.startsWith(activeTask.project_id + '-')) {
+                  columnElement = col;
+                  break;
+                }
+              }
+            }
+            // Bulunamazsa ilk kolonu kullan
+            if (!columnElement && statusColumns.length > 0) {
+              columnElement = statusColumns[0];
+            }
+          }
         }
       }
       
@@ -520,18 +593,18 @@ const TaskManager = ({ user }) => {
       if (idToCheck === 'todo' || idToCheck === 'in-progress' || idToCheck === 'done') {
         overContainer = idToCheck;
       }
-      // Proje bazlı kolon ID'leri
+      // Proje bazlı kolon ID'leri - regex ile kontrol et
       else if (typeof idToCheck === 'string') {
-        // in-progress için özel kontrol
-        if (idToCheck.includes('-in-progress') && (idToCheck.endsWith('-in-progress') || idToCheck === 'in-progress')) {
+        // in-progress için özel kontrol - regex ile
+        if (/in-progress$/.test(idToCheck) || idToCheck === 'in-progress') {
           overContainer = 'in-progress';
         }
         // todo için kontrol
-        else if (idToCheck.endsWith('-todo') || idToCheck === 'todo') {
+        else if (/todo$/.test(idToCheck) || idToCheck === 'todo') {
           overContainer = 'todo';
         }
         // done için kontrol
-        else if (idToCheck.endsWith('-done') || idToCheck === 'done') {
+        else if (/done$/.test(idToCheck) || idToCheck === 'done') {
           overContainer = 'done';
         }
         // Görev kartı üzerindeyse, görevin status'ünü kullan (aynı kolona bırakıldı demektir)
