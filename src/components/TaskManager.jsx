@@ -45,7 +45,7 @@ const TaskCard = ({ task, onSelect, compact = false }) => {
 
   if (compact) {
     return (
-      <div ref={setNodeRef} style={style} {...attributes}>
+      <div ref={setNodeRef} style={style} {...attributes} data-task-id={task.id}>
         <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onSelect(task)}>
           <CardContent className="p-2">
             <div className="flex items-start justify-between gap-2">
@@ -64,7 +64,7 @@ const TaskCard = ({ task, onSelect, compact = false }) => {
   }
 
   return (
-    <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
+    <div ref={setNodeRef} style={style} {...attributes} className="mb-3" data-task-id={task.id}>
       <Card className="hover:shadow-md transition-shadow">
         <CardContent className="p-3">
           <div className="flex items-start justify-between">
@@ -106,11 +106,12 @@ const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
       ref={setNodeRef} 
       className={`bg-gray-100 rounded-lg p-3 w-full md:w-1/3 transition-colors ${isOver ? 'bg-blue-50 ring-2 ring-blue-400' : ''}`}
       data-column-id={id}
-      style={{ minHeight: '300px' }}
+      data-status={id}
+      style={{ minHeight: '400px', position: 'relative' }}
     >
       <h3 className="font-semibold text-gray-700 mb-4 px-1">{title} ({tasks.length})</h3>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="min-h-[250px]">
+        <div className="min-h-[350px] relative z-0">
           {tasks.length > 0 ? (
             tasks.map(task => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />)
           ) : (
@@ -139,7 +140,7 @@ const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
       className={`bg-white rounded-lg p-2 transition-colors ${isOver ? 'bg-blue-50 ring-2 ring-blue-400' : ''}`}
       data-column-id={columnId}
       data-status={id}
-      style={{ minHeight: '150px' }}
+      style={{ minHeight: '200px', position: 'relative' }}
     >
       <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
         {id === 'todo' && <Clock className="h-4 w-4 text-blue-600" />}
@@ -150,13 +151,13 @@ const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
         </span>
       </h4>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
-        <div className="min-h-[120px] space-y-1">
+        <div className="min-h-[150px] space-y-1 relative z-0">
           {tasks.length > 0 ? (
             tasks.map(task => (
               <TaskCard key={task.id} task={task} onSelect={onSelectTask} compact={true} />
             ))
           ) : (
-            <div className="text-xs text-gray-400 text-center py-4">Görevleri buraya sürükleyin</div>
+            <div className="text-xs text-gray-400 text-center py-8">Görevleri buraya sürükleyin</div>
           )}
         </div>
       </SortableContext>
@@ -176,6 +177,7 @@ const TaskManager = ({ user }) => {
   const [activeTab, setActiveTab] = useState('projects');
   const [expandedProjects, setExpandedProjects] = useState({});
   const [selectedProject, setSelectedProject] = useState(null);
+  const [overColumnId, setOverColumnId] = useState(null);
   const { toast } = useToast();
   const { user: authUser } = useAuth();
 
@@ -414,46 +416,107 @@ const TaskManager = ({ user }) => {
 
   const sensors = useSensors(useSensor(PointerSensor, { activationConstraint: { distance: 5 } }));
 
+  const handleDragOver = (event) => {
+    const { over } = event;
+    if (!over) {
+      setOverColumnId(null);
+      return;
+    }
+    
+    const overId = over.id;
+    const overData = over.data.current;
+    
+    // Kolon ID'sini bul
+    let columnId = null;
+    
+    if (overData?.type === 'column' && overData?.status) {
+      // Kolonun kendisi
+      columnId = overId;
+    } else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
+      columnId = overId;
+    } else if (typeof overId === 'string') {
+      // Proje bazlı kolon ID'leri
+      if (overId.endsWith('-todo') || overId.endsWith('-in-progress') || overId.endsWith('-done')) {
+        columnId = overId;
+      } else {
+        // Görev kartı üzerindeyse, parent kolonu bul
+        const task = tasks.find(t => t.id === overId);
+        if (task) {
+          // Görevin bulunduğu kolonu bul
+          const element = document.querySelector(`[data-column-id*="${task.status}"]`);
+          if (element) {
+            columnId = element.getAttribute('data-column-id');
+          }
+        }
+      }
+    }
+    
+    setOverColumnId(columnId);
+  };
+
   const handleDragEnd = async (event) => {
     const { active, over } = event;
-    if (!over) return;
+    if (!over) {
+      setOverColumnId(null);
+      return;
+    }
     
     const activeId = active.id;
     const overId = over.id;
     const overData = over.data.current;
     
-    // Eğer over bir kolon ise, data'dan status'ü al
+    // Önce overColumnId state'ini kullan (handleDragOver'dan gelen)
     let overContainer = null;
+    let columnIdToCheck = overColumnId || overId;
     
     // Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
     if (overData?.type === 'column' && overData?.status) {
       overContainer = overData.status;
     }
     // Direkt kolon ID'leri (Kanban sekmesi için)
-    else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
-      overContainer = overId;
+    else if (columnIdToCheck === 'todo' || columnIdToCheck === 'in-progress' || columnIdToCheck === 'done') {
+      overContainer = columnIdToCheck;
     }
     // Proje bazlı kolon ID'leri (Proje Bazlı sekme için: projectId-status)
-    else if (typeof overId === 'string') {
-      // in-progress için özel kontrol (tire içerdiği için split ile sorun çıkarabilir)
-      if (overId.includes('-in-progress') && overId.endsWith('-in-progress')) {
+    else if (typeof columnIdToCheck === 'string') {
+      // in-progress için özel kontrol
+      if (columnIdToCheck.endsWith('-in-progress')) {
         overContainer = 'in-progress';
       } 
-      // todo ve done için kontrol
-      else if (overId.endsWith('-todo')) {
+      // todo için kontrol
+      else if (columnIdToCheck.endsWith('-todo')) {
         overContainer = 'todo';
       } 
-      else if (overId.endsWith('-done')) {
+      // done için kontrol
+      else if (columnIdToCheck.endsWith('-done')) {
         overContainer = 'done';
       }
-      // Eğer over bir görev kartı ise, o görevin bulunduğu kolonu bul
+      // Eğer over bir görev kartı ise, DOM'dan parent kolonu bul
       else {
         const task = tasks.find(t => t.id === overId);
         if (task) {
-          overContainer = task.status;
+          // Görev kartının üzerine bırakıldıysa, parent kolonu bul
+          const taskElement = document.querySelector(`[data-task-id="${overId}"]`) || 
+                             document.querySelector(`[data-id="${overId}"]`);
+          if (taskElement) {
+            const columnElement = taskElement.closest('[data-column-id]');
+            if (columnElement) {
+              const status = columnElement.getAttribute('data-status');
+              if (status) {
+                overContainer = status;
+              } else {
+                // Fallback: görevin mevcut status'ünü kullan (aynı kolona bırakıldı demektir)
+                overContainer = task.status;
+              }
+            } else {
+              overContainer = task.status;
+            }
+          } else {
+            overContainer = task.status;
+          }
         } else {
           // DOM'dan data-status attribute'unu kontrol et
-          const element = document.querySelector(`[data-column-id="${overId}"]`);
+          const element = document.querySelector(`[data-column-id="${columnIdToCheck}"]`);
           if (element) {
             const status = element.getAttribute('data-status');
             if (status && (status === 'todo' || status === 'in-progress' || status === 'done')) {
@@ -464,9 +527,24 @@ const TaskManager = ({ user }) => {
       }
     }
     
+    // Eğer hala kolon bulunamadıysa, overId'yi direkt kontrol et
+    if (!overContainer && typeof overId === 'string') {
+      if (overId.endsWith('-todo')) {
+        overContainer = 'todo';
+      } else if (overId.endsWith('-in-progress')) {
+        overContainer = 'in-progress';
+      } else if (overId.endsWith('-done')) {
+        overContainer = 'done';
+      } else if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
+        overContainer = overId;
+      }
+    }
+    
+    setOverColumnId(null);
+    
     // Eğer kolon bulunamadıysa veya aynı kolona bırakıldıysa işlem yapma
     if (!overContainer) {
-      console.log('Kolon bulunamadı:', { overId, overData });
+      console.log('Kolon bulunamadı:', { overId, overData, activeId, overColumnId });
       return;
     }
     
@@ -501,6 +579,11 @@ const TaskManager = ({ user }) => {
       return prevTasks.map(task => 
         task.id === activeId ? { ...task, status: overContainer } : task
       );
+    });
+    
+    toast({
+      title: "Başarılı",
+      description: `Görev "${statusMap[overContainer]}" durumuna taşındı.`
     });
     
     logAction('UPDATE_TASK_STATUS', `Görev durumu güncellendi: ${activeId} -> ${overContainer}`, authUser);
@@ -958,7 +1041,7 @@ const TaskManager = ({ user }) => {
                 {(searchTerm || filterAssignee) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
               
-              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+              <DndContext sensors={sensors} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
                 <div className="space-y-4">
                   {/* Projeler ve Görevler */}
                   {projects.map(project => (
@@ -1091,7 +1174,7 @@ const TaskManager = ({ user }) => {
                 <Input placeholder="Etiket filtrele..." value={filterTag} onChange={e => setFilterTag(e.target.value)} className="w-full sm:w-[180px]" />
                 {(searchTerm || filterAssignee || filterTag) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); setFilterTag(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
-              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
+              <DndContext sensors={sensors} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
                 <div className="flex flex-col md:flex-row space-y-4 md:space-y-0 md:space-x-4">
                   <TaskColumn id="todo" title={statusMap['todo']} tasks={columns.todo} onSelectTask={setViewingTask} />
                   <TaskColumn id="in-progress" title={statusMap['in-progress']} tasks={columns['in-progress']} onSelectTask={setViewingTask} />
