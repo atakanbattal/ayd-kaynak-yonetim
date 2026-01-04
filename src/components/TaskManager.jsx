@@ -38,10 +38,30 @@ const statusMap = {
   'done': 'Tamamlandı'
 };
 
-const TaskCard = ({ task, onSelect }) => {
+const TaskCard = ({ task, onSelect, compact = false }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
   const style = { transform: CSS.Transform.toString(transform), transition, opacity: isDragging ? 0.5 : 1 };
   const priority = priorityMap[task.priority] || priorityMap.medium;
+
+  if (compact) {
+    return (
+      <div ref={setNodeRef} style={style} {...attributes}>
+        <Card className="hover:shadow-md transition-shadow cursor-pointer" onClick={() => onSelect(task)}>
+          <CardContent className="p-2">
+            <div className="flex items-start justify-between gap-2">
+              <div className="flex-1 min-w-0">
+                <p className="font-medium text-xs leading-snug">{task.title}</p>
+                <p className="text-xs text-gray-500 mt-1 truncate">{task.assignee_name}</p>
+              </div>
+              <div {...listeners} className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600 touch-none flex-shrink-0" onClick={(e) => e.stopPropagation()}>
+                <GripVertical className="h-3 w-3" />
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
 
   return (
     <div ref={setNodeRef} style={style} {...attributes} className="mb-3">
@@ -84,6 +104,36 @@ const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
       <h3 className="font-semibold text-gray-700 mb-4 px-1">{title} ({tasks.length})</h3>
       <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
         <div className="min-h-[200px]">{tasks.map(task => <TaskCard key={task.id} task={task} onSelect={onSelectTask} />)}</div>
+      </SortableContext>
+    </div>
+  );
+};
+
+const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
+  const columnId = `${projectId}-${id}`;
+  const { setNodeRef, isOver } = useDroppable({ id: columnId });
+  
+  return (
+    <div 
+      ref={setNodeRef} 
+      className={`bg-white rounded-lg p-2 transition-colors ${isOver ? 'bg-gray-100 ring-2 ring-blue-400' : ''}`}
+      data-column-id={columnId}
+      data-status={id}
+    >
+      <h4 className="text-sm font-medium mb-2 flex items-center gap-1">
+        {id === 'todo' && <Clock className="h-4 w-4 text-blue-600" />}
+        {id === 'in-progress' && <Loader className="h-4 w-4 text-yellow-600" />}
+        {id === 'done' && <CheckCircle className="h-4 w-4 text-green-600" />}
+        <span className={id === 'todo' ? 'text-blue-600' : id === 'in-progress' ? 'text-yellow-600' : 'text-green-600'}>
+          {title} ({tasks.length})
+        </span>
+      </h4>
+      <SortableContext items={tasks.map(t => t.id)} strategy={verticalListSortingStrategy}>
+        <div className="min-h-[100px] space-y-1">
+          {tasks.map(task => (
+            <TaskCard key={task.id} task={task} onSelect={onSelectTask} compact={true} />
+          ))}
+        </div>
       </SortableContext>
     </div>
   );
@@ -346,12 +396,23 @@ const TaskManager = ({ user }) => {
     const activeId = active.id;
     const overId = over.id;
     
-    // Eğer over bir kolon ise (todo, in-progress, done)
+    // Eğer over bir kolon ise (todo, in-progress, done veya projectId-status formatında)
     let overContainer = null;
+    
+    // Direkt kolon ID'leri (Kanban sekmesi için)
     if (overId === 'todo' || overId === 'in-progress' || overId === 'done') {
       overContainer = overId;
-    } else {
-      // Eğer over bir görev kartı ise, o görevin bulunduğu kolonu bul
+    } 
+    // Proje bazlı kolon ID'leri (Proje Bazlı sekme için: projectId-status)
+    else if (typeof overId === 'string' && overId.includes('-')) {
+      const parts = overId.split('-');
+      const lastPart = parts[parts.length - 1];
+      if (lastPart === 'todo' || lastPart === 'in-progress' || lastPart === 'done') {
+        overContainer = lastPart;
+      }
+    }
+    // Eğer over bir görev kartı ise, o görevin bulunduğu kolonu bul
+    else {
       const task = tasks.find(t => t.id === overId);
       if (task) {
         overContainer = task.status;
@@ -396,6 +457,14 @@ const TaskManager = ({ user }) => {
     // Kolon ID'lerini kontrol et
     if (id === 'todo' || id === 'in-progress' || id === 'done') {
       return id;
+    }
+    // Proje bazlı kolon ID'leri için
+    if (typeof id === 'string' && id.includes('-')) {
+      const parts = id.split('-');
+      const lastPart = parts[parts.length - 1];
+      if (lastPart === 'todo' || lastPart === 'in-progress' || lastPart === 'done') {
+        return lastPart;
+      }
     }
     // Görev ID'si ise, görevin bulunduğu kolonu bul
     const task = tasks.find(t => t.id === id);
@@ -854,135 +923,122 @@ const TaskManager = ({ user }) => {
                 {(searchTerm || filterAssignee) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
               
-              <div className="space-y-4">
-                {/* Projeler ve Görevler */}
-                {projects.map(project => (
-                  <div key={project.id} className="border rounded-lg overflow-hidden">
-                    <div 
-                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
-                      style={{ borderLeft: `4px solid ${project.color}` }}
-                      onClick={() => toggleProjectExpand(project.id)}
-                    >
-                      <div className="flex items-center gap-3">
-                        {expandedProjects[project.id] ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
-                        <Folder className="h-5 w-5" style={{ color: project.color }} />
-                        <div>
-                          <h3 className="font-semibold">{project.name}</h3>
-                          {project.description && <p className="text-xs text-gray-500">{project.description}</p>}
+              <DndContext sensors={sensors} onDragEnd={handleDragEnd} collisionDetection={closestCenter}>
+                <div className="space-y-4">
+                  {/* Projeler ve Görevler */}
+                  {projects.map(project => (
+                    <div key={project.id} className="border rounded-lg overflow-hidden">
+                      <div 
+                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
+                        style={{ borderLeft: `4px solid ${project.color}` }}
+                        onClick={() => toggleProjectExpand(project.id)}
+                      >
+                        <div className="flex items-center gap-3">
+                          {expandedProjects[project.id] ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
+                          <Folder className="h-5 w-5" style={{ color: project.color }} />
+                          <div>
+                            <h3 className="font-semibold">{project.name}</h3>
+                            {project.description && <p className="text-xs text-gray-500">{project.description}</p>}
+                          </div>
+                          <span className="ml-2 px-2 py-0.5 bg-gray-200 rounded-full text-xs font-medium">
+                            {tasksByProject[project.id]?.length || 0} görev
+                          </span>
                         </div>
-                        <span className="ml-2 px-2 py-0.5 bg-gray-200 rounded-full text-xs font-medium">
-                          {tasksByProject[project.id]?.length || 0} görev
-                        </span>
+                        <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
+                          <Button variant="ghost" size="sm" onClick={() => { setEditingProject(project); setIsProjectFormOpen(true); }}><Edit className="h-4 w-4" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => { if(confirm('Bu projeyi silmek istediğinize emin misiniz?')) handleDeleteProject(project.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          <Button size="sm" onClick={() => { setEditingTask(null); setSelectedProject(project.id); setIsFormOpen(true); }}><Plus className="h-4 w-4" /></Button>
+                        </div>
                       </div>
-                      <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
-                        <Button variant="ghost" size="sm" onClick={() => { setEditingProject(project); setIsProjectFormOpen(true); }}><Edit className="h-4 w-4" /></Button>
-                        <Button variant="ghost" size="sm" onClick={() => { if(confirm('Bu projeyi silmek istediğinize emin misiniz?')) handleDeleteProject(project.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                        <Button size="sm" onClick={() => { setEditingTask(null); setSelectedProject(project.id); setIsFormOpen(true); }}><Plus className="h-4 w-4" /></Button>
-                      </div>
+                      
+                      {expandedProjects[project.id] && tasksByProject[project.id]?.length > 0 && (
+                        <div className="border-t bg-gray-50 p-2">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <ProjectTaskColumn 
+                              id="todo" 
+                              title="Beklemede" 
+                              tasks={tasksByProject[project.id].filter(t => t.status === 'todo')} 
+                              onSelectTask={setViewingTask}
+                              projectId={project.id}
+                            />
+                            <ProjectTaskColumn 
+                              id="in-progress" 
+                              title="Devam Eden" 
+                              tasks={tasksByProject[project.id].filter(t => t.status === 'in-progress')} 
+                              onSelectTask={setViewingTask}
+                              projectId={project.id}
+                            />
+                            <ProjectTaskColumn 
+                              id="done" 
+                              title="Tamamlandı" 
+                              tasks={tasksByProject[project.id].filter(t => t.status === 'done')} 
+                              onSelectTask={setViewingTask}
+                              projectId={project.id}
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    
-                    {expandedProjects[project.id] && tasksByProject[project.id]?.length > 0 && (
-                      <div className="border-t bg-gray-50 p-2">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                          {/* Beklemede */}
-                          <div className="bg-white rounded-lg p-2">
-                            <h4 className="text-sm font-medium text-blue-600 mb-2 flex items-center gap-1"><Clock className="h-4 w-4" /> Beklemede ({tasksByProject[project.id].filter(t => t.status === 'todo').length})</h4>
-                            {tasksByProject[project.id].filter(t => t.status === 'todo').map(task => (
-                              <div key={task.id} className="p-2 mb-1 bg-blue-50 rounded border-l-2 border-blue-400 cursor-pointer hover:bg-blue-100" onClick={() => setViewingTask(task)}>
-                                <p className="text-sm font-medium">{task.title}</p>
-                                <p className="text-xs text-gray-500">{task.assignee_name}</p>
-                              </div>
-                            ))}
-                          </div>
-                          {/* Devam Eden */}
-                          <div className="bg-white rounded-lg p-2">
-                            <h4 className="text-sm font-medium text-yellow-600 mb-2 flex items-center gap-1"><Loader className="h-4 w-4" /> Devam Eden ({tasksByProject[project.id].filter(t => t.status === 'in-progress').length})</h4>
-                            {tasksByProject[project.id].filter(t => t.status === 'in-progress').map(task => (
-                              <div key={task.id} className="p-2 mb-1 bg-yellow-50 rounded border-l-2 border-yellow-400 cursor-pointer hover:bg-yellow-100" onClick={() => setViewingTask(task)}>
-                                <p className="text-sm font-medium">{task.title}</p>
-                                <p className="text-xs text-gray-500">{task.assignee_name}</p>
-                              </div>
-                            ))}
-                          </div>
-                          {/* Tamamlandı */}
-                          <div className="bg-white rounded-lg p-2">
-                            <h4 className="text-sm font-medium text-green-600 mb-2 flex items-center gap-1"><CheckCircle className="h-4 w-4" /> Tamamlandı ({tasksByProject[project.id].filter(t => t.status === 'done').length})</h4>
-                            {tasksByProject[project.id].filter(t => t.status === 'done').map(task => (
-                              <div key={task.id} className="p-2 mb-1 bg-green-50 rounded border-l-2 border-green-400 cursor-pointer hover:bg-green-100" onClick={() => setViewingTask(task)}>
-                                <p className="text-sm font-medium">{task.title}</p>
-                                <p className="text-xs text-gray-500">{task.assignee_name}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                ))}
+                  ))}
                 
-                {/* Projesiz Görevler */}
-                {tasksByProject['no-project']?.length > 0 && (
-                  <div className="border rounded-lg overflow-hidden border-dashed">
-                    <div 
-                      className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 bg-gray-100"
-                      onClick={() => toggleProjectExpand('no-project')}
-                    >
-                      <div className="flex items-center gap-3">
-                        {expandedProjects['no-project'] ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
-                        <Folder className="h-5 w-5 text-gray-400" />
-                        <div>
-                          <h3 className="font-semibold text-gray-600">Proje Atanmamış Görevler</h3>
+                  {/* Projesiz Görevler */}
+                  {tasksByProject['no-project']?.length > 0 && (
+                    <div className="border rounded-lg overflow-hidden border-dashed">
+                      <div 
+                        className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 bg-gray-100"
+                        onClick={() => toggleProjectExpand('no-project')}
+                      >
+                        <div className="flex items-center gap-3">
+                          {expandedProjects['no-project'] ? <ChevronDown className="h-5 w-5 text-gray-500" /> : <ChevronRight className="h-5 w-5 text-gray-500" />}
+                          <Folder className="h-5 w-5 text-gray-400" />
+                          <div>
+                            <h3 className="font-semibold text-gray-600">Proje Atanmamış Görevler</h3>
+                          </div>
+                          <span className="ml-2 px-2 py-0.5 bg-gray-300 rounded-full text-xs font-medium">
+                            {tasksByProject['no-project'].length} görev
+                          </span>
                         </div>
-                        <span className="ml-2 px-2 py-0.5 bg-gray-300 rounded-full text-xs font-medium">
-                          {tasksByProject['no-project'].length} görev
-                        </span>
                       </div>
+                      
+                      {expandedProjects['no-project'] && (
+                        <div className="border-t bg-gray-50 p-2">
+                          <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
+                            <ProjectTaskColumn 
+                              id="todo" 
+                              title="Beklemede" 
+                              tasks={tasksByProject['no-project'].filter(t => t.status === 'todo')} 
+                              onSelectTask={setViewingTask}
+                              projectId="no-project"
+                            />
+                            <ProjectTaskColumn 
+                              id="in-progress" 
+                              title="Devam Eden" 
+                              tasks={tasksByProject['no-project'].filter(t => t.status === 'in-progress')} 
+                              onSelectTask={setViewingTask}
+                              projectId="no-project"
+                            />
+                            <ProjectTaskColumn 
+                              id="done" 
+                              title="Tamamlandı" 
+                              tasks={tasksByProject['no-project'].filter(t => t.status === 'done')} 
+                              onSelectTask={setViewingTask}
+                              projectId="no-project"
+                            />
+                          </div>
+                        </div>
+                      )}
                     </div>
-                    
-                    {expandedProjects['no-project'] && (
-                      <div className="border-t bg-gray-50 p-2">
-                        <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                          <div className="bg-white rounded-lg p-2">
-                            <h4 className="text-sm font-medium text-blue-600 mb-2">Beklemede</h4>
-                            {tasksByProject['no-project'].filter(t => t.status === 'todo').map(task => (
-                              <div key={task.id} className="p-2 mb-1 bg-blue-50 rounded border-l-2 border-blue-400 cursor-pointer hover:bg-blue-100" onClick={() => setViewingTask(task)}>
-                                <p className="text-sm font-medium">{task.title}</p>
-                                <p className="text-xs text-gray-500">{task.assignee_name}</p>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="bg-white rounded-lg p-2">
-                            <h4 className="text-sm font-medium text-yellow-600 mb-2">Devam Eden</h4>
-                            {tasksByProject['no-project'].filter(t => t.status === 'in-progress').map(task => (
-                              <div key={task.id} className="p-2 mb-1 bg-yellow-50 rounded border-l-2 border-yellow-400 cursor-pointer hover:bg-yellow-100" onClick={() => setViewingTask(task)}>
-                                <p className="text-sm font-medium">{task.title}</p>
-                                <p className="text-xs text-gray-500">{task.assignee_name}</p>
-                              </div>
-                            ))}
-                          </div>
-                          <div className="bg-white rounded-lg p-2">
-                            <h4 className="text-sm font-medium text-green-600 mb-2">Tamamlandı</h4>
-                            {tasksByProject['no-project'].filter(t => t.status === 'done').map(task => (
-                              <div key={task.id} className="p-2 mb-1 bg-green-50 rounded border-l-2 border-green-400 cursor-pointer hover:bg-green-100" onClick={() => setViewingTask(task)}>
-                                <p className="text-sm font-medium">{task.title}</p>
-                                <p className="text-xs text-gray-500">{task.assignee_name}</p>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    )}
-                  </div>
-                )}
-                
-                {projects.length === 0 && tasksByProject['no-project']?.length === 0 && (
-                  <div className="text-center py-10 text-gray-500">
-                    <Folder className="h-12 w-12 mx-auto mb-3 text-gray-300" />
-                    <p>Henüz proje veya görev bulunmuyor.</p>
-                    <Button className="mt-4" onClick={() => setIsProjectFormOpen(true)}><FolderPlus className="mr-2 h-4 w-4" />İlk Projeyi Oluştur</Button>
-                  </div>
-                )}
-              </div>
+                  )}
+                  
+                  {projects.length === 0 && tasksByProject['no-project']?.length === 0 && (
+                    <div className="text-center py-10 text-gray-500">
+                      <Folder className="h-12 w-12 mx-auto mb-3 text-gray-300" />
+                      <p>Henüz proje veya görev bulunmuyor.</p>
+                      <Button className="mt-4" onClick={() => setIsProjectFormOpen(true)}><FolderPlus className="mr-2 h-4 w-4" />İlk Projeyi Oluştur</Button>
+                    </div>
+                  )}
+                </div>
+              </DndContext>
             </TabsContent>
 
             <TabsContent value="kanban">
