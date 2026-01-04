@@ -70,7 +70,7 @@ const CertificatePrintLayout = ({ certificateData }) => {
           <div style={{ display: 'flex', justifyContent: 'center', gap: '180px' }}>
             <div style={{ textAlign: 'center' }}>
               <div style={{ width: '200px', borderTop: '3px solid #555', margin: '0 auto 10px auto' }}></div>
-              <p style={{ fontWeight: 'bold', fontSize: '18px', margin: '0 0 5px 0', color: '#0B2C5F' }}>Tuğçe MAVİ BATTAL</p>
+              <p style={{ fontWeight: 'bold', fontSize: '18px', margin: '0 0 5px 0', color: '#0B2C5F' }}>{certificateData.trainerName || 'Eğitmen'}</p>
               <p style={{ color: '#666', fontSize: '15px', margin: '0' }}>Eğitmen</p>
             </div>
             <div style={{ textAlign: 'center' }}>

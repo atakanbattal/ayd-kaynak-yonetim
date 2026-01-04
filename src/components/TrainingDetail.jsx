@@ -153,7 +153,7 @@ import React, { useState, useEffect, useCallback } from 'react';
                     <ExamResults trainingId={trainingId} passingGrade={training.passing_grade} />
                   </div>
                 )}
-                {activeTab === 'certificates' && <CertificateSystem trainingId={trainingId} trainingName={training.name} />}
+                {activeTab === 'certificates' && <CertificateSystem trainingId={trainingId} trainingName={training.name} trainer={training.trainer} />}
               </div>
             </CardContent>
           </Card>

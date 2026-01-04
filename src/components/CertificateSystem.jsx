@@ -6,7 +6,7 @@ import React, { useState, useEffect, useCallback } from 'react';
     import { Loader2, Award, Download, RefreshCw } from 'lucide-react';
     import { openPrintWindow } from '@/lib/utils';
 
-    const CertificateSystem = ({ trainingId, trainingName }) => {
+    const CertificateSystem = ({ trainingId, trainingName, trainer }) => {
       const [certificates, setCertificates] = useState([]);
       const [successfulParticipants, setSuccessfulParticipants] = useState([]);
       const [allParticipants, setAllParticipants] = useState([]);
@@ -118,6 +118,7 @@ import React, { useState, useEffect, useCallback } from 'react';
             trainingName: trainingName,
             issueDate: new Date(certificate.issue_date).toLocaleDateString('tr-TR'),
             certificateNumber: certificate.certificate_number,
+            trainerName: trainer ? `${trainer.first_name} ${trainer.last_name}`.toUpperCase() : 'Eğitmen',
           }
         };
         openPrintWindow(reportData, toast);
