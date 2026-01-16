@@ -6,8 +6,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
     import { Input } from '@/components/ui/input';
     import { Label } from '@/components/ui/label';
     import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-    import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-    import { Calendar } from '@/components/ui/calendar';
+    import { DateRangePicker } from '@/components/ui/date-range-picker';
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
     import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
     import { useToast } from '@/components/ui/use-toast';
@@ -48,44 +47,14 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
     const getStatusStyle = (status) => statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
 
     const ImprovementFilters = ({ filters, setFilters, lines }) => {
-        const [open, setOpen] = useState(false);
-
-        const setDateRange = (range) => {
-            setFilters(prev => ({ ...prev, dateRange: range }));
-            setOpen(false);
-        };
-
-        const predefinedRanges = [
-            { label: 'Bu Ay', range: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } },
-            { label: 'Son 30 Gün', range: { from: subDays(new Date(), 29), to: new Date() } },
-            { label: 'Bu Çeyrek', range: { from: startOfQuarter(new Date()), to: endOfQuarter(new Date()) } },
-            { label: 'Tüm Zamanlar', range: { from: new Date('2020-01-01'), to: new Date() } },
-        ];
-
         return (
             <div className="p-4 bg-gray-50 rounded-lg mb-4 flex flex-wrap items-center gap-4">
-                <Popover open={open} onOpenChange={setOpen}>
-                    <PopoverTrigger asChild>
-                        <Button variant="outline" className={cn("w-[280px] justify-start text-left font-normal", !filters.dateRange && "text-muted-foreground")}>
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {filters.dateRange?.from && filters.dateRange?.to ? (
-                                `${format(filters.dateRange.from, "dd LLL, y", { locale: tr })} - ${format(filters.dateRange.to, "dd LLL, y", { locale: tr })}`
-                            ) : (
-                                <span>Tüm Zamanlar</span>
-                            )}
-                        </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0 flex" align="start">
-                        <Calendar initialFocus mode="range" defaultMonth={filters.dateRange?.from} selected={filters.dateRange} onSelect={(range) => setFilters(prev => ({ ...prev, dateRange: range }))} numberOfMonths={2} locale={tr} />
-                        <div className="flex flex-col space-y-2 p-2 border-l">
-                            {predefinedRanges.map(({ label, range }) => (
-                                <Button key={label} variant="ghost" className="justify-start" onClick={() => setDateRange(range)}>
-                                    {label}
-                                </Button>
-                            ))}
-                        </div>
-                    </PopoverContent>
-                </Popover>
+                <DateRangePicker
+                    value={filters.dateRange}
+                    onChange={(range) => setFilters(prev => ({ ...prev, dateRange: range || { from: new Date('2020-01-01'), to: new Date() } }))}
+                    placeholder="Tüm Zamanlar"
+                    className="w-[280px]"
+                />
                 <Input 
                     placeholder="Parça Kodu Ara..." 
                     value={filters.partCode || ''} 

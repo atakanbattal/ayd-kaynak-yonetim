@@ -4,8 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar as CalendarComponent } from '@/components/ui/calendar';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -235,8 +234,7 @@ const AuditLog = () => {
             : 'Tüm Zamanlar',
           'Kullanıcı Filtresi': filters.user === 'all' ? 'Tümü' : filters.user,
           'Eylem Filtresi': filters.action === 'all' ? 'Tümü' : filters.action,
-          'Arama Terimi': filters.searchTerm || 'Yok',
-          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr })
+          'Toplam Kayıt': filteredData.length.toString()
         },
         kpiCards: [
           { title: 'Toplam Aktivite', value: filteredData.length.toString() },
@@ -337,19 +335,12 @@ const AuditLog = () => {
                     {uniqueActions.map(action => <SelectItem key={action} value={action}>{action}</SelectItem>)}
                   </SelectContent>
                 </Select>
-                <Popover>
-                  <PopoverTrigger asChild>
-                    <Button variant="outline">
-                      <Calendar className="mr-2 h-4 w-4" />
-                      {filters.dateRange?.from && filters.dateRange?.to
-                        ? `${format(filters.dateRange.from, 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange.to, 'dd.MM.yyyy', { locale: tr })}`
-                        : 'Tarih Aralığı'}
-                    </Button>
-                  </PopoverTrigger>
-                  <PopoverContent className="w-auto p-0" align="start">
-                    <CalendarComponent mode="range" selected={filters.dateRange} onSelect={(range) => setFilters({ ...filters, dateRange: range })} numberOfMonths={2} locale={tr} />
-                  </PopoverContent>
-                </Popover>
+                <DateRangePicker
+                  value={filters.dateRange}
+                  onChange={(range) => setFilters({ ...filters, dateRange: range })}
+                  placeholder="Tarih Aralığı"
+                  className="w-[260px]"
+                />
               </div>
 
               <div className="border rounded-lg overflow-hidden max-h-[500px] overflow-y-auto">

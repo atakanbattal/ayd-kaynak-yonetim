@@ -41,8 +41,7 @@ import React, { useState, useEffect, useMemo } from 'react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-    import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-    import { Calendar } from '@/components/ui/calendar';
+    import { DateRangePicker } from '@/components/ui/date-range-picker';
     import { useToast } from '@/components/ui/use-toast';
     import { formatCurrency, openPrintWindow, cn } from '@/lib/utils';
     import { supabase } from '@/lib/customSupabaseClient';
@@ -1610,84 +1609,16 @@ import React, { useState, useEffect, useMemo } from 'react';
               <div className="py-4 space-y-4">
                 <div className="space-y-2">
                   <label className="text-sm font-medium">Rapor Dönemi</label>
-                  <Popover>
-                    <PopoverTrigger asChild>
-                      <Button
-                        variant="outline"
-                        className={cn(
-                          "w-full justify-start text-left font-normal",
-                          !reportDateRange.from && "text-muted-foreground"
-                        )}
-                      >
-                        <CalendarIcon className="mr-2 h-4 w-4" />
-                        {reportDateRange.from && reportDateRange.to ? (
-                          <>
-                            {format(reportDateRange.from, "dd LLL, y", { locale: tr })} -{" "}
-                            {format(reportDateRange.to, "dd LLL, y", { locale: tr })}
-                          </>
-                        ) : (
-                          <span>Tarih aralığı seçin</span>
-                        )}
-                      </Button>
-                    </PopoverTrigger>
-                    <PopoverContent className="w-auto p-0" align="start">
-                      <Calendar
-                        initialFocus
-                        mode="range"
-                        defaultMonth={reportDateRange.from}
-                        selected={reportDateRange}
-                        onSelect={(range) => {
-                          if (range?.from && range?.to) {
-                            setReportDateRange(range);
-                          }
-                        }}
-                        numberOfMonths={2}
-                        locale={tr}
-                      />
-                      <div className="flex flex-col space-y-2 p-2 border-t">
-                        <Button
-                          variant="ghost"
-                          className="justify-start"
-                          onClick={() => setReportDateRange({
-                            from: startOfMonth(new Date()),
-                            to: endOfMonth(new Date())
-                          })}
-                        >
-                          Bu Ay
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="justify-start"
-                          onClick={() => setReportDateRange({
-                            from: startOfMonth(subMonths(new Date(), 1)),
-                            to: endOfMonth(subMonths(new Date(), 1))
-                          })}
-                        >
-                          Geçen Ay
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="justify-start"
-                          onClick={() => setReportDateRange({
-                            from: startOfYear(new Date()),
-                            to: new Date()
-                          })}
-                        >
-                          Yıl Başından Bugüne
-                        </Button>
-                        <Button
-                          variant="ghost"
-                          className="justify-start"
-                          onClick={() => setReportDateRange({
-                            from: startOfDay(subYears(new Date(), 1)),
-                            to: endOfDay(new Date())
-                          })}
-                        >
-                          Son 12 Ay
-                        </Button>
-                      </div>
-                    </PopoverContent>
-                  </Popover>
+                  <DateRangePicker
+                    value={reportDateRange}
+                    onChange={(range) => {
+                      if (range?.from && range?.to) {
+                        setReportDateRange(range);
+                      }
+                    }}
+                    placeholder="Tarih aralığı seçin"
+                    className="w-full"
+                  />
                 </div>
                 {reportDateRange.from && reportDateRange.to && (
                   <div className="p-3 bg-blue-50 rounded-lg">

@@ -3,16 +3,146 @@ import { useSearchParams, useNavigate } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
 import { Button } from '@/components/ui/button';
 import { Printer, Download } from 'lucide-react';
-import jsPDF from 'jspdf';
-import html2canvas from 'html2canvas';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
 
-const AydLogo = () => (
-  <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" style={{ height: '90px' }} />
-);
+// Kurumsal Renkler
+const COLORS = {
+  primary: '#0B2C5F',      // Koyu Mavi (Logo rengi)
+  secondary: '#1e40af',    // Mavi
+  accent: '#FFC107',       // Sarı/Altın
+  text: '#1f2937',
+  muted: '#64748b',
+  border: '#e5e7eb',
+  background: '#f8fafc'
+};
+
+// AYD Logo - Public klasöründen PNG/JPG olarak yüklenir
+const AydLogo = ({ height = 50 }) => {
+  return (
+    <img 
+      src="/logo.png" 
+      alt="AYD Kaynak Teknolojileri" 
+      style={{ 
+        height: `${height}px`, 
+        width: 'auto',
+        display: 'block',
+        objectFit: 'contain'
+      }}
+      onError={(e) => {
+        // PNG bulunamazsa JPG dene
+        if (e.target.src.endsWith('.png')) {
+          e.target.src = '/logo.jpg';
+        }
+      }}
+    />
+  );
+};
+
+// Standart Rapor Header Bileşeni
+const ReportHeader = ({ title, subtitle, date, reportId }) => {
+  const today = date || new Date().toLocaleDateString('tr-TR');
+  const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  
+  return (
+    <header style={{
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      borderBottom: `3px solid ${COLORS.primary}`,
+      paddingBottom: '12px',
+      marginBottom: '16px'
+    }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+        <AydLogo height={50} />
+        <div>
+          <h1 style={{ fontSize: '14pt', fontWeight: '700', color: COLORS.primary, margin: '0' }}>AYD Kaynak Teknolojileri</h1>
+          <p style={{ fontSize: '8pt', color: COLORS.muted, margin: '2px 0 0 0', textTransform: 'uppercase', letterSpacing: '0.08em' }}>Yönetim Sistemi</p>
+        </div>
+      </div>
+      <div style={{ textAlign: 'right' }}>
+        <h2 style={{ fontSize: '11pt', fontWeight: '600', color: COLORS.primary, margin: '0 0 4px 0' }}>{title}</h2>
+        {subtitle && <p style={{ fontSize: '9pt', color: COLORS.text, margin: '0 0 2px 0' }}>{subtitle}</p>}
+        {reportId && <p style={{ fontSize: '7pt', color: COLORS.muted, margin: '0 0 2px 0', fontFamily: 'monospace' }}>{reportId}</p>}
+        <p style={{ fontSize: '8pt', color: COLORS.muted, margin: '0' }}>{today} {now}</p>
+      </div>
+    </header>
+  );
+};
+
+// Standart Sayfa Footer Bileşeni
+const ReportFooter = ({ moduleName }) => {
+  const today = new Date().toLocaleDateString('tr-TR');
+  const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
+  
+  return (
+    <footer style={{
+      marginTop: 'auto',
+      paddingTop: '12px',
+      borderTop: `1px solid ${COLORS.border}`,
+      display: 'flex',
+      justifyContent: 'space-between',
+      alignItems: 'center',
+      fontSize: '7pt',
+      color: COLORS.muted
+    }}>
+      <span>AYD Kaynak Teknolojileri - {moduleName || 'Yönetim Sistemi'}</span>
+      <span>Yazdırılma: {today} {now}</span>
+      <span>© {new Date().getFullYear()}</span>
+    </footer>
+  );
+};
+
+// Standart İmza Alanı Bileşeni
+const SignatureSection = ({ fields }) => {
+  if (!fields || fields.length === 0) return null;
+  
+  return (
+    <section style={{ 
+      marginTop: '24px', 
+      paddingTop: '16px', 
+      borderTop: `1px solid ${COLORS.border}`,
+      breakInside: 'avoid'
+    }}>
+      <h2 style={{ 
+        fontSize: '9pt', 
+        fontWeight: '700', 
+        color: COLORS.muted, 
+        textAlign: 'center', 
+        margin: '0 0 24px 0', 
+        textTransform: 'uppercase', 
+        letterSpacing: '0.1em' 
+      }}>İmza ve Onay</h2>
+      <div style={{ 
+        display: 'grid', 
+        gridTemplateColumns: `repeat(${fields.length}, 1fr)`, 
+        gap: '32px' 
+      }}>
+        {fields.map((field, index) => (
+          <div key={index} style={{ textAlign: 'center' }}>
+            <p style={{ 
+              fontSize: '8pt', 
+              fontWeight: '600', 
+              color: COLORS.muted, 
+              textTransform: 'uppercase', 
+              margin: '0 0 40px 0' 
+            }}>{field.title}</p>
+            <div style={{ 
+              borderTop: `1px solid ${COLORS.text}`, 
+              margin: '0 20px', 
+              paddingTop: '8px' 
+            }}>
+              <p style={{ fontSize: '9pt', fontWeight: '600', color: COLORS.text, margin: '0 0 2px 0' }}>{field.name || '.............................'}</p>
+              <p style={{ fontSize: '8pt', color: COLORS.muted, margin: '0' }}>{field.role || ' '}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </section>
+  );
+};
 
 const CertificatePrintLayout = ({ certificateData }) => {
   return (
@@ -90,9 +220,6 @@ const CertificatePrintLayout = ({ certificateData }) => {
 }
 
 const WPSPrintLayout = ({ wpsData }) => {
-  const today = new Date().toLocaleDateString('tr-TR');
-  const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
-
   const signatureFields = [
     { title: 'Hazırlayan', name: 'Tuğçe MAVİ BATTAL', role: 'Kaynak Mühendisi' },
     { title: 'Kontrol Eden', name: '', role: '' },
@@ -118,39 +245,60 @@ const WPSPrintLayout = ({ wpsData }) => {
   const part1Info = getPartInfo(wpsData.part1, isPart1Pipe);
   const part2Info = getPartInfo(wpsData.part2, isPart2Pipe);
   const mainThickness = wpsData.part1?.thickness || wpsData.part1?.pipe_wt || 'N/A';
-
   const wpsTitle = `WPS-${wpsData.part1?.material_type || 'MALZEME'}-${mainThickness}mm`;
 
   const renderRow = (label, value) => (
-    <tr className="border-b border-gray-200">
-      <td className="p-2 font-semibold bg-gray-50 w-1/3">{label}</td>
-      <td className="p-2">{value || 'N/A'}</td>
+    <tr style={{ borderBottom: `1px solid ${COLORS.border}` }}>
+      <td style={{ padding: '8px 12px', fontWeight: '600', background: COLORS.background, width: '35%', fontSize: '9pt', color: COLORS.text }}>{label}</td>
+      <td style={{ padding: '8px 12px', fontSize: '9pt', color: COLORS.text }}>{value || 'N/A'}</td>
     </tr>
   );
 
   return (
-    <div className="print-container bg-white text-gray-800 font-sans w-[210mm] min-h-[297mm] p-8">
-      <header className="text-center mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">AYD Kaynak Teknolojileri Yönetim Sistemi</h1>
-        <p className="text-md text-gray-600">Kaynak Yönetim Sistemi</p>
-      </header>
+    <div className="print-container" style={{
+      background: '#fff',
+      color: COLORS.text,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      width: '210mm',
+      minHeight: '297mm',
+      padding: '12mm 15mm',
+      boxSizing: 'border-box',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <ReportHeader 
+        title="WPS Spesifikasyonu" 
+        subtitle={wpsData.wps_code}
+        reportId={`Parça: ${wpsData.part_code}`}
+      />
 
-      <section className="border border-gray-300 rounded-lg p-4 mb-6 grid grid-cols-2 gap-4 items-center">
-        <div>
-          <p><span className="font-semibold">Belge Türü:</span> WPS Spesifikasyonu</p>
-          <p><span className="font-semibold">WPS No:</span> {wpsData.wps_code}</p>
-          <p><span className="font-semibold">Parça Kodu:</span> {wpsData.part_code}</p>
-        </div>
-        <div className="text-right">
-          <p><span className="font-semibold">Yazdırılma:</span> {today} {now}</p>
-          <p><span className="font-semibold">Sistem:</span> AYD Kaynak Teknolojileri Yönetim Sistemi</p>
-          <p><span className="font-semibold">Güncelleme:</span> {new Date(wpsData.updated_at || wpsData.created_at).toLocaleDateString('tr-TR')}</p>
+      {/* Metadata */}
+      <section style={{ 
+        background: COLORS.background, 
+        borderRadius: '4px', 
+        padding: '10px 14px', 
+        marginBottom: '16px',
+        border: `1px solid ${COLORS.border}`,
+        fontSize: '9pt'
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+          <span><strong>WPS No:</strong> {wpsData.wps_code}</span>
+          <span><strong>Güncelleme:</strong> {new Date(wpsData.updated_at || wpsData.created_at).toLocaleDateString('tr-TR')}</span>
         </div>
       </section>
 
-      <section className="mb-6">
-        <h2 className="text-lg font-bold text-white bg-blue-800 p-2 rounded-t-md">1. TEMEL BİLGİLER</h2>
-        <table className="w-full border-collapse border border-gray-300">
+      {/* Temel Bilgiler */}
+      <section style={{ marginBottom: '16px' }}>
+        <h2 style={{ 
+          fontSize: '10pt', 
+          fontWeight: '700', 
+          color: '#fff', 
+          background: COLORS.primary, 
+          padding: '8px 12px', 
+          margin: '0',
+          borderRadius: '4px 4px 0 0'
+        }}>1. TEMEL BİLGİLER</h2>
+        <table style={{ width: '100%', borderCollapse: 'collapse', border: `1px solid ${COLORS.border}`, borderTop: 'none' }}>
           <tbody>
             {renderRow('WPS Başlığı', wpsTitle)}
             {renderRow('Ana Malzemeler', `${part1Info.material} / ${part2Info.material}`)}
@@ -164,9 +312,18 @@ const WPSPrintLayout = ({ wpsData }) => {
         </table>
       </section>
 
-      <section className="mb-8">
-        <h2 className="text-lg font-bold text-white bg-red-700 p-2 rounded-t-md">2. ROBOT PARAMETRELERİ</h2>
-        <table className="w-full border-collapse border border-gray-300">
+      {/* Robot Parametreleri */}
+      <section style={{ marginBottom: '16px' }}>
+        <h2 style={{ 
+          fontSize: '10pt', 
+          fontWeight: '700', 
+          color: '#fff', 
+          background: '#b91c1c', 
+          padding: '8px 12px', 
+          margin: '0',
+          borderRadius: '4px 4px 0 0'
+        }}>2. ROBOT PARAMETRELERİ</h2>
+        <table style={{ width: '100%', borderCollapse: 'collapse', border: `1px solid ${COLORS.border}`, borderTop: 'none' }}>
           <tbody>
             {renderRow('Kaynak Akımı', `${wpsData.current_range} A`)}
             {renderRow('Kaynak Gerilimi', `${wpsData.voltage_range} V`)}
@@ -181,92 +338,118 @@ const WPSPrintLayout = ({ wpsData }) => {
         </table>
       </section>
 
-      <section className="signature-section">
-        <h2 className="text-lg font-bold text-white bg-gray-700 p-2 rounded-t-md">3. İMZA VE ONAY</h2>
-        <div className="grid grid-cols-3 gap-8 pt-4 pb-4 border border-t-0 border-gray-300 rounded-b-md text-center">
-          {signatureFields.map((field, index) => (
-            <div key={index} className="signature-box">
-              <p className="font-bold mb-12">{field.title.toUpperCase()}</p>
-              <p className="border-t border-gray-400 mx-4 pt-1">{field.name || 'Ad Soyad'}</p>
-              <p className="text-sm text-gray-600">{field.role || ' '}</p>
-            </div>
-          ))}
-        </div>
-      </section>
-
-      <footer className="print-footer text-xs text-gray-500 flex justify-between items-center mt-auto pt-4">
-        <span>AYD Kaynak Yönetimi - WPS Sistemi</span>
-        <span>Yazdırılma: {today} {now}</span>
-        <span>Sayfa 1/1</span>
-      </footer>
+      <SignatureSection fields={signatureFields} />
+      <ReportFooter moduleName="WPS Sistemi" />
     </div>
   );
 };
 
 const ExamPrintLayout = ({ examData }) => {
-  const today = new Date().toLocaleDateString('tr-TR');
   const totalPoints = examData.questions.reduce((acc, q) => acc + q.points, 0);
 
   return (
-    <div className="print-container bg-white text-gray-800 font-sans w-[210mm] min-h-[297mm] p-8 flex flex-col">
-      <header className="flex justify-between items-center mb-6 border-b-2 border-blue-800 pb-4">
-        <div className="text-left">
-          <h1 className="text-2xl font-bold text-blue-900">Eğitim Değerlendirme Sınavı</h1>
-          <p className="text-lg text-gray-700 mt-1">{examData.trainingName}</p>
-        </div>
-        <img src="https://horizons-cdn.hostinger.com/42102681-7ddc-4184-98a5-73d4f6325bfd/ada2181c81988ef298490de9a3c6d391.png" alt="AYD Logo" className="h-14" />
-      </header>
+    <div className="print-container" style={{
+      background: '#fff',
+      color: COLORS.text,
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif',
+      width: '210mm',
+      minHeight: '297mm',
+      padding: '12mm 15mm',
+      boxSizing: 'border-box',
+      display: 'flex',
+      flexDirection: 'column'
+    }}>
+      <ReportHeader 
+        title="Eğitim Değerlendirme Sınavı" 
+        subtitle={examData.trainingName}
+      />
 
-      <section className="border border-gray-300 rounded-lg p-4 mb-6 text-sm bg-gray-50">
-        <div className="grid grid-cols-2 gap-x-8 gap-y-4">
-          <div className="flex items-center gap-2"><label className="font-semibold w-20">Ad Soyad:</label><div className="flex-1 border-b border-gray-400"></div></div>
-          <div className="flex items-center gap-2"><label className="font-semibold w-20">Tarih:</label><div className="flex-1 border-b border-gray-400"></div></div>
-          <div className="flex items-center gap-2"><label className="font-semibold w-20">Sicil No:</label><div className="flex-1 border-b border-gray-400"></div></div>
-          <div className="flex items-center gap-2"><label className="font-semibold w-20">İmza:</label><div className="flex-1 border-b border-gray-400"></div></div>
+      {/* Katılımcı Bilgi Formu */}
+      <section style={{ 
+        background: COLORS.background, 
+        borderRadius: '4px', 
+        padding: '14px 16px', 
+        marginBottom: '16px',
+        border: `1px solid ${COLORS.border}`
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px 24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: '600', fontSize: '9pt', width: '70px', color: COLORS.text }}>Ad Soyad:</label>
+            <div style={{ flex: 1, borderBottom: `1px solid ${COLORS.muted}`, height: '20px' }}></div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: '600', fontSize: '9pt', width: '70px', color: COLORS.text }}>Tarih:</label>
+            <div style={{ flex: 1, borderBottom: `1px solid ${COLORS.muted}`, height: '20px' }}></div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: '600', fontSize: '9pt', width: '70px', color: COLORS.text }}>Sicil No:</label>
+            <div style={{ flex: 1, borderBottom: `1px solid ${COLORS.muted}`, height: '20px' }}></div>
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <label style={{ fontWeight: '600', fontSize: '9pt', width: '70px', color: COLORS.text }}>İmza:</label>
+            <div style={{ flex: 1, borderBottom: `1px solid ${COLORS.muted}`, height: '20px' }}></div>
+          </div>
         </div>
       </section>
 
-      <section className="mb-6 flex-grow">
-        <div className="flex justify-between items-center bg-blue-100 text-blue-900 p-2 rounded-md mb-4">
-          <h3 className="text-lg font-bold">Sorular</h3>
-          <span className="font-semibold">Toplam Puan: {totalPoints}</span>
+      {/* Sorular */}
+      <section style={{ flex: 1 }}>
+        <div style={{ 
+          display: 'flex', 
+          justifyContent: 'space-between', 
+          alignItems: 'center', 
+          background: '#dbeafe', 
+          color: COLORS.primary, 
+          padding: '8px 12px', 
+          borderRadius: '4px', 
+          marginBottom: '16px' 
+        }}>
+          <h3 style={{ fontSize: '11pt', fontWeight: '700', margin: 0 }}>Sorular</h3>
+          <span style={{ fontSize: '10pt', fontWeight: '600' }}>Toplam Puan: {totalPoints}</span>
         </div>
-        <div className="space-y-6">
+        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
           {examData.questions.map((q, index) => (
-            <div key={q.id} className="text-sm border-b pb-4">
-              <p className="font-semibold mb-3 text-base">{index + 1}. {q.question_text} <span className="font-normal text-gray-600">({q.points} Puan)</span></p>
+            <div key={q.id} style={{ borderBottom: `1px solid ${COLORS.border}`, paddingBottom: '12px' }}>
+              <p style={{ fontWeight: '600', fontSize: '10pt', marginBottom: '10px', color: COLORS.text }}>
+                {index + 1}. {q.question_text} <span style={{ fontWeight: '400', color: COLORS.muted }}>({q.points} Puan)</span>
+              </p>
               {q.question_type === 'çoktan seçmeli' && (
-                <div className="grid grid-cols-2 gap-x-8 gap-y-2 pl-4">
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '6px 24px', paddingLeft: '16px' }}>
                   {q.options.map((opt, i) => (
-                    <div key={i} className="flex items-center">
-                      <span className="text-base font-semibold mr-2">{String.fromCharCode(65 + i)})</span>
-                      <span className="text-base">{opt.text}</span>
+                    <div key={i} style={{ display: 'flex', alignItems: 'center' }}>
+                      <span style={{ fontSize: '10pt', fontWeight: '600', marginRight: '8px', color: COLORS.primary }}>{String.fromCharCode(65 + i)})</span>
+                      <span style={{ fontSize: '10pt', color: COLORS.text }}>{opt.text}</span>
                     </div>
                   ))}
                 </div>
               )}
               {q.question_type === 'doğru/yanlış' && (
-                <div className="flex items-center space-x-8 pl-4">
-                  <div className="flex items-center"><span className="text-base font-semibold mr-2">A)</span><span className="text-base">Doğru</span></div>
-                  <div className="flex items-center"><span className="text-base font-semibold mr-2">B)</span><span className="text-base">Yanlış</span></div>
+                <div style={{ display: 'flex', gap: '32px', paddingLeft: '16px' }}>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10pt', fontWeight: '600', marginRight: '8px', color: COLORS.primary }}>A)</span>
+                    <span style={{ fontSize: '10pt' }}>Doğru</span>
+                  </div>
+                  <div style={{ display: 'flex', alignItems: 'center' }}>
+                    <span style={{ fontSize: '10pt', fontWeight: '600', marginRight: '8px', color: COLORS.primary }}>B)</span>
+                    <span style={{ fontSize: '10pt' }}>Yanlış</span>
+                  </div>
                 </div>
               )}
               {q.question_type === 'açık uçlu' && (
-                <div className="mt-2 border-b-2 border-dotted h-20"></div>
+                <div style={{ marginTop: '8px', borderBottom: '2px dotted #cbd5e1', height: '60px' }}></div>
               )}
             </div>
           ))}
         </div>
       </section>
-      <div className="text-center mt-8">
-        <p className="text-lg font-bold">Alınan Puan:</p>
-        <div className="w-32 h-16 border-2 border-gray-400 mx-auto mt-2"></div>
+
+      {/* Puan Kutusu */}
+      <div style={{ textAlign: 'center', marginTop: '24px' }}>
+        <p style={{ fontSize: '11pt', fontWeight: '700', color: COLORS.primary, marginBottom: '8px' }}>Alınan Puan:</p>
+        <div style={{ width: '120px', height: '50px', border: `2px solid ${COLORS.muted}`, margin: '0 auto' }}></div>
       </div>
-      <footer className="print-footer text-xs text-gray-500 flex justify-between items-center mt-auto pt-4">
-        <span>AYD Kaynak Yönetimi - Eğitim Sistemi</span>
-        <span>Yazdırılma: {today}</span>
-        <span>Sayfa 1/1</span>
-      </footer>
+
+      <ReportFooter moduleName="Eğitim Sistemi" />
     </div>
   );
 }
@@ -275,366 +458,311 @@ const GeneralReportLayout = ({ reportData }) => {
   const today = new Date().toLocaleDateString('tr-TR');
   const now = new Date().toLocaleTimeString('tr-TR', { hour: '2-digit', minute: '2-digit' });
 
-  // Chart Colors
-  const CHART_COLORS = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16'];
+  // Renk Paleti
+  const CHART_COLORS = ['#1e40af', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#65a30d', '#475569'];
 
-  const formatYAxis = (value) => {
-    if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M`;
-    if (value >= 1000) return `${(value / 1000).toFixed(1)}k`;
-    return value;
-  };
-
+  // Grafik Render
   const renderChart = (chartType, data, config = {}) => {
-    const {
-      dataKey = 'value',
-      nameKey = 'name',
-      width = '100%',
-      height = 300,
-      colors = CHART_COLORS,
-      xAxisKey = 'name',
-      bars = [],
-      lines = []
-    } = config;
+    const { dataKey = 'value', nameKey = 'name', xAxisKey = 'name', bars = [], lines = [] } = config;
+    if (!data || data.length === 0) return <p style={{ color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>Grafik verisi bulunamadı.</p>;
 
-    if (!data || data.length === 0) return <p className="text-gray-500 italic">Grafik verisi bulunamadı.</p>;
+    const chartHeight = 200;
 
     if (chartType === 'bar') {
       return (
-        <div style={{ width, height }} className="mx-auto">
+        <div style={{ width: '100%', height: chartHeight }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey={xAxisKey} axisLine={false} tickLine={false} dy={10} />
-              <YAxis
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={formatYAxis}
-                dx={-10}
-              />
-              <Tooltip
-                cursor={{ fill: '#f3f4f6' }}
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-              />
-              <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              {bars.length > 0 ? (
-                bars.map((bar, idx) => (
-                  <Bar
-                    key={idx}
-                    dataKey={bar.key}
-                    name={bar.name}
-                    fill={bar.color || colors[idx % colors.length]}
-                    maxBarSize={60}
-                    radius={[4, 4, 0, 0]}
-                  />
-                ))
-              ) : (
-                <Bar
-                  dataKey={dataKey}
-                  fill={colors[0]}
-                  maxBarSize={60}
-                  radius={[4, 4, 0, 0]}
-                />
-              )}
+            <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <XAxis dataKey={xAxisKey} tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} />
+              {bars.length > 0 ? bars.map((bar, idx) => <Bar key={idx} dataKey={bar.key} name={bar.name} fill={bar.color || CHART_COLORS[idx % CHART_COLORS.length]} />) : <Bar dataKey={dataKey} fill={CHART_COLORS[0]} />}
             </BarChart>
           </ResponsiveContainer>
         </div>
       );
     }
-
     if (chartType === 'line') {
       return (
-        <div style={{ width, height }} className="mx-auto">
+        <div style={{ width: '100%', height: chartHeight }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 20, right: 30, left: 20, bottom: 5 }}>
-              <CartesianGrid strokeDasharray="3 3" vertical={false} />
-              <XAxis dataKey={xAxisKey} axisLine={false} tickLine={false} dy={10} />
-              <YAxis
-                axisLine={false}
-                tickLine={false}
-                tickFormatter={formatYAxis}
-                dx={-10}
-              />
-              <Tooltip
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-              />
-              <Legend wrapperStyle={{ paddingTop: '20px' }} />
-              {lines.length > 0 ? (
-                lines.map((line, idx) => (
-                  <Line
-                    key={idx}
-                    type="monotone"
-                    dataKey={line.key}
-                    name={line.name}
-                    stroke={line.color || colors[idx % colors.length]}
-                    strokeWidth={3}
-                    dot={{ r: 4, strokeWidth: 2 }}
-                    activeDot={{ r: 6 }}
-                  />
-                ))
-              ) : (
-                <Line
-                  type="monotone"
-                  dataKey={dataKey}
-                  stroke={colors[0]}
-                  strokeWidth={3}
-                  dot={{ r: 4, strokeWidth: 2 }}
-                />
-              )}
+            <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
+              <XAxis dataKey={xAxisKey} tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} width={40} />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} />
+              {lines.length > 0 ? lines.map((line, idx) => <Line key={idx} type="monotone" dataKey={line.key} name={line.name} stroke={line.color || CHART_COLORS[idx % CHART_COLORS.length]} strokeWidth={2} dot={false} />) : <Line type="monotone" dataKey={dataKey} stroke={CHART_COLORS[0]} strokeWidth={2} dot={false} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
       );
     }
-
     if (chartType === 'pie') {
       return (
-        <div style={{ width, height, display: 'flex', justifyContent: 'center' }} className="mx-auto">
+        <div style={{ width: '100%', height: chartHeight }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie
-                data={data}
-                cx="50%"
-                cy="50%"
-                labelLine={false}
-                label={({ name, percent }) => percent > 0.05 ? `${(percent * 100).toFixed(0)}%` : ''}
-                outerRadius={100}
-                fill="#8884d8"
-                dataKey={dataKey}
-                nameKey={nameKey}
-              >
-                {data.map((entry, index) => (
-                  <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />
-                ))}
+              <Pie data={data} cx="50%" cy="50%" outerRadius={70} fill="#8884d8" dataKey={dataKey} nameKey={nameKey} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
+                {data.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
               </Pie>
-              <Tooltip
-                contentStyle={{ borderRadius: '8px', border: 'none', boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)' }}
-              />
-              <Legend wrapperStyle={{ paddingTop: '20px' }} />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} />
+              <Legend wrapperStyle={{ fontSize: '9px' }} />
             </PieChart>
           </ResponsiveContainer>
         </div>
       );
     }
-
     return null;
   };
 
-  return (
-    <div className="print-container bg-white text-gray-800 font-sans w-[210mm] min-h-[297mm] p-8">
-      {/* Professional Header */}
-      <header className="border-b-2 border-blue-800 pb-4 mb-6">
-        <div className="flex justify-between items-start">
-          <div>
-            <h1 className="text-3xl font-bold text-blue-900 mb-1">AYD Kaynak Teknolojileri</h1>
-            <p className="text-lg text-gray-600">Yönetim Sistemi</p>
-          </div>
-          <div className="text-right text-sm">
-            <p className="font-semibold text-gray-700">{reportData.title || 'Rapor'}</p>
-            <p className="text-gray-500">{reportData.reportId}</p>
-          </div>
-        </div>
-      </header>
+  // Tablo Render Helper
+  const renderTable = (headers, rows, options = {}) => {
+    const { headerBg = COLORS.primary, zebraStripe = true } = options;
+    if (!headers || !rows || rows.length === 0) return null;
 
-      {/* Unified Report Info & Parameters */}
-      <section className="mb-8 border border-gray-200 rounded-lg overflow-hidden">
-        <div className="bg-gray-100 px-6 py-3 border-b border-gray-200">
-          <h2 className="text-sm font-bold text-gray-700 uppercase tracking-widest">Rapor Bilgileri</h2>
-        </div>
-        <div className="p-6 bg-white grid grid-cols-2 lg:grid-cols-4 gap-6">
-          <div className="flex flex-col">
-            <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">Rapor Tarihi</span>
-            <span className="text-sm font-bold text-gray-900">{today} {now}</span>
-          </div>
-          {reportData.filters && Object.entries(reportData.filters).map(([key, value]) => {
-            // "Rapor Tarihi" is already shown above, skip it if present to avoid duplication
+  return (
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt', tableLayout: 'auto' }}>
+        <thead>
+          <tr>
+            {headers.map((header, i) => (
+              <th key={i} style={{
+                padding: '8px 10px',
+                textAlign: 'left',
+                fontWeight: '600',
+                color: '#fff',
+                background: headerBg,
+                fontSize: '8pt',
+                textTransform: 'uppercase',
+                letterSpacing: '0.02em',
+                whiteSpace: 'nowrap'
+              }}>{header}</th>
+            ))}
+          </tr>
+        </thead>
+        <tbody>
+          {rows.map((row, rowIdx) => {
+            // Section header detection
+            const isSectionHeader = row.length > 0 && typeof row[0] === 'string' &&
+              (row[0].includes('TOP') || row[0].includes('BOTTOM') || row[0].includes('BAZLI') ||
+               row[0].includes('ANALİZ') || row[0].includes('ÖZET') || row[0].includes('PERSONEL') ||
+               row[0].includes('HAT') || row[0].includes('PARÇA') || row[0].includes('ROBOT'));
+
+            if (isSectionHeader) {
+              const isTop = row[0].includes('TOP') || row[0].includes('EN YÜKSEK');
+              const isBottom = row[0].includes('BOTTOM') || row[0].includes('EN DÜŞÜK');
+              return (
+                <tr key={rowIdx}>
+                  <td colSpan={headers.length} style={{
+                    padding: '10px 12px',
+                    fontWeight: '700',
+                    fontSize: '9pt',
+                    color: isTop ? COLORS.secondary : isBottom ? '#b91c1c' : COLORS.primary,
+                    background: isTop ? '#dbeafe' : isBottom ? '#fee2e2' : '#f1f5f9',
+                    borderTop: '2px solid ' + (isTop ? '#3b82f6' : isBottom ? '#ef4444' : '#cbd5e1'),
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.03em'
+                  }}>{row[0]}</td>
+                </tr>
+              );
+            }
+
+            return (
+              <tr key={rowIdx} style={{ background: zebraStripe && rowIdx % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                {row.map((cell, cellIdx) => (
+                  <td key={cellIdx} style={{
+                    padding: '7px 10px',
+                    borderBottom: '1px solid #e5e7eb',
+                    color: '#1f2937',
+                    fontSize: '9pt',
+                    fontWeight: cellIdx === 0 ? '500' : '400'
+                  }}>{cell}</td>
+                ))}
+              </tr>
+            );
+          })}
+        </tbody>
+      </table>
+    );
+  };
+
+  // KPI Kartları için renkler - Kurumsal Tema
+  const kpiColors = [COLORS.primary, '#166534', '#c2410c', '#7e22ce', '#0e7490', '#b91c1c', '#4338ca', '#0f766e', '#a16207', '#6b21a8'];
+
+  return (
+    <div className="print-container" style={{
+      background: '#fff',
+      color: '#1f2937',
+      fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
+      width: '210mm',
+      minHeight: '297mm',
+      padding: '12mm 15mm',
+      boxSizing: 'border-box'
+    }}>
+
+      {/* ===== HEADER ===== */}
+      <ReportHeader 
+        title={reportData.title || 'Rapor'}
+        reportId={reportData.reportId}
+      />
+
+      {/* ===== METADATA / FİLTRELER ===== */}
+      {reportData.filters && Object.keys(reportData.filters).length > 0 && (
+        <section style={{
+          background: '#f1f5f9',
+          borderRadius: '4px',
+          padding: '10px 14px',
+          marginBottom: '16px',
+          border: '1px solid #e2e8f0'
+        }}>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: '16px', alignItems: 'center' }}>
+            {Object.entries(reportData.filters).map(([key, value]) => {
             if (key === 'Rapor Tarihi') return null;
             return (
-              <div key={key} className="flex flex-col">
-                <span className="text-xs font-semibold text-gray-500 uppercase tracking-wide mb-1">{key}</span>
-                <span className="text-sm font-bold text-gray-900">{value}</span>
+                <div key={key} style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                  <span style={{ fontSize: '8pt', fontWeight: '600', color: '#475569', textTransform: 'uppercase' }}>{key}:</span>
+                  <span style={{ fontSize: '9pt', fontWeight: '700', color: '#0f172a' }}>{value}</span>
               </div>
             );
           })}
         </div>
       </section>
+      )}
 
-      {/* KPI Cards */}
+      {/* ===== KPI KARTLARI ===== */}
       {reportData.kpiCards && reportData.kpiCards.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Özet Bilgiler</h2>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-3">
+        <section style={{ marginBottom: '20px' }}>
+          <h2 style={{
+            fontSize: '10pt',
+            fontWeight: '700',
+            color: COLORS.primary,
+            margin: '0 0 10px 0',
+            paddingBottom: '6px',
+            borderBottom: '2px solid #1e3a5f',
+            textTransform: 'uppercase',
+            letterSpacing: '0.05em'
+          }}>Özet Göstergeler</h2>
+          <div style={{
+            display: 'grid',
+            gridTemplateColumns: `repeat(${Math.min(reportData.kpiCards.length, 5)}, 1fr)`,
+            gap: '10px'
+          }}>
             {reportData.kpiCards.map((card, index) => (
-              <div key={index} className="bg-gradient-to-br from-blue-50 to-blue-100 p-4 rounded-lg border border-blue-200 text-center">
-                <p className="text-xs text-gray-600 mb-1 font-medium">{card.title}</p>
-                <p className="text-xl font-bold text-blue-700">{card.value}</p>
+              <div key={index} style={{
+                background: kpiColors[index % kpiColors.length],
+                padding: '10px 12px',
+                borderRadius: '6px'
+              }}>
+                <p style={{
+                  fontSize: '7pt',
+                  fontWeight: '600',
+                  color: 'rgba(255,255,255,0.8)',
+                  margin: '0 0 4px 0',
+                  textTransform: 'uppercase',
+                  letterSpacing: '0.02em',
+                  lineHeight: '1.2'
+                }}>{card.title}</p>
+                <p style={{
+                  fontSize: '14pt',
+                  fontWeight: '700',
+                  color: '#fff',
+                  margin: '0',
+                  lineHeight: '1.1'
+                }}>{card.value}</p>
               </div>
             ))}
           </div>
         </section>
       )}
 
+      {/* ===== TEK KAYIT DETAY ===== */}
       {reportData.singleItemData && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detay Bilgiler</h2>
-          <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-            <table className="w-full">
+        <section style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 10px 0', paddingBottom: '6px', borderBottom: `2px solid ${COLORS.primary}`, textTransform: 'uppercase' }}>Detay Bilgiler</h2>
+          <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #e5e7eb' }}>
               <tbody>
-                {Object.entries(reportData.singleItemData).map(([key, value]) => (
-                  <tr key={key} className="border-b border-gray-200 last:border-0">
-                    <td className="p-2 font-semibold text-gray-700 w-1/3">{key}</td>
-                    <td className="p-2 text-gray-900">{value}</td>
+              {Object.entries(reportData.singleItemData).map(([key, value], idx) => (
+                <tr key={key} style={{ background: idx % 2 === 0 ? '#fff' : '#f8fafc' }}>
+                  <td style={{ padding: '8px 12px', fontWeight: '600', color: '#475569', width: '35%', fontSize: '9pt', borderBottom: '1px solid #e5e7eb' }}>{key}</td>
+                  <td style={{ padding: '8px 12px', color: '#1f2937', fontSize: '9pt', borderBottom: '1px solid #e5e7eb' }}>{value}</td>
                   </tr>
                 ))}
               </tbody>
             </table>
-          </div>
         </section>
       )}
 
+      {/* ===== EKLER ===== */}
       {reportData.attachments && reportData.attachments.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-green-600">Kanıt Dokümanları</h2>
-          <div className="bg-green-50 rounded-lg p-4 border border-green-200">
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        <section style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 10px 0', paddingBottom: '6px', borderBottom: '2px solid #059669', textTransform: 'uppercase' }}>Kanıt Dokümanları</h2>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '8px' }}>
               {reportData.attachments.map((file, index) => {
                 const isImage = file.type && file.type.startsWith('image/');
-                const isPdf = file.name && file.name.toLowerCase().endsWith('.pdf');
-
                 return (
-                  <div key={index} className="border border-gray-300 rounded-lg p-3 bg-white">
+                <div key={index} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', padding: '6px', background: '#f8fafc', textAlign: 'center' }}>
                     {isImage ? (
-                      <div className="space-y-2">
-                        <img
-                          src={file.url}
-                          alt={file.name}
-                          className="w-full h-48 object-contain rounded border border-gray-200"
-                          onError={(e) => {
-                            e.target.style.display = 'none';
-                            e.target.nextSibling.style.display = 'block';
-                          }}
-                        />
-                        <div style={{ display: 'none' }} className="text-center text-gray-500 text-sm">
-                          Görsel yüklenemedi
-                        </div>
-                        <a
-                          href={file.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline font-medium block text-center"
-                        >
-                          {file.name}
-                        </a>
-                      </div>
-                    ) : (
-                      <div className="space-y-2">
-                        <div className="h-48 flex items-center justify-center bg-gray-100 rounded border border-gray-200">
-                          {isPdf ? (
-                            <div className="text-center">
-                              <div className="text-4xl mb-2">📄</div>
-                              <p className="text-xs text-gray-600">PDF Dosyası</p>
-                            </div>
-                          ) : (
-                            <div className="text-center">
-                              <div className="text-4xl mb-2">📎</div>
-                              <p className="text-xs text-gray-600">Dosya</p>
+                    <img src={file.url} alt={file.name} style={{ width: '100%', height: '50px', objectFit: 'contain', borderRadius: '2px' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                  ) : (
+                    <div style={{ height: '50px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#e2e8f0', borderRadius: '2px' }}>
+                      <span style={{ fontSize: '7pt', color: '#64748b' }}>DOSYA</span>
                             </div>
                           )}
-                        </div>
-                        <a
-                          href={file.url}
-                          target="_blank"
-                          rel="noopener noreferrer"
-                          className="text-sm text-blue-600 hover:underline font-medium block text-center"
-                        >
-                          {file.name}
-                        </a>
-                      </div>
-                    )}
+                  <p style={{ fontSize: '7pt', color: '#475569', margin: '4px 0 0 0', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{file.name}</p>
                   </div>
                 );
               })}
-            </div>
           </div>
         </section>
       )}
 
-      {/* Sections (preferred format) */}
+      {/* ===== BÖLÜMLER (SECTIONS) ===== */}
       {reportData.sections && reportData.sections.length > 0 && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detaylı Veriler</h2>
-          <div className="space-y-8">
+        <section style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 12px 0', paddingBottom: '6px', borderBottom: `2px solid ${COLORS.primary}`, textTransform: 'uppercase' }}>Detaylı Analiz</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
             {reportData.sections.map((section, sectionIndex) => {
+              const isTopSection = section.title && (section.title.includes('TOP') || section.title.includes('EN YÜKSEK'));
+              const isBottomSection = section.title && section.title.includes('BOTTOM');
+              const accentColor = isTopSection ? COLORS.secondary : isBottomSection ? '#b91c1c' : COLORS.primary;
+              const headerBg = isTopSection ? COLORS.secondary : isBottomSection ? '#b91c1c' : COLORS.primary;
 
               if (section.type === 'chart') {
                 return (
-                  <div key={sectionIndex} className="break-inside-avoid mb-6">
-                    <h3 className="text-base font-bold text-blue-900 bg-blue-50 px-4 py-2 border-l-4 border-blue-600 mb-3">
-                      {section.title}
-                    </h3>
-                    <div className="bg-white border border-gray-200 rounded p-4" style={{ backgroundColor: '#ffffff' }}>
-                      {renderChart(section.chartType, section.data, section.config)}
+                  <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', breakInside: 'avoid' }}>
+                    <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 12px', background: '#f8fafc' }}>
+                      <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase' }}>{section.title}</h3>
                     </div>
+                    <div style={{ padding: '10px' }}>{renderChart(section.chartType, section.data, section.config)}</div>
                   </div>
                 );
               }
 
-              // section.tableData formatını da destekle
               const headers = section.headers || (section.tableData && section.tableData.headers);
               const rows = section.rows || (section.tableData && section.tableData.rows);
-              const hasTable = headers && rows && rows.length > 0;
 
               return (
-                <div key={sectionIndex} className="break-inside-avoid mb-6">
-                  <h3 className="text-base font-bold text-blue-900 bg-blue-50 px-4 py-2 border-l-4 border-blue-600 mb-3">
-                    {section.title}
-                  </h3>
-                  {hasTable ? (
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse text-xs">
-                        <thead>
-                          <tr className="bg-gray-200">
-                            {headers.map((header, headerIndex) => (
-                              <th key={headerIndex} className="p-2 text-left font-semibold text-gray-700 border border-gray-300">
-                                {header}
-                              </th>
-                            ))}
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {rows.map((row, rowIndex) => (
-                            <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50">
-                              {row.map((cell, cellIndex) => (
-                                <td key={cellIndex} className="p-2 border border-gray-200 text-gray-800">
-                                  {cell}
-                                </td>
-                              ))}
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
+                <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', breakInside: 'avoid' }}>
+                  <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 12px', background: '#f8fafc' }}>
+                    <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase' }}>{section.title}</h3>
                     </div>
-                  ) : (
-                    section.type !== 'list' && (
-                      <p className="text-sm text-gray-500 italic p-3 bg-gray-50 rounded border border-gray-200">
-                        Bu dönem için veri bulunamadı.
-                      </p>
-                    )
-                  )}
-                  {section.type === 'list' && section.items && (
-                    <div className="bg-gray-50 rounded-lg p-4 border border-gray-200">
-                      {section.items.map((item, itemIndex) => (
-                        <div key={itemIndex} className="mb-4 last:mb-0">
-                          <p className="font-semibold text-gray-800 mb-2">{item.header}</p>
+                  {headers && rows && rows.length > 0 ? (
+                    <div style={{ padding: '0' }}>{renderTable(headers, rows, { headerBg })}</div>
+                  ) : section.type === 'list' && section.items ? (
+                    <div style={{ padding: '10px 12px' }}>
+                      {section.items.map((item, itemIdx) => (
+                        <div key={itemIdx} style={{ marginBottom: '8px' }}>
+                          <p style={{ fontWeight: '600', fontSize: '9pt', color: '#1f2937', margin: '0 0 4px 0' }}>{item.header}</p>
                           {item.details && (
-                            <ul className="list-disc pl-5 space-y-1 text-sm text-gray-600">
-                              {item.details.map((detail, detailIndex) => (
-                                <li key={detailIndex}>{detail}</li>
-                              ))}
+                            <ul style={{ margin: '0', paddingLeft: '16px' }}>
+                              {item.details.map((d, dIdx) => <li key={dIdx} style={{ fontSize: '8pt', color: '#475569', marginBottom: '2px' }}>{d}</li>)}
                             </ul>
                           )}
                         </div>
                       ))}
                     </div>
+                  ) : (
+                    <p style={{ fontSize: '8pt', color: '#6b7280', fontStyle: 'italic', padding: '10px 12px', margin: '0' }}>Veri bulunamadı.</p>
                   )}
                 </div>
               );
@@ -643,84 +771,21 @@ const GeneralReportLayout = ({ reportData }) => {
         </section>
       )}
 
-      {/* Table Data (fallback format) - Render whenever it exists */}
-      {reportData.tableData && (
-        <section className="mb-8">
-          <h2 className="text-lg font-bold text-gray-800 mb-4 pb-2 border-b-2 border-blue-600">Detaylı Veriler</h2>
-          <div className="overflow-x-auto">
-            <table className="w-full border-collapse text-xs">
-              <thead>
-                <tr className="bg-gray-200">
-                  {reportData.tableData.headers.map((header, index) => (
-                    <th key={index} className="p-2 text-left font-semibold text-gray-700 border border-gray-300">
-                      {header}
-                    </th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {reportData.tableData.rows.map((row, rowIndex) => {
-                  // Skip separator rows
-                  const isSeparator = row.every(cell => typeof cell === 'string' && (cell.startsWith('===') || cell.startsWith('---')));
-                  if (isSeparator) return null;
-
-                  // Check if this is a section header row
-                  const isSectionHeader = row.length > 0 && typeof row[0] === 'string' &&
-                    (row[0].includes('TOP') || row[0].includes('BOTTOM') || row[0].includes('EN ÇOK') ||
-                      row[0].includes('EN ETKİLİ') || row[0].includes('ÖZET') || row[0].includes('PERSONEL') ||
-                      row[0].includes('HAT') || row[0].includes('PARÇA') || row[0].includes('VARDIYA') ||
-                      row[0].includes('ANALİZ') || row[0].includes('BAZLI') || row[0].includes('SENARYO') ||
-                      row[0].includes('ROBOT') || row[0].includes('İYİLEŞTİRME') || row[0].includes('MANUEL') ||
-                      row[0].includes('TAMİR') || row[0].includes('GÖNDEREN'));
-
-                  if (isSectionHeader) {
-                    return (
-                      <tr key={rowIndex} className="bg-blue-100">
-                        <td colSpan={reportData.tableData.headers.length} className="p-3 font-bold text-blue-900 text-center border-t-2 border-b border-blue-300">
-                          {row[0]}
-                        </td>
-                      </tr>
-                    );
-                  }
-
-                  return (
-                    <tr key={rowIndex} className="border-b border-gray-200 hover:bg-gray-50">
-                      {row.map((cell, cellIndex) => (
-                        <td key={cellIndex} className="p-2 border border-gray-200 text-gray-800">
-                          {cell}
-                        </td>
-                      ))}
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      {/* ===== TABLO VERİLERİ ===== */}
+      {reportData.tableData && reportData.tableData.headers && reportData.tableData.rows && (
+        <section style={{ marginBottom: '20px' }}>
+          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 12px 0', paddingBottom: '6px', borderBottom: `2px solid ${COLORS.primary}`, textTransform: 'uppercase' }}>Detaylı Veriler</h2>
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
+            {renderTable(reportData.tableData.headers, reportData.tableData.rows)}
           </div>
         </section>
       )}
 
-      {reportData.signatureFields && (
-        <section className="signature-section mt-12 pt-6 border-t-2 border-gray-300">
-          <h2 className="text-lg font-bold text-gray-800 mb-6 text-center">İmza ve Onay</h2>
-          <div className="grid grid-cols-3 gap-8">
-            {reportData.signatureFields.map((field, index) => (
-              <div key={index} className="text-center">
-                <p className="font-bold text-gray-700 mb-8 text-sm uppercase">{field.title}</p>
-                <div className="border-t-2 border-gray-400 pt-2 mt-12">
-                  <p className="font-semibold text-gray-900">{field.name || 'Ad Soyad'}</p>
-                  <p className="text-xs text-gray-600 mt-1">{field.role || ' '}</p>
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-      )}
+      {/* ===== İMZA ALANI ===== */}
+      <SignatureSection fields={reportData.signatureFields} />
 
-      <footer className="print-footer text-xs text-gray-500 flex justify-between items-center mt-12 pt-4 border-t border-gray-200">
-        <span>AYD Kaynak Teknolojileri Yönetim Sistemi</span>
-        <span>Yazdırılma: {today} {now}</span>
-        <span>Sayfa 1/1</span>
-      </footer>
+      {/* ===== FOOTER ===== */}
+      <ReportFooter />
     </div>
   );
 };
@@ -833,107 +898,10 @@ const PrintPage = () => {
     return <GeneralReportLayout reportData={reportContent} />;
   };
 
-  const handleSaveAsPDF = async () => {
-    try {
-      const printArea = document.querySelector('.print-area');
-      if (!printArea) {
-        alert('PDF oluşturulacak içerik bulunamadı.');
-        return;
-      }
-
-      // Loading mesajı göster
-      const loadingToast = document.createElement('div');
-      loadingToast.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #4CAF50; color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
-      loadingToast.textContent = 'PDF oluşturuluyor... Lütfen bekleyin.';
-      document.body.appendChild(loadingToast);
-
-      // Sayfa boyutları (A4)
-      const isLandscape = reportContent.certificateData;
-      const pageWidth = isLandscape ? 297 : 210; // mm
-      const pageHeight = isLandscape ? 210 : 297; // mm
-      const margin = 10; // mm
-      const contentWidth = pageWidth - (margin * 2);
-      const contentHeight = pageHeight - (margin * 2);
-
-      // PDF oluştur
-      const pdf = new jsPDF({
-        orientation: isLandscape ? 'landscape' : 'portrait',
-        unit: 'mm',
-        format: 'a4'
-      });
-
-      // Orijinal scroll pozisyonunu kaydet
-      const originalScrollTop = window.pageYOffset;
-      const originalScrollLeft = window.pageXOffset;
-
-      // Scroll'u sıfırla
-      window.scrollTo(0, 0);
-
-      // İçeriği yakala - yüksek kalite için scale artırıldı
-      const canvas = await html2canvas(printArea, {
-        scale: 2,
-        useCORS: true,
-        logging: false,
-        backgroundColor: '#ffffff',
-        windowWidth: printArea.scrollWidth,
-        windowHeight: printArea.scrollHeight,
-        allowTaint: false
-      });
-
-      // Scroll pozisyonunu geri yükle
-      window.scrollTo(originalScrollLeft, originalScrollTop);
-
-      const imgData = canvas.toDataURL('image/png', 1.0);
-      const imgWidth = contentWidth;
-      const imgHeight = (canvas.height * imgWidth) / canvas.width;
-
-      // Çok sayfalı PDF oluştur
-      let heightLeft = imgHeight;
-      let yPosition = 0;
-      let pageNumber = 1;
-
-      // İlk sayfa
-      pdf.addImage(imgData, 'PNG', margin, margin, imgWidth, imgHeight, undefined, 'FAST');
-      heightLeft -= contentHeight;
-      yPosition -= contentHeight;
-
-      // Ek sayfalar gerekirse
-      while (heightLeft > 0) {
-        pdf.addPage();
-        pageNumber++;
-        // Negatif yPosition kullanarak görüntünün devamını göster
-        pdf.addImage(imgData, 'PNG', margin, margin + yPosition, imgWidth, imgHeight, undefined, 'FAST');
-        heightLeft -= contentHeight;
-        yPosition -= contentHeight;
-      }
-
-      // Dosya adı oluştur
-      const reportTitle = reportContent.title || reportContent.wpsData?.wps_code || reportContent.reportId || 'Rapor';
-      const sanitizedTitle = reportTitle.replace(/[^a-z0-9çğıöşüÇĞIİÖŞÜ\s]/gi, '_').substring(0, 50);
-      const fileName = `${sanitizedTitle}_${new Date().toISOString().slice(0, 10)}.pdf`;
-
-      // PDF'i kaydet
-      pdf.save(fileName);
-
-      // Loading mesajını kaldır
-      if (document.body.contains(loadingToast)) {
-        document.body.removeChild(loadingToast);
-      }
-
-      // Başarı mesajı
-      const successToast = document.createElement('div');
-      successToast.style.cssText = 'position: fixed; top: 20px; left: 50%; transform: translateX(-50%); background: #4CAF50; color: white; padding: 12px 24px; border-radius: 8px; z-index: 10000; box-shadow: 0 4px 6px rgba(0,0,0,0.1);';
-      successToast.textContent = `PDF başarıyla kaydedildi! (${pageNumber} sayfa)`;
-      document.body.appendChild(successToast);
-      setTimeout(() => {
-        if (document.body.contains(successToast)) {
-          document.body.removeChild(successToast);
-        }
-      }, 3000);
-    } catch (error) {
-      console.error('PDF oluşturma hatası:', error);
-      alert('PDF oluşturulurken bir hata oluştu: ' + error.message);
-    }
+  const handleSaveAsPDF = () => {
+    // Tarayıcının native yazdırma/PDF kaydetme penceresini aç
+    // Bu yöntem CSS @page kurallarına saygı duyar, metinleri bölmez ve en kaliteli çıktıyı verir.
+    window.print();
   };
 
   return (
@@ -947,33 +915,31 @@ const PrintPage = () => {
         {renderLayout()}
       </div>
       <style jsx global>{`
+        /* ===== EKRAN GÖRÜNÜMÜ ===== */
               body {
                 -webkit-print-color-adjust: exact !important;
                 print-color-adjust: exact !important;
+          background-color: #e5e7eb;
+          margin: 0;
+          padding: 0;
               }
               
               @media screen {
-                body {
-                  background-color: #f0f0f0;
-                }
                 .print-area {
                   display: flex;
                   justify-content: center;
                   align-items: flex-start;
-                  padding: 2rem 0;
+            padding: 24px 0;
+            min-height: 100vh;
                 }
                 .print-container {
-                  transform-origin: top center;
-                  box-shadow: 0 0 20px rgba(0,0,0,0.15);
-                  border: 1px solid #ccc;
-                  min-height: auto;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+            background: white;
                 }
                 .page-portrait .print-container {
-                  transform: scale(0.9);
                   width: 210mm;
                 }
                 .page-landscape .print-container {
-                  transform: scale(0.85);
                   width: 297mm;
                 }
                 .certificate-layout {
@@ -981,17 +947,18 @@ const PrintPage = () => {
                 }
               }
               
+        /* ===== BASKI GÖRÜNÜMÜ ===== */
               @media print {
-                  * {
-                    -webkit-print-color-adjust: exact !important;
-                    print-color-adjust: exact !important;
+          @page {
+            size: A4 portrait;
+            margin: 8mm 10mm;
                   }
                   
                   html, body {
                     margin: 0 !important;
                     padding: 0 !important;
-                    width: 210mm !important;
                     background: white !important;
+            font-size: 10pt;
                   }
                   
                   .no-print {
@@ -999,93 +966,84 @@ const PrintPage = () => {
                   }
               
                   .print-area {
-                    width: 100% !important;
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    overflow: visible !important;
-                    position: relative !important;
+            display: block;
+            width: 100%;
+            margin: 0;
+            padding: 0;
                   }
                   
                   .print-container {
-                      width: 210mm !important;
-                      min-height: 297mm !important;
-                      max-width: 210mm !important;
+            width: 100% !important;
+            max-width: 100% !important;
+            min-height: auto !important;
                       box-shadow: none !important;
                       border: none !important;
-                      border-radius: 0 !important;
-                      transform: none !important;
-                      overflow: visible !important;
-                      page-break-after: auto !important;
+            padding: 0 !important;
+            margin: 0 !important;
+            background: white !important;
+          }
+
+          /* Tablo Yönetimi */
+          table {
+            width: 100% !important;
+            border-collapse: collapse !important;
+            page-break-inside: auto !important;
+          }
+
+          thead {
+            display: table-header-group !important;
+          }
+
+          tbody {
+            display: table-row-group !important;
+          }
+
+          tr {
                       page-break-inside: avoid !important;
                       break-inside: avoid !important;
                   }
                   
-                  .certificate-layout {
-                      width: 297mm !important;
-                      height: 210mm !important;
-                      max-width: 297mm !important;
-                      max-height: 210mm !important;
-                      min-width: 297mm !important;
-                      min-height: 210mm !important;
-                      padding: 8mm 15mm !important;
-                      box-sizing: border-box !important;
-                      page-break-after: avoid !important;
+          th, td {
+                      page-break-inside: avoid !important;
+                  }
+                  
+          /* Bölüm ve Kart Yönetimi */
+          section {
                       page-break-inside: avoid !important;
                       break-inside: avoid !important;
                   }
                   
-                  /* Sayfa bölünmesi için */
-                  .print-container section {
+          header {
+            page-break-after: avoid !important;
+                  }
+                  
+          .signature-section, footer {
                       page-break-inside: avoid !important;
                       break-inside: avoid !important;
                   }
                   
-                  .print-container table {
-                      page-break-inside: auto !important;
-                      break-inside: auto !important;
-                  }
-                  
-                  .print-container tr {
+          /* Grafik Yönetimi */
+          .recharts-responsive-container {
                       page-break-inside: avoid !important;
                       break-inside: avoid !important;
                   }
-                  
-                  .signature-section {
-                      page-break-inside: avoid !important;
-                      break-inside: avoid !important;
-                  }
-              }
-          `}</style>
-      {pageClass === 'page-landscape' && (
-        <style dangerouslySetInnerHTML={{
-          __html: `
-              @page {
-                size: A4 landscape;
-                margin: 0;
-              }
-              @media print {
+
+          /* Sertifika Layout */
+          .certificate-layout {
+            width: 100% !important;
+            height: 100% !important;
+            page-break-inside: avoid !important;
+          }
+        }
+
+        /* Landscape için özel */
+        @media print and (orientation: landscape) {
                 @page {
                   size: A4 landscape;
-                  margin: 0;
-                }
-              }
-            `}} />
-      )}
-      {pageClass === 'page-portrait' && (
-        <style dangerouslySetInnerHTML={{
-          __html: `
-              @page {
-                size: A4 portrait;
-                margin: 0;
-              }
-              @media print {
-                @page {
-                  size: A4 portrait;
-                  margin: 0;
-                }
-              }
-            `}} />
-      )}
+            margin: 8mm 10mm;
+          }
+        }
+      `}</style>
     </>
   );
 };

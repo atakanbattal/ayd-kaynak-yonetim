@@ -184,10 +184,10 @@ const ProjectImprovement = () => {
       });
 
       const totalAnnualImpact = filteredData.reduce((sum, p) => sum + (p.annual_impact || 0), 0);
-      const totalInvestment = filteredData.reduce((sum, p) => sum + (p.investment_cost || 0), 0);
+      const totalInvestment = filteredData.reduce((sum, p) => sum + (p.improvement_cost || 0), 0);
       const avgROI = filteredData.length > 0 
         ? filteredData.reduce((sum, p) => {
-            const roi = p.investment_cost > 0 ? ((p.annual_impact - p.investment_cost) / p.investment_cost) * 100 : 0;
+            const roi = p.improvement_cost > 0 ? ((p.annual_impact - p.improvement_cost) / p.improvement_cost) * 100 : 0;
             return sum + roi;
           }, 0) / filteredData.length
         : 0;
@@ -197,21 +197,20 @@ const ProjectImprovement = () => {
         title: 'Proje Bazlı İyileştirmeler - Detaylı Rapor',
         reportId,
         filters: {
-          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-          'Arama Terimi': searchTerm || 'Yok'
+          'Toplam Proje Sayısı': filteredData.length.toString()
         },
         kpiCards: [
           { title: 'Toplam Proje', value: filteredData.length.toString() },
           { title: 'Toplam Yıllık Kazanç', value: formatCurrency(totalAnnualImpact) },
-          { title: 'Toplam Yatırım', value: formatCurrency(totalInvestment) },
+          { title: 'Toplam İyileştirme Maliyeti', value: formatCurrency(totalInvestment) },
           { title: 'Net Kazanç', value: formatCurrency(totalAnnualImpact - totalInvestment) },
           { title: 'Ortalama ROI', value: `${avgROI.toFixed(2)}%` },
           { title: 'Ortalama Proje Kazancı', value: formatCurrency(filteredData.length > 0 ? totalAnnualImpact / filteredData.length : 0) }
         ],
         tableData: {
-          headers: ['Tarih', 'Proje Konusu', 'Açıklama', 'Önceki Maliyet', 'Mevcut Maliyet', 'Yıllık Kazanç', 'Yatırım', 'ROI'],
+          headers: ['Tarih', 'Proje Konusu', 'Açıklama', 'Önceki Maliyet', 'Mevcut Maliyet', 'Yıllık Kazanç', 'İyileştirme Maliyeti', 'ROI'],
           rows: filteredData.map(p => {
-            const roi = p.investment_cost > 0 ? ((p.annual_impact - p.investment_cost) / p.investment_cost) * 100 : 0;
+            const roi = p.improvement_cost > 0 ? ((p.annual_impact - p.improvement_cost) / p.improvement_cost) * 100 : 0;
             return [
               format(new Date(p.improvement_date), 'dd.MM.yyyy', { locale: tr }),
               p.subject || '-',
@@ -219,7 +218,7 @@ const ProjectImprovement = () => {
               formatCurrency(p.previous_cost || 0),
               formatCurrency(p.current_cost || 0),
               formatCurrency(p.annual_impact || 0),
-              formatCurrency(p.investment_cost || 0),
+              formatCurrency(p.improvement_cost || 0),
               `${roi.toFixed(2)}%`
             ];
           })

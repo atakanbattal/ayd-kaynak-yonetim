@@ -223,7 +223,8 @@ const TrainingPlan = () => {
 
       const { data: allParticipants, error: participantsError } = await supabase
         .from('training_participants')
-        .select('*, employee:employees(first_name, last_name, registration_number)');
+        .select('*, employee:employees(first_name, last_name, registration_number)')
+        .order('created_at', { ascending: false });
 
       if (participantsError) throw participantsError;
 
@@ -233,7 +234,15 @@ const TrainingPlan = () => {
 
       if (certificatesError) throw certificatesError;
 
-      const filteredData = trainings.filter(t => {
+      // Sınav sonuçlarını da çek
+      const { data: allExamResults, error: examError } = await supabase
+        .from('training_exam_results')
+        .select('*');
+      
+      const examResults = allExamResults || [];
+
+      // allTrainings üzerinden filtreleme yap (state yerine taze veri kullan)
+      const filteredData = allTrainings.filter(t => {
         const searchMatch = !searchTerm || 
           (t.name && t.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -261,6 +270,22 @@ const TrainingPlan = () => {
         return acc;
       }, {});
 
+      // Eğitmen bazlı analiz
+      const byTrainer = filteredData.reduce((acc, t) => {
+        const trainerName = t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'Belirtilmemiş';
+        if (!acc[trainerName]) acc[trainerName] = { total: 0, completed: 0, participants: 0 };
+        acc[trainerName].total++;
+        if (t.status === 'Tamamlandı') acc[trainerName].completed++;
+        const trainingParticipants = allParticipants.filter(p => p.training_id === t.id);
+        acc[trainerName].participants += trainingParticipants.length;
+        return acc;
+      }, {});
+
+      // Katılımcı başarı analizi (sınav sonuçları)
+      const successfulExams = examResults.filter(e => e.status === 'Başarılı').length;
+      const failedExams = examResults.filter(e => e.status === 'Başarısız').length;
+      const examSuccessRate = examResults.length > 0 ? Math.round((successfulExams / examResults.length) * 100) : 0;
+
       const totalParticipants = allParticipants.length;
       const totalAttended = allParticipants.filter(p => p.participation_status === 'Katıldı').length;
       const totalCertificates = allCertificates.length;
@@ -270,9 +295,8 @@ const TrainingPlan = () => {
         title: 'Eğitim Planlama - Detaylı Rapor',
         reportId,
         filters: {
-          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-          'Arama Terimi': searchTerm || 'Yok',
-          'Durum Filtresi': filterStatus === 'all' ? 'Tümü' : filterStatus
+          'Durum Filtresi': filterStatus === 'all' ? 'Tümü' : filterStatus,
+          'Toplam Eğitim Sayısı': filteredData.length.toString()
         },
         kpiCards: [
           { title: 'Toplam Eğitim', value: filteredData.length.toString() },
@@ -282,24 +306,55 @@ const TrainingPlan = () => {
           { title: 'Toplam Katılımcı', value: totalParticipants.toString() },
           { title: 'Katılan Katılımcı', value: totalAttended.toString() },
           { title: 'Verilen Sertifika', value: totalCertificates.toString() },
-          { title: 'Katılım Oranı', value: totalParticipants > 0 ? `${Math.round((totalAttended / totalParticipants) * 100)}%` : '0%' }
+          { title: 'Katılım Oranı', value: totalParticipants > 0 ? `%${Math.round((totalAttended / totalParticipants) * 100)}` : '%0' },
+          { title: 'Sınav Başarı Oranı', value: `%${examSuccessRate}` },
+          { title: 'Başarılı Sınav', value: successfulExams.toString() },
+          { title: 'Başarısız Sınav', value: failedExams.toString() },
+          { title: 'Farklı Eğitmen', value: Object.keys(byTrainer).length.toString() }
         ],
-        tableData: {
-          headers: ['Eğitim Adı', 'Eğitmen', 'Planlanan Tarih', 'Gerçekleşen Tarih', 'Durum', 'Katılımcı Sayısı', 'Katılan', 'Sertifika'],
-          rows: filteredData.map(t => {
-            const participants = participantsByTraining[t.id] || { total: 0, attended: 0, certificates: 0 };
-            return [
-              t.name || '-',
-              t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'N/A',
-              t.planned_date ? format(new Date(t.planned_date), 'dd.MM.yyyy', { locale: tr }) : '-',
-              t.actual_date ? format(new Date(t.actual_date), 'dd.MM.yyyy', { locale: tr }) : '-',
-              t.status || 'Belirtilmemiş',
-              participants.total.toString(),
-              participants.attended.toString(),
-              participants.certificates.toString()
-            ];
-          })
-        },
+        sections: [
+          {
+            title: 'EĞİTİM LİSTESİ',
+            headers: ['Eğitim Adı', 'Eğitmen', 'Planlanan Tarih', 'Gerçekleşen Tarih', 'Durum', 'Katılımcı', 'Katılan', 'Sertifika'],
+            rows: filteredData.map(t => {
+              const participants = participantsByTraining[t.id] || { total: 0, attended: 0, certificates: 0 };
+              return [
+                t.name || '-',
+                t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'N/A',
+                t.planned_date ? format(new Date(t.planned_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+                t.actual_date ? format(new Date(t.actual_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+                t.status || 'Belirtilmemiş',
+                participants.total.toString(),
+                participants.attended.toString(),
+                participants.certificates.toString()
+              ];
+            })
+          },
+          {
+            title: 'EĞİTMEN BAZLI ANALİZ',
+            headers: ['Eğitmen', 'Toplam Eğitim', 'Tamamlanan', 'Toplam Katılımcı', 'Tamamlanma Oranı'],
+            rows: Object.entries(byTrainer)
+              .sort((a, b) => b[1].total - a[1].total)
+              .map(([trainer, data]) => [
+                trainer,
+                data.total.toString(),
+                data.completed.toString(),
+                data.participants.toString(),
+                data.total > 0 ? `%${Math.round((data.completed / data.total) * 100)}` : '%0'
+              ])
+          },
+          {
+            title: 'DURUM BAZLI ÖZET',
+            headers: ['Durum', 'Eğitim Sayısı', 'Oran (%)'],
+            rows: Object.entries(trainingsByStatus)
+              .sort((a, b) => b[1] - a[1])
+              .map(([status, count]) => [
+                status,
+                count.toString(),
+                `%${((count / filteredData.length) * 100).toFixed(1)}`
+              ])
+          }
+        ],
         signatureFields: [
           { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
           { title: 'Kontrol Eden', name: '', role: '..................' },

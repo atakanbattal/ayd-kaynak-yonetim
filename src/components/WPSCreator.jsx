@@ -452,9 +452,7 @@ import React, { useState, useEffect, useMemo, useCallback } from 'react';
             title: 'WPS Yönetimi - Detaylı Rapor',
             reportId,
             filters: {
-              'Rapor Tarihi': new Date().toLocaleDateString('tr-TR'),
-              'Toplam WPS': filteredWps.length.toString(),
-              'Arama Terimi': searchTerm || 'Yok'
+              'Toplam WPS Sayısı': filteredWps.length.toString()
             },
             kpiCards: [
               { title: 'Toplam WPS', value: filteredWps.length.toString() },

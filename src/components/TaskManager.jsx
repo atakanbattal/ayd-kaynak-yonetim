@@ -11,8 +11,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Textarea } from '@/components/ui/textarea';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
+import { DatePicker } from '@/components/ui/date-range-picker';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { useToast } from '@/components/ui/use-toast';
 import { cn, logAction, openPrintWindow, formatCurrency } from '@/lib/utils';
@@ -993,10 +992,7 @@ const TaskManager = ({ user }) => {
         title: 'Aksiyon Takibi - Detaylı Rapor',
         reportId,
         filters: {
-          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-          'Arama Terimi': searchTerm || 'Yok',
-          'Atanan Filtresi': filterAssignee || 'Yok',
-          'Etiket Filtresi': filterTag || 'Yok',
+          'Toplam Görev': filteredData.length.toString(),
           'Toplam Proje': projectsRes.data.length.toString()
         },
         kpiCards: [
@@ -1209,7 +1205,7 @@ const TaskManager = ({ user }) => {
           <div className="space-y-2"><Label>Proje</Label><Select value={formData.project_id || 'none'} onValueChange={project_id => setFormData({...formData, project_id: project_id === 'none' ? null : project_id})}><SelectTrigger><SelectValue placeholder="Proje seçin..." /></SelectTrigger><SelectContent><SelectItem value="none">Proje Yok</SelectItem>{projects.map(p => <SelectItem key={p.id} value={p.id}><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{backgroundColor: p.color}}></div>{p.name}</div></SelectItem>)}</SelectContent></Select></div>
           <div className="space-y-2"><Label>Öncelik</Label><Select value={formData.priority} onValueChange={priority => setFormData({...formData, priority})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Düşük</SelectItem><SelectItem value="medium">Orta</SelectItem><SelectItem value="high">Yüksek</SelectItem><SelectItem value="critical">Kritik</SelectItem></SelectContent></Select></div>
           <div className="space-y-2"><Label>Atanan</Label><Combobox options={employeeOptions} value={formData.assignee_id} onSelect={(value) => setFormData({...formData, assignee_id: value})} placeholder="Personel Seç" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı."/></div>
-          <div className="space-y-2"><Label>Termin Tarihi</Label><Popover><PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start", !formData.due_date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formData.due_date ? format(new Date(formData.due_date), 'PPP', { locale: tr }) : <span>Tarih seçin</span>}</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="single" selected={formData.due_date ? new Date(formData.due_date) : null} onSelect={date => setFormData({...formData, due_date: date?.toISOString()})} initialFocus /></PopoverContent></Popover></div>
+          <div className="space-y-2"><Label>Termin Tarihi</Label><DatePicker value={formData.due_date ? new Date(formData.due_date) : null} onChange={date => setFormData({...formData, due_date: date?.toISOString()})} placeholder="Tarih seçin" className="w-full" /></div>
           <div className="space-y-2 col-span-2"><Label>Etiketler (virgülle ayırın)</Label><Input value={formData.tags} onChange={e => setFormData({...formData, tags: e.target.value})} /></div>
         </div>
         <div className="flex justify-end pt-4"><Button onClick={() => onSave(formData)}>Kaydet</Button></div>

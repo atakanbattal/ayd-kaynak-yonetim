@@ -12,8 +12,7 @@ import React, { useState, useEffect, useMemo } from 'react';
     import { supabase } from '@/lib/customSupabaseClient';
     import { useAuth } from '@/contexts/SupabaseAuthContext';
     import { logAction, formatCurrency, openPrintWindow } from '@/lib/utils';
-    import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-    import { Calendar } from '@/components/ui/calendar';
+    import { DateRangePicker } from '@/components/ui/date-range-picker';
     import { format, startOfMonth, endOfMonth, parseISO, startOfYear, endOfYear } from 'date-fns';
     import { tr } from 'date-fns/locale';
     import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -407,9 +406,8 @@ import React, { useState, useEffect, useMemo } from 'react';
             reportId,
             filters: {
               'Rapor Dönemi': `${format(filters.dateRange?.from || startOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || endOfMonth(new Date()), 'dd.MM.yyyy', { locale: tr })}`,
-              'Arama Terimi': filters.searchTerm || 'Yok',
-              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-              'Toplam Gün': Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
+              'Toplam Gün': Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün',
+              'Toplam Kayıt': filteredDaily.length.toString()
             },
             kpiCards: [
               { title: 'Toplam Üretim', value: totalProduction.toLocaleString('tr-TR') + ' adet' },
@@ -761,36 +759,12 @@ import React, { useState, useEffect, useMemo } from 'react';
                   <TabsContent value="data" className="space-y-4">
                     <div className="flex flex-col sm:flex-row gap-2 mb-4 p-2 bg-gray-50 rounded-lg">
                       <div className="relative flex-grow"><Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400" /><Input placeholder="Hat adına göre ara..." value={filters.searchTerm} onChange={e => setFilters({...filters, searchTerm: e.target.value})} className="pl-10" /></div>
-                      <Popover>
-                        <PopoverTrigger asChild>
-                          <Button variant="outline" className="w-full sm:w-auto justify-start text-left font-normal">
-                            <CalendarIcon className="mr-2 h-4 w-4" />
-                            {filters.dateRange?.from ? (
-                              filters.dateRange.to ? (
-                                <>
-                                  {format(filters.dateRange.from, "dd LLL, y", { locale: tr })} -{" "}
-                                  {format(filters.dateRange.to, "dd LLL, y", { locale: tr })}
-                                </>
-                              ) : (
-                                format(filters.dateRange.from, "dd LLL, y", { locale: tr })
-                              )
-                            ) : (
-                              <span>Tarih Aralığı Seç</span>
-                            )}
-                          </Button>
-                        </PopoverTrigger>
-                        <PopoverContent className="w-auto p-0" align="start">
-                          <Calendar
-                            initialFocus
-                            mode="range"
-                            defaultMonth={filters.dateRange?.from}
-                            selected={filters.dateRange}
-                            onSelect={(range) => setFilters({ ...filters, dateRange: range })}
-                            numberOfMonths={2}
-                            locale={tr}
-                          />
-                        </PopoverContent>
-                      </Popover>
+                      <DateRangePicker
+                        value={filters.dateRange}
+                        onChange={(range) => setFilters({ ...filters, dateRange: range || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } })}
+                        placeholder="Tarih Aralığı Seç"
+                        className="w-full sm:w-[280px]"
+                      />
                       <Button variant="ghost" onClick={() => setFilters({ dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) }, searchTerm: '' })}><X className="h-4 w-4 mr-2" />Temizle</Button>
                     </div>
                     <div className="border rounded-lg overflow-hidden">

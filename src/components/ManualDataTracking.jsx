@@ -8,8 +8,7 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -2254,36 +2253,12 @@ const ManualDataTracking = () => {
 
                                 {/* Tarih Aralığı Seçici */}
                                 <div className="flex gap-2 p-2 bg-gray-50 rounded-lg">
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline" className="w-full justify-start text-left font-normal">
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {filters.dateRange?.from ? (
-                                                    filters.dateRange.to ? (
-                                                        <>
-                                                            {format(filters.dateRange.from, "dd LLL, y", { locale: tr })} -{" "}
-                                                            {format(filters.dateRange.to, "dd LLL, y", { locale: tr })}
-                                                        </>
-                                                    ) : (
-                                                        format(filters.dateRange.from, "dd LLL, y", { locale: tr })
-                                                    )
-                                                ) : (
-                                                    <span>Özel Tarih Aralığı Seç</span>
-                                                )}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                            <Calendar
-                                                initialFocus
-                                                mode="range"
-                                                defaultMonth={filters.dateRange?.from}
-                                                selected={filters.dateRange}
-                                                onSelect={(range) => setFilters({ ...filters, dateRange: range })}
-                                                numberOfMonths={2}
-                                                locale={tr}
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
+                                    <DateRangePicker
+                                        value={filters.dateRange}
+                                        onChange={(range) => setFilters({ ...filters, dateRange: range || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } })}
+                                        placeholder="Özel Tarih Aralığı Seç"
+                                        className="w-full"
+                                    />
                                 </div>
                             </div>
 
@@ -2918,35 +2893,12 @@ const ManualDataTracking = () => {
                                 </div>
                                 <div className="space-y-2">
                                     <Label>Özel Tarih Aralığı</Label>
-                                    <Popover>
-                                        <PopoverTrigger asChild>
-                                            <Button variant="outline" className="w-full justify-start">
-                                                <CalendarIcon className="mr-2 h-4 w-4" />
-                                                {analysisFilters.dateRange?.from ? (
-                                                    analysisFilters.dateRange.to ? (
-                                                        <>
-                                                            {format(analysisFilters.dateRange.from, "dd MMM yyyy", { locale: tr })} - {format(analysisFilters.dateRange.to, "dd MMM yyyy", { locale: tr })}
-                                                        </>
-                                                    ) : (
-                                                        format(analysisFilters.dateRange.from, "dd MMM yyyy", { locale: tr })
-                                                    )
-                                                ) : (
-                                                    <span>Tarih Seçin</span>
-                                                )}
-                                            </Button>
-                                        </PopoverTrigger>
-                                        <PopoverContent className="w-auto p-0" align="start">
-                                            <Calendar
-                                                initialFocus
-                                                mode="range"
-                                                defaultMonth={analysisFilters.dateRange?.from}
-                                                selected={analysisFilters.dateRange}
-                                                onSelect={(range) => setAnalysisFilters({ ...analysisFilters, dateRange: range })}
-                                                numberOfMonths={2}
-                                                locale={tr}
-                                            />
-                                        </PopoverContent>
-                                    </Popover>
+                                    <DateRangePicker
+                                        value={analysisFilters.dateRange}
+                                        onChange={(range) => setAnalysisFilters({ ...analysisFilters, dateRange: range || { from: startOfYear(new Date()), to: endOfMonth(new Date()) } })}
+                                        placeholder="Tarih Seçin"
+                                        className="w-full"
+                                    />
                                 </div>
                             </div>
                         </CardContent>

@@ -7,8 +7,7 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover';
-import { Calendar } from '@/components/ui/calendar';
+import { DateRangePicker, DatePicker } from '@/components/ui/date-range-picker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
@@ -659,10 +658,12 @@ const ComparativeCost = () => {
       </div>
        <div className="space-y-2 mt-4">
         <Label>Kayıt Tarihi</Label>
-        <Popover>
-          <PopoverTrigger asChild><Button variant={"outline"} className={cn("w-full justify-start text-left font-normal", !formState.scenario_date && "text-muted-foreground")}><CalendarIcon className="mr-2 h-4 w-4" />{formState.scenario_date ? format(new Date(formState.scenario_date), "dd MMMM yyyy", { locale: tr }) : <span>Tarih seçin</span>}</Button></PopoverTrigger>
-          <PopoverContent className="w-auto p-0"><Calendar mode="single" selected={new Date(formState.scenario_date)} onSelect={(d) => setFormState({ ...formState, scenario_date: d.toISOString() })} initialFocus locale={tr} /></PopoverContent>
-        </Popover>
+        <DatePicker
+          value={formState.scenario_date ? new Date(formState.scenario_date) : null}
+          onChange={(d) => setFormState({ ...formState, scenario_date: d?.toISOString() })}
+          placeholder="Tarih seçin"
+          className="w-full"
+        />
       </div>
       <div className="space-y-2 mt-4">
         <Label>Kanıt Dokümanları</Label>
@@ -753,7 +754,7 @@ const ComparativeCost = () => {
                   <Label>Filtreler</Label>
                   <div className="flex flex-wrap items-center gap-2">
                     <Tabs value={filters.quickSelect} onValueChange={handleDateFilterChange} className="w-auto"><TabsList><TabsTrigger value="today">Bugün</TabsTrigger><TabsTrigger value="thisWeek">Bu Hafta</TabsTrigger><TabsTrigger value="thisMonth">Bu Ay</TabsTrigger><TabsTrigger value="last3Months">Son 3 Ay</TabsTrigger><TabsTrigger value="ytd">Yıl Başı</TabsTrigger><TabsTrigger value="last12Months">Son 12 Ay</TabsTrigger><TabsTrigger value="allTime">Tüm Zamanlar</TabsTrigger></TabsList></Tabs>
-                    <Popover><PopoverTrigger asChild><Button variant="outline" size="sm" className="w-full md:w-auto"><CalendarIcon className="mr-2 h-4 w-4" />Özel Aralık</Button></PopoverTrigger><PopoverContent className="w-auto p-0"><Calendar mode="range" selected={filters.date} onSelect={(date) => setFilters({...filters, date, quickSelect: 'custom'})} locale={tr} /></PopoverContent></Popover>
+                    <DateRangePicker value={filters.date} onChange={(date) => setFilters({...filters, date, quickSelect: 'custom'})} placeholder="Özel Aralık" className="w-full md:w-[260px]" />
                     <Select onValueChange={(v) => setFilters({...filters, lines: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent></Select>
                     <Select onValueChange={(v) => setFilters({...filters, robots: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Robotlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Robotlar</SelectItem>{robots.map(r => <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>)}</SelectContent></Select>
                     <Input placeholder="Parça Kodu Ara..." className="w-[160px]" value={filters.partCode} onChange={(e) => setFilters({...filters, partCode: e.target.value})} />

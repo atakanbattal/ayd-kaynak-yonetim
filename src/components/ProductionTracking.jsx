@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
     import { motion } from 'framer-motion';
-    import { Factory, Plus, Clock, Trash2 } from 'lucide-react';
+    import { Factory, Plus, Clock, Trash2, Download } from 'lucide-react';
     import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
     import { Button } from '@/components/ui/button';
     import { Input } from '@/components/ui/input';
@@ -10,7 +10,9 @@ import React, { useState, useEffect } from 'react';
     import { useToast } from '@/components/ui/use-toast';
     import { supabase } from '@/lib/customSupabaseClient';
     import { useAuth } from '@/contexts/SupabaseAuthContext';
-    import { logAction } from '@/lib/utils';
+    import { logAction, openPrintWindow } from '@/lib/utils';
+    import { format } from 'date-fns';
+    import { tr } from 'date-fns/locale';
 
     const shiftOptions = [
         { value: '1', label: 'Vardiya 1 (Gündüz)' },
@@ -101,11 +103,172 @@ import React, { useState, useEffect } from 'react';
         }
       };
 
+      const handleGenerateDetailedReport = async () => {
+        try {
+          toast({ title: "Detaylı üretim raporu hazırlanıyor...", description: "Tüm üretim verileri toplanıyor." });
+
+          const { data: allRecords, error } = await supabase
+            .from('production_records')
+            .select('*, robots(name), employees(first_name, last_name), wps(wps_code)')
+            .order('record_date', { ascending: false });
+
+          if (error) throw error;
+
+          // Filtreleme uygula
+          let filteredData = allRecords || [];
+          if (filters.dateFrom) filteredData = filteredData.filter(r => r.record_date >= filters.dateFrom);
+          if (filters.dateTo) filteredData = filteredData.filter(r => r.record_date <= filters.dateTo);
+          if (filters.partCode) filteredData = filteredData.filter(r => r.part_code && r.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
+          if (filters.robotId !== 'all') filteredData = filteredData.filter(r => r.robot_id === filters.robotId);
+          if (filters.operatorId !== 'all') filteredData = filteredData.filter(r => r.operator_id === filters.operatorId);
+
+          const totalQuantity = filteredData.reduce((sum, r) => sum + (Number(r.quantity) || 0), 0);
+
+          // Parça bazlı analiz
+          const byPartCode = filteredData.reduce((acc, r) => {
+            const partCode = r.part_code || 'Belirtilmemiş';
+            if (!acc[partCode]) acc[partCode] = { quantity: 0, count: 0 };
+            acc[partCode].quantity += Number(r.quantity) || 0;
+            acc[partCode].count++;
+            return acc;
+          }, {});
+
+          // Robot bazlı analiz
+          const byRobot = filteredData.reduce((acc, r) => {
+            const robotName = r.robots?.name || 'Belirtilmemiş';
+            if (!acc[robotName]) acc[robotName] = { quantity: 0, count: 0 };
+            acc[robotName].quantity += Number(r.quantity) || 0;
+            acc[robotName].count++;
+            return acc;
+          }, {});
+
+          // Operatör bazlı analiz
+          const byOperator = filteredData.reduce((acc, r) => {
+            const operatorName = r.employees ? `${r.employees.first_name} ${r.employees.last_name}` : 'Belirtilmemiş';
+            if (!acc[operatorName]) acc[operatorName] = { quantity: 0, count: 0 };
+            acc[operatorName].quantity += Number(r.quantity) || 0;
+            acc[operatorName].count++;
+            return acc;
+          }, {});
+
+          // Vardiya bazlı analiz
+          const byShift = filteredData.reduce((acc, r) => {
+            const shift = getShiftLabel(r.shift);
+            if (!acc[shift]) acc[shift] = { quantity: 0, count: 0 };
+            acc[shift].quantity += Number(r.quantity) || 0;
+            acc[shift].count++;
+            return acc;
+          }, {});
+
+          const reportId = `RPR-PROD-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+          const reportData = {
+            title: 'Üretim Kaydı & İzlenebilirlik - Detaylı Rapor',
+            reportId,
+            filters: {
+              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+              'Tarih Aralığı': `${filters.dateFrom || 'Başlangıç yok'} - ${filters.dateTo || 'Bitiş yok'}`,
+              'Parça Kodu Filtresi': filters.partCode || 'Yok',
+              'Robot Filtresi': filters.robotId !== 'all' ? robots.find(r => r.id === filters.robotId)?.name || 'Yok' : 'Tümü',
+              'Operatör Filtresi': filters.operatorId !== 'all' ? operators.find(o => o.id === filters.operatorId)?.first_name || 'Yok' : 'Tümü'
+            },
+            kpiCards: [
+              { title: 'Toplam Kayıt', value: filteredData.length.toString() },
+              { title: 'Toplam Üretim Adedi', value: totalQuantity.toLocaleString('tr-TR') },
+              { title: 'Farklı Parça Kodu', value: Object.keys(byPartCode).length.toString() },
+              { title: 'Aktif Robot', value: Object.keys(byRobot).length.toString() },
+              { title: 'Aktif Operatör', value: Object.keys(byOperator).length.toString() },
+              { title: 'Ortalama Kayıt Başı Üretim', value: filteredData.length > 0 ? Math.round(totalQuantity / filteredData.length).toLocaleString('tr-TR') : '0' }
+            ],
+            sections: [
+              {
+                title: 'ÜRETİM KAYITLARI',
+                headers: ['Tarih', 'Saat', 'Vardiya', 'Parça Kodu', 'Adet', 'Robot', 'Operatör', 'WPS'],
+                rows: filteredData.slice(0, 100).map(r => [
+                  r.record_date ? format(new Date(r.record_date), 'dd.MM.yyyy', { locale: tr }) : '-',
+                  r.record_time || '-',
+                  getShiftLabel(r.shift),
+                  r.part_code || '-',
+                  (Number(r.quantity) || 0).toLocaleString('tr-TR'),
+                  r.robots?.name || 'N/A',
+                  r.employees ? `${r.employees.first_name} ${r.employees.last_name}` : 'N/A',
+                  r.wps?.wps_code || 'N/A'
+                ])
+              },
+              {
+                title: 'PARÇA BAZLI ANALİZ',
+                headers: ['Parça Kodu', 'Toplam Üretim', 'Kayıt Sayısı', 'Ortalama'],
+                rows: Object.entries(byPartCode)
+                  .sort((a, b) => b[1].quantity - a[1].quantity)
+                  .slice(0, 20)
+                  .map(([partCode, data]) => [
+                    partCode,
+                    data.quantity.toLocaleString('tr-TR'),
+                    data.count.toString(),
+                    Math.round(data.quantity / data.count).toLocaleString('tr-TR')
+                  ])
+              },
+              {
+                title: 'ROBOT BAZLI ANALİZ',
+                headers: ['Robot', 'Toplam Üretim', 'Kayıt Sayısı', 'Oran (%)'],
+                rows: Object.entries(byRobot)
+                  .sort((a, b) => b[1].quantity - a[1].quantity)
+                  .map(([robot, data]) => [
+                    robot,
+                    data.quantity.toLocaleString('tr-TR'),
+                    data.count.toString(),
+                    totalQuantity > 0 ? `%${((data.quantity / totalQuantity) * 100).toFixed(1)}` : '%0'
+                  ])
+              },
+              {
+                title: 'OPERATÖR BAZLI ANALİZ',
+                headers: ['Operatör', 'Toplam Üretim', 'Kayıt Sayısı', 'Oran (%)'],
+                rows: Object.entries(byOperator)
+                  .sort((a, b) => b[1].quantity - a[1].quantity)
+                  .slice(0, 15)
+                  .map(([operator, data]) => [
+                    operator,
+                    data.quantity.toLocaleString('tr-TR'),
+                    data.count.toString(),
+                    totalQuantity > 0 ? `%${((data.quantity / totalQuantity) * 100).toFixed(1)}` : '%0'
+                  ])
+              },
+              {
+                title: 'VARDİYA BAZLI ANALİZ',
+                headers: ['Vardiya', 'Toplam Üretim', 'Kayıt Sayısı', 'Oran (%)'],
+                rows: Object.entries(byShift)
+                  .sort((a, b) => b[1].quantity - a[1].quantity)
+                  .map(([shift, data]) => [
+                    shift,
+                    data.quantity.toLocaleString('tr-TR'),
+                    data.count.toString(),
+                    totalQuantity > 0 ? `%${((data.quantity / totalQuantity) * 100).toFixed(1)}` : '%0'
+                  ])
+              }
+            ],
+            signatureFields: [
+              { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+              { title: 'Kontrol Eden', name: '', role: '..................' },
+              { title: 'Onaylayan', name: '', role: '..................' }
+            ]
+          };
+
+          await openPrintWindow(reportData, toast);
+          toast({ title: "Rapor Hazır", description: "Detaylı üretim raporu başarıyla oluşturuldu." });
+        } catch (error) {
+          console.error('Detaylı rapor hatası:', error);
+          toast({
+            title: "Rapor Oluşturulamadı",
+            description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+            variant: "destructive"
+          });
+        }
+      };
+
       return (
         <div className="space-y-6">
           <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
             <Card>
-              <CardHeader><div className="flex justify-between items-center"><div><CardTitle className="flex items-center space-x-2"><Factory className="h-5 w-5" /><span>Üretim Kaydı & İzlenebilirlik</span></CardTitle><CardDescription>Üretim kayıtlarını takip edin ve parça bazlı izlenebilirlik sağlayın</CardDescription></div><Dialog open={showAddDialog} onOpenChange={setShowAddDialog}><DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Yeni Kayıt</Button></DialogTrigger><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Yeni Üretim Kaydı</DialogTitle></DialogHeader><div className="grid grid-cols-2 gap-4 py-4">
+              <CardHeader><div className="flex justify-between items-center"><div><CardTitle className="flex items-center space-x-2"><Factory className="h-5 w-5" /><span>Üretim Kaydı & İzlenebilirlik</span></CardTitle><CardDescription>Üretim kayıtlarını takip edin ve parça bazlı izlenebilirlik sağlayın</CardDescription></div><div className="flex space-x-2"><Dialog open={showAddDialog} onOpenChange={setShowAddDialog}><DialogTrigger asChild><Button><Plus className="h-4 w-4 mr-2" />Yeni Kayıt</Button></DialogTrigger><DialogContent className="max-w-2xl"><DialogHeader><DialogTitle>Yeni Üretim Kaydı</DialogTitle></DialogHeader><div className="grid grid-cols-2 gap-4 py-4">
                 <div className="space-y-2"><Label>Tarih *</Label><Input type="date" value={newRecord.record_date} onChange={(e) => setNewRecord({...newRecord, record_date: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Saat *</Label><Input type="time" value={newRecord.record_time} onChange={(e) => setNewRecord({...newRecord, record_time: e.target.value})} /></div>
                 <div className="space-y-2"><Label>Vardiya</Label><Select value={newRecord.shift} onValueChange={(v) => setNewRecord({...newRecord, shift: v})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{shiftOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
@@ -117,7 +280,7 @@ import React, { useState, useEffect } from 'react';
                 <div className="space-y-2"><Label>Operatör *</Label><Select value={newRecord.operator_id} onValueChange={(v) => setNewRecord({...newRecord, operator_id: v})}><SelectTrigger><SelectValue placeholder="Operatör seçin" /></SelectTrigger><SelectContent>{operators.map((o) => <SelectItem key={o.id} value={o.id}>{o.first_name} {o.last_name}</SelectItem>)}</SelectContent></Select></div>
                 <div className="space-y-2"><Label>WPS</Label><Select value={newRecord.wps_id} onValueChange={(v) => setNewRecord({...newRecord, wps_id: v})}><SelectTrigger><SelectValue placeholder="WPS seçin" /></SelectTrigger><SelectContent>{wpsList.filter(w => !newRecord.part_code || w.part_code === newRecord.part_code).map((w) => <SelectItem key={w.id} value={w.id}>{w.wps_code}</SelectItem>)}</SelectContent></Select></div>
                 <div className="col-span-2 space-y-2"><Label>Notlar</Label><Input placeholder="Özel notlar..." value={newRecord.notes} onChange={(e) => setNewRecord({...newRecord, notes: e.target.value})} /></div>
-              </div><div className="flex justify-end space-x-2 mt-4"><Button variant="outline" onClick={() => setShowAddDialog(false)}>İptal</Button><Button onClick={handleAddRecord}>Kaydet</Button></div></DialogContent></Dialog></div></CardHeader>
+              </div><div className="flex justify-end space-x-2 mt-4"><Button variant="outline" onClick={() => setShowAddDialog(false)}>İptal</Button><Button onClick={handleAddRecord}>Kaydet</Button></div></DialogContent></Dialog><Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button></div></div></CardHeader>
               <CardContent>
                 <div className="mb-6 p-4 bg-gray-50 rounded-lg"><div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-4">
                   <div className="space-y-2"><Label>Başlangıç</Label><Input type="date" value={filters.dateFrom} onChange={(e) => setFilters({...filters, dateFrom: e.target.value})} /></div>

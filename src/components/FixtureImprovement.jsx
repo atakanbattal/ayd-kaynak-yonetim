@@ -265,9 +265,7 @@ const FixtureImprovement = () => {
         title: 'Fikstür İyileştirme - Detaylı Analiz Raporu',
         reportId,
         filters: {
-          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-          'Arama Terimi': searchTerm || 'Yok',
-          'Toplam Veri': filteredData.length + ' kayıt'
+          'Toplam Kayıt': filteredData.length + ' adet'
         },
         kpiCards: [
           { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
