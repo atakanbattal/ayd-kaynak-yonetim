@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { BookUser, Plus, Eye, Trash2, Save, Calendar as CalendarIcon, FileText, Edit, Search } from 'lucide-react';
+import { BookUser, Plus, Eye, Trash2, Save, Calendar as CalendarIcon, Calendar, FileText, Edit, Search, Factory, TrendingUp, Activity, Check, ListOrdered } from 'lucide-react';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -69,49 +69,146 @@ const MultiRowForm = ({ onSave, lines, employees }) => {
     };
 
     return (
-        <div className="space-y-6">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4 p-4 border rounded-lg bg-gray-50">
-                <div className="space-y-2"><Label>Tarih *</Label><Input type="date" value={recordDate} onChange={e => setRecordDate(e.target.value)} /></div>
-                <div className="space-y-2"><Label>Vardiya *</Label><Select value={shift} onValueChange={setShift}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{shiftOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent></Select></div>
-            </div>
+        <div className="flex flex-col h-full">
+            <div className="p-6 space-y-6 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-5 border border-indigo-100 rounded-xl bg-indigo-50/50">
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                            <CalendarIcon className="w-4 h-4 text-indigo-600" /> Tarih *
+                        </Label>
+                        <Input
+                            type="date"
+                            value={recordDate}
+                            onChange={e => setRecordDate(e.target.value)}
+                            className="h-11 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700 flex items-center gap-2">
+                            <Factory className="w-4 h-4 text-indigo-600" /> Vardiya *
+                        </Label>
+                        <Select value={shift} onValueChange={setShift}>
+                            <SelectTrigger className="h-11 border-gray-300 focus:border-indigo-500 focus:ring-indigo-500 rounded-lg">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                {shiftOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}
+                            </SelectContent>
+                        </Select>
+                    </div>
+                </div>
 
-            <Tabs defaultValue="manual">
-                <TabsList>
-                    <TabsTrigger value="manual">Manuel Hat Kayıtları</TabsTrigger>
-                    <TabsTrigger value="repair">Tamir Hattı Kayıtları</TabsTrigger>
-                </TabsList>
-                <TabsContent value="manual" className="space-y-2 max-h-[40vh] overflow-y-auto p-2 border rounded-lg">
-                    {manualRows.map((row, index) => (
-                        <div key={row.id} className="grid grid-cols-12 gap-2 items-center p-2 rounded-md bg-white shadow-sm">
-                            <div className="col-span-2"><Combobox options={employeeOptions} value={row.operator_id} onSelect={v => handleRowChange(setManualRows, index, 'operator_id', v)} placeholder="Operatör *" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı." /></div>
-                            <Input className="col-span-2" placeholder="Parça Kodu" value={row.part_code} onChange={e => handleRowChange(setManualRows, index, 'part_code', e.target.value)} />
-                            <Select value={row.line_id || ''} onValueChange={v => handleRowChange(setManualRows, index, 'line_id', v)}><SelectTrigger className="col-span-2"><SelectValue placeholder="Hat" /></SelectTrigger><SelectContent>{lines.filter(l => l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select>
-                            <Input className="col-span-2" type="number" placeholder="Adet" value={row.quantity} onChange={e => handleRowChange(setManualRows, index, 'quantity', e.target.value)} />
-                            <Input className="col-span-2" type="number" placeholder="Süre (sn)" value={row.duration_seconds} onChange={e => handleRowChange(setManualRows, index, 'duration_seconds', e.target.value)} />
-                            <Input className="col-span-1" placeholder="Açıklama" value={row.description} onChange={e => handleRowChange(setManualRows, index, 'description', e.target.value)} />
-                            <Button variant="ghost" size="icon" onClick={() => removeRow(setManualRows, index)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                <Tabs defaultValue="manual" className="w-full">
+                    <TabsList className="grid w-full grid-cols-2 h-12 bg-gray-100 p-1 rounded-xl">
+                        <TabsTrigger value="manual" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-indigo-600 data-[state=active]:shadow-sm text-base font-medium">Manuel Hat Kayıtları</TabsTrigger>
+                        <TabsTrigger value="repair" className="rounded-lg data-[state=active]:bg-white data-[state=active]:text-orange-600 data-[state=active]:shadow-sm text-base font-medium">Tamir Hattı Kayıtları</TabsTrigger>
+                    </TabsList>
+
+                    <TabsContent value="manual" className="space-y-4 mt-4">
+                        <div className="space-y-3">
+                            {manualRows.map((row, index) => (
+                                <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 rounded-xl bg-white border border-gray-200 shadow-sm hover:border-indigo-200 hover:shadow-md transition-all">
+                                    <div className="md:col-span-3 space-y-1">
+                                        <Label className="text-xs text-gray-500">Operatör</Label>
+                                        <Combobox options={employeeOptions} value={row.operator_id} onSelect={v => handleRowChange(setManualRows, index, 'operator_id', v)} placeholder="Seçiniz..." searchPlaceholder="Ara..." emptyPlaceholder="Yok" className="h-10" />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <Label className="text-xs text-gray-500">Parça Kodu</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-indigo-500 rounded-lg" placeholder="Kod" value={row.part_code} onChange={e => handleRowChange(setManualRows, index, 'part_code', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <Label className="text-xs text-gray-500">Hat</Label>
+                                        <Select value={row.line_id || ''} onValueChange={v => handleRowChange(setManualRows, index, 'line_id', v)}>
+                                            <SelectTrigger className="h-10 border-gray-200 focus:border-indigo-500 rounded-lg">
+                                                <SelectValue placeholder="Seç" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {lines.filter(l => l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="md:col-span-1 space-y-1">
+                                        <Label className="text-xs text-gray-500">Adet</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-indigo-500 rounded-lg text-center" type="number" placeholder="0" value={row.quantity} onChange={e => handleRowChange(setManualRows, index, 'quantity', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-1 space-y-1">
+                                        <Label className="text-xs text-gray-500">Süre(s)</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-indigo-500 rounded-lg text-center" type="number" placeholder="0" value={row.duration_seconds} onChange={e => handleRowChange(setManualRows, index, 'duration_seconds', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <Label className="text-xs text-gray-500">Açıklama</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-indigo-500 rounded-lg" placeholder="Opsiyonel" value={row.description} onChange={e => handleRowChange(setManualRows, index, 'description', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-1 flex justify-center pb-1">
+                                        <Button variant="ghost" size="icon" onClick={() => removeRow(setManualRows, index)} className="h-9 w-9 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"><Trash2 className="h-5 w-5" /></Button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => addRow(setManualRows)} className="mt-2"><Plus className="h-4 w-4 mr-2" />Manuel Satır Ekle</Button>
-                </TabsContent>
-                <TabsContent value="repair" className="space-y-2 max-h-[40vh] overflow-y-auto p-2 border rounded-lg">
-                    {repairRows.map((row, index) => (
-                        <div key={row.id} className="grid grid-cols-12 gap-2 items-center p-2 rounded-md bg-white shadow-sm">
-                            <div className="col-span-2"><Combobox options={employeeOptions} value={row.operator_id} onSelect={v => handleRowChange(setRepairRows, index, 'operator_id', v)} placeholder="Operatör *" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı." /></div>
-                            <Select value={row.repair_line_id || ''} onValueChange={v => handleRowChange(setRepairRows, index, 'repair_line_id', v)}><SelectTrigger className="col-span-2"><SelectValue placeholder="Tamir Hattı" /></SelectTrigger><SelectContent>{lines.filter(l => l.type === 'repair' || l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select>
-                            <Select value={row.source_line_id || ''} onValueChange={v => handleRowChange(setRepairRows, index, 'source_line_id', v)}><SelectTrigger className="col-span-2"><SelectValue placeholder="Kaynak Hat" /></SelectTrigger><SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select>
-                            <Input className="col-span-2" type="number" placeholder="Adet" value={row.quantity} onChange={e => handleRowChange(setRepairRows, index, 'quantity', e.target.value)} />
-                            <Input className="col-span-2" type="number" placeholder="Süre (sn)" value={row.duration_seconds} onChange={e => handleRowChange(setRepairRows, index, 'duration_seconds', e.target.value)} />
-                            <Input className="col-span-1" placeholder="Açıklama" value={row.description} onChange={e => handleRowChange(setRepairRows, index, 'description', e.target.value)} />
-                            <Button variant="ghost" size="icon" onClick={() => removeRow(setRepairRows, index)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        <Button variant="outline" size="lg" onClick={() => addRow(setManualRows)} className="w-full border-dashed border-2 border-gray-300 hover:border-indigo-500 hover:bg-indigo-50 hover:text-indigo-600 h-12 rounded-xl text-gray-500 transition-all">
+                            <Plus className="h-5 w-5 mr-2" /> Yeni Satır Ekle
+                        </Button>
+                    </TabsContent>
+
+                    <TabsContent value="repair" className="space-y-4 mt-4">
+                        <div className="space-y-3">
+                            {repairRows.map((row, index) => (
+                                <div key={row.id} className="grid grid-cols-1 md:grid-cols-12 gap-3 items-end p-4 rounded-xl bg-white border border-gray-200 shadow-sm hover:border-orange-200 hover:shadow-md transition-all">
+                                    <div className="md:col-span-3 space-y-1">
+                                        <Label className="text-xs text-gray-500">Operatör</Label>
+                                        <Combobox options={employeeOptions} value={row.operator_id} onSelect={v => handleRowChange(setRepairRows, index, 'operator_id', v)} placeholder="Seçiniz..." searchPlaceholder="Ara..." emptyPlaceholder="Yok" className="h-10" />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <Label className="text-xs text-gray-500">Tamir Hattı</Label>
+                                        <Select value={row.repair_line_id || ''} onValueChange={v => handleRowChange(setRepairRows, index, 'repair_line_id', v)}>
+                                            <SelectTrigger className="h-10 border-gray-200 focus:border-orange-500 rounded-lg">
+                                                <SelectValue placeholder="Seç" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {lines.filter(l => l.type === 'repair' || l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <Label className="text-xs text-gray-500">Kaynak Hat</Label>
+                                        <Select value={row.source_line_id || ''} onValueChange={v => handleRowChange(setRepairRows, index, 'source_line_id', v)}>
+                                            <SelectTrigger className="h-10 border-gray-200 focus:border-orange-500 rounded-lg">
+                                                <SelectValue placeholder="Seç" />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="md:col-span-1 space-y-1">
+                                        <Label className="text-xs text-gray-500">Adet</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-orange-500 rounded-lg text-center" type="number" placeholder="0" value={row.quantity} onChange={e => handleRowChange(setRepairRows, index, 'quantity', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-1 space-y-1">
+                                        <Label className="text-xs text-gray-500">Süre(s)</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-orange-500 rounded-lg text-center" type="number" placeholder="0" value={row.duration_seconds} onChange={e => handleRowChange(setRepairRows, index, 'duration_seconds', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-2 space-y-1">
+                                        <Label className="text-xs text-gray-500">Açıklama</Label>
+                                        <Input className="h-10 border-gray-200 focus:border-orange-500 rounded-lg" placeholder="Opsiyonel" value={row.description} onChange={e => handleRowChange(setRepairRows, index, 'description', e.target.value)} />
+                                    </div>
+                                    <div className="md:col-span-1 flex justify-center pb-1">
+                                        <Button variant="ghost" size="icon" onClick={() => removeRow(setRepairRows, index)} className="h-9 w-9 text-gray-400 hover:text-red-600 hover:bg-red-50 rounded-full transition-colors"><Trash2 className="h-5 w-5" /></Button>
+                                    </div>
+                                </div>
+                            ))}
                         </div>
-                    ))}
-                    <Button variant="outline" size="sm" onClick={() => addRow(setRepairRows, true)} className="mt-2"><Plus className="h-4 w-4 mr-2" />Tamir Satırı Ekle</Button>
-                </TabsContent>
-            </Tabs>
-            <DialogFooter>
-                <Button onClick={handleSaveClick}><Save className="mr-2 h-4 w-4" />Tümünü Kaydet</Button>
-            </DialogFooter>
+                        <Button variant="outline" size="lg" onClick={() => addRow(setRepairRows, true)} className="w-full border-dashed border-2 border-gray-300 hover:border-orange-500 hover:bg-orange-50 hover:text-orange-600 h-12 rounded-xl text-gray-500 transition-all">
+                            <Plus className="h-5 w-5 mr-2" /> Yeni Tamir Satırı Ekle
+                        </Button>
+                    </TabsContent>
+                </Tabs>
+            </div>
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end gap-3 rounded-b-xl">
+                <Button size="lg" onClick={handleSaveClick} className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200/50 transition-all h-12 px-8 rounded-xl font-semibold">
+                    <Save className="mr-2 h-5 w-5" /> Tümünü Kaydet
+                </Button>
+            </div>
         </div>
     );
 };
@@ -139,70 +236,107 @@ const EditRecordForm = ({ record, recordType, onSave, lines, employees }) => {
     };
 
     return (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                    <Label>Operatör</Label>
-                    <Combobox options={employeeOptions} value={formData.operator_id} onSelect={v => handleChange('operator_id', v)} placeholder="Operatör seçin" searchPlaceholder="Personel ara..." />
-                </div>
-                <div className="space-y-1">
-                    <Label>Vardiya</Label>
-                    <Select value={String(formData.shift)} onValueChange={v => handleChange('shift', v)}>
-                        <SelectTrigger><SelectValue /></SelectTrigger>
-                        <SelectContent>{shiftOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
-                    </Select>
-                </div>
-            </div>
-            {recordType === 'manual' && (
-                <div className="space-y-1">
-                    <Label>Parça Kodu</Label>
-                    <Input value={formData.part_code} onChange={e => handleChange('part_code', e.target.value)} />
-                </div>
-            )}
-            <div className="grid grid-cols-2 gap-4">
-                <div className="space-y-1">
-                    <Label>Adet</Label>
-                    <Input type="number" value={formData.quantity} onChange={e => handleChange('quantity', Number(e.target.value))} />
-                </div>
-                <div className="space-y-1">
-                    <Label>Süre (saniye)</Label>
-                    <Input type="number" value={formData.duration_seconds || 0} onChange={e => handleChange('duration_seconds', Number(e.target.value))} />
-                </div>
-            </div>
-            {recordType === 'manual' ? (
-                <div className="space-y-1">
-                    <Label>Hat</Label>
-                    <Select value={formData.line_id || ''} onValueChange={v => handleChange('line_id', v)}>
-                        <SelectTrigger><SelectValue placeholder="Hat seçin" /></SelectTrigger>
-                        <SelectContent>{lines.filter(l => l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
-                    </Select>
-                </div>
-            ) : (
-                <div className="grid grid-cols-2 gap-4">
-                    <div className="space-y-1">
-                        <Label>Tamir Hattı</Label>
-                        <Select value={formData.repair_line_id || ''} onValueChange={v => handleChange('repair_line_id', v)}>
-                            <SelectTrigger><SelectValue placeholder="Tamir Hattı" /></SelectTrigger>
-                            <SelectContent>{lines.filter(l => l.type === 'repair' || l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
-                        </Select>
+        <div className="flex flex-col h-full">
+            <div className="p-6 space-y-5 flex-1 overflow-y-auto">
+                <div className="grid grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Operatör</Label>
+                        <Combobox
+                            options={employeeOptions}
+                            value={formData.operator_id}
+                            onSelect={v => handleChange('operator_id', v)}
+                            placeholder="Operatör seçin"
+                            searchPlaceholder="Personel ara..."
+                            className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"
+                        />
                     </div>
-                    <div className="space-y-1">
-                        <Label>Kaynak Hat</Label>
-                        <Select value={formData.source_line_id || ''} onValueChange={v => handleChange('source_line_id', v)}>
-                            <SelectTrigger><SelectValue placeholder="Kaynak Hat" /></SelectTrigger>
-                            <SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Vardiya</Label>
+                        <Select value={String(formData.shift)} onValueChange={v => handleChange('shift', v)}>
+                            <SelectTrigger className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"><SelectValue /></SelectTrigger>
+                            <SelectContent>{shiftOptions.map(o => <SelectItem key={o.value} value={o.value}>{o.label}</SelectItem>)}</SelectContent>
                         </Select>
                     </div>
                 </div>
-            )}
-            <div className="space-y-1">
-                <Label>Açıklama</Label>
-                <Input value={formData.description || ''} onChange={e => handleChange('description', e.target.value)} />
+
+                {recordType === 'manual' && (
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Parça Kodu</Label>
+                        <Input
+                            value={formData.part_code}
+                            onChange={e => handleChange('part_code', e.target.value)}
+                            className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg font-medium"
+                        />
+                    </div>
+                )}
+
+                <div className="grid grid-cols-2 gap-5">
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Adet</Label>
+                        <Input
+                            type="number"
+                            value={formData.quantity}
+                            onChange={e => handleChange('quantity', Number(e.target.value))}
+                            className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"
+                        />
+                    </div>
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Süre (saniye)</Label>
+                        <Input
+                            type="number"
+                            value={formData.duration_seconds || 0}
+                            onChange={e => handleChange('duration_seconds', Number(e.target.value))}
+                            className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"
+                        />
+                    </div>
+                </div>
+
+                {recordType === 'manual' ? (
+                    <div className="space-y-2">
+                        <Label className="text-sm font-semibold text-gray-700">Hat</Label>
+                        <Select value={formData.line_id || ''} onValueChange={v => handleChange('line_id', v)}>
+                            <SelectTrigger className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"><SelectValue placeholder="Hat seçin" /></SelectTrigger>
+                            <SelectContent>{lines.filter(l => l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+                        </Select>
+                    </div>
+                ) : (
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="space-y-2">
+                            <Label className="text-sm font-semibold text-gray-700">Tamir Hattı</Label>
+                            <Select value={formData.repair_line_id || ''} onValueChange={v => handleChange('repair_line_id', v)}>
+                                <SelectTrigger className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"><SelectValue placeholder="Tamir Hattı" /></SelectTrigger>
+                                <SelectContent>{lines.filter(l => l.type === 'repair' || l.type === 'manual').map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                        <div className="space-y-2">
+                            <Label className="text-sm font-semibold text-gray-700">Kaynak Hat</Label>
+                            <Select value={formData.source_line_id || ''} onValueChange={v => handleChange('source_line_id', v)}>
+                                <SelectTrigger className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"><SelectValue placeholder="Kaynak Hat" /></SelectTrigger>
+                                <SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+                            </Select>
+                        </div>
+                    </div>
+                )}
+
+                <div className="space-y-2">
+                    <Label className="text-sm font-semibold text-gray-700">Açıklama</Label>
+                    <Input
+                        value={formData.description || ''}
+                        onChange={e => handleChange('description', e.target.value)}
+                        className="h-11 border-gray-300 focus:border-indigo-500 rounded-lg"
+                        placeholder="İsteğe bağlı açıklama..."
+                    />
+                </div>
             </div>
 
-            <DialogFooter>
-                <Button onClick={handleSave}>Kaydet</Button>
-            </DialogFooter>
+            <div className="p-6 bg-gray-50 border-t border-gray-100 flex justify-end rounded-b-xl">
+                <Button
+                    onClick={handleSave}
+                    className="bg-indigo-600 hover:bg-indigo-700 text-white shadow-lg shadow-indigo-200/50 transition-all h-12 px-8 rounded-xl font-semibold"
+                >
+                    <Save className="mr-2 h-5 w-5" /> Kaydet
+                </Button>
+            </div>
         </div>
     );
 };
@@ -252,6 +386,15 @@ const ManualDataTracking = () => {
     const [partCodeSearchResults, setPartCodeSearchResults] = useState(null);
     const [showPartCodeSearch, setShowPartCodeSearch] = useState(false);
     const [employeeAnalysisPeriod, setEmployeeAnalysisPeriod] = useState('monthly'); // 'monthly' veya 'yearly'
+
+    // Hat bazlı üretim adetleri
+    const [productionCounts, setProductionCounts] = useState([]);
+    const [showProductionCountsDialog, setShowProductionCountsDialog] = useState(false);
+    const [prodCountsFormData, setProdCountsFormData] = useState({
+        year: format(new Date(), 'yyyy'),
+        month: format(new Date(), 'MM'),
+        entries: [] // { line_id, production_qty }
+    });
 
     const fetchData = useCallback(async () => {
         setLoading(true);
@@ -1672,6 +1815,99 @@ const ManualDataTracking = () => {
         }
     };
 
+    // Hat bazlı üretim adetleri dialog aç
+    const openProductionCountsDialog = async () => {
+        const yearMonth = `${format(new Date(), 'yyyy')}-${format(new Date(), 'MM')}`;
+        try {
+            const { data: existing } = await supabase
+                .from('production_counts')
+                .select('*')
+                .eq('year_month', yearMonth);
+
+            const entries = lines.map(l => {
+                const found = (existing || []).find(e => e.line_id === l.id);
+                return { line_id: l.id, line_name: l.name, production_qty: found ? String(found.production_qty) : '' };
+            });
+
+            setProdCountsFormData({
+                year: format(new Date(), 'yyyy'),
+                month: format(new Date(), 'MM'),
+                entries
+            });
+            setShowProductionCountsDialog(true);
+        } catch (error) {
+            toast({ title: "Hata", description: error.message, variant: "destructive" });
+        }
+    };
+
+    // Hat bazlı üretim adetleri dialog (ay değişince)
+    const updateProductionCountsMonth = async (year, month) => {
+        const yearMonth = `${year}-${String(month).padStart(2, '0')}`;
+        try {
+            const { data: existing } = await supabase
+                .from('production_counts')
+                .select('*')
+                .eq('year_month', yearMonth);
+
+            const entries = lines.map(l => {
+                const found = (existing || []).find(e => e.line_id === l.id);
+                return { line_id: l.id, line_name: l.name, production_qty: found ? String(found.production_qty) : '' };
+            });
+
+            setProdCountsFormData(prev => ({ ...prev, year, month, entries }));
+        } catch (error) {
+            toast({ title: "Hata", description: error.message, variant: "destructive" });
+        }
+    };
+
+    // Hat bazlı üretim adetlerini kaydet
+    const handleSaveProductionCounts = async () => {
+        try {
+            const yearMonth = `${prodCountsFormData.year}-${String(prodCountsFormData.month).padStart(2, '0')}`;
+            const entriesToSave = prodCountsFormData.entries
+                .filter(e => e.production_qty && Number(e.production_qty) > 0)
+                .map(e => ({
+                    year_month: yearMonth,
+                    line_id: e.line_id,
+                    production_qty: Number(e.production_qty),
+                    updated_at: new Date().toISOString()
+                }));
+
+            if (entriesToSave.length === 0) {
+                toast({ title: "Uyarı", description: "En az bir hat için üretim adedi girin.", variant: "destructive" });
+                return;
+            }
+
+            // Upsert - her hat için
+            for (const entry of entriesToSave) {
+                const { data: existing } = await supabase
+                    .from('production_counts')
+                    .select('id')
+                    .eq('year_month', entry.year_month)
+                    .eq('line_id', entry.line_id)
+                    .single();
+
+                if (existing) {
+                    await supabase
+                        .from('production_counts')
+                        .update({ production_qty: entry.production_qty, updated_at: entry.updated_at })
+                        .eq('id', existing.id);
+                } else {
+                    await supabase
+                        .from('production_counts')
+                        .insert(entry);
+                }
+            }
+
+            toast({ title: "Başarılı", description: `${yearMonth}: ${entriesToSave.length} hat için üretim adetleri kaydedildi.` });
+            logAction('SAVE_PRODUCTION_COUNTS', `${yearMonth}: ${entriesToSave.length} hat`, user);
+            setShowProductionCountsDialog(false);
+            fetchData();
+        } catch (error) {
+            toast({ title: "Hata", description: error.message, variant: "destructive" });
+        }
+    };
+
     // Analiz sekmesi için filtrelenmiş veriler
     const analysisData = useMemo(() => {
         // Tarih aralığını güvenli bir şekilde al - UTC kullanarak saat dilimi sorunlarını önle
@@ -2217,6 +2453,7 @@ const ManualDataTracking = () => {
                                         });
                                         setShowMonthlyDialog(true);
                                     }}><CalendarIcon className="mr-2 h-4 w-4" />Aylık Toplam Gir</Button>
+                                    <Button variant="secondary" onClick={openProductionCountsDialog}><Factory className="mr-2 h-4 w-4" />Hat Bazlı Üretim</Button>
                                     <Button variant="outline" onClick={handleGenerateReport}><FileText className="h-4 w-4 mr-2" />Raporla</Button>
                                 </div>
                             </div>
@@ -2229,6 +2466,12 @@ const ManualDataTracking = () => {
                                         const today = new Date();
                                         setFilters({ ...filters, dateRange: { from: today, to: today } });
                                     }}>Bugün</Button>
+                                    <Button size="sm" variant="outline" onClick={() => {
+                                        const today = new Date();
+                                        const yesterday = new Date(today);
+                                        yesterday.setDate(yesterday.getDate() - 1);
+                                        setFilters({ ...filters, dateRange: { from: yesterday, to: yesterday } });
+                                    }}>Dün</Button>
                                     <Button size="sm" variant="outline" onClick={() => {
                                         const today = new Date();
                                         setFilters({ ...filters, dateRange: { from: startOfMonth(today), to: endOfMonth(today) } });
@@ -2415,167 +2658,281 @@ const ManualDataTracking = () => {
                         </CardContent>
                     </Card>
 
+                    {/* Add Record Dialog */}
                     <Dialog open={showDialog} onOpenChange={setShowDialog}>
-                        <DialogContent className="max-w-6xl">
-                            <DialogHeader><DialogTitle>Toplu Kayıt Ekle</DialogTitle></DialogHeader>
-                            <MultiRowForm onSave={handleMultiSave} lines={lines} employees={employees} />
+                        <DialogContent className="max-w-7xl p-0 overflow-hidden bg-white rounded-2xl shadow-xl border-0">
+                            <DialogHeader className="bg-gradient-to-r from-blue-600 to-indigo-600 px-8 py-6">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                                        <Plus className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-2xl font-bold text-white">Toplu Kayıt Ekle</DialogTitle>
+                                        <DialogDescription className="text-blue-100 text-sm mt-1">
+                                            Manuel veya tamir hattı için yeni üretim kayıtları oluşturun (Tarih ve vardiya seçimi zorunludur).
+                                        </DialogDescription>
+                                    </div>
+                                </div>
+                            </DialogHeader>
+                            <div className="p-1 bg-gray-50 h-[650px]">
+                                <MultiRowForm onSave={handleMultiSave} lines={lines} employees={employees} />
+                            </div>
                         </DialogContent>
                     </Dialog>
 
+                    {/* View Details Dialog */}
                     <Dialog open={!!viewingDetails} onOpenChange={() => setViewingDetails(null)}>
-                        <DialogContent className="max-w-7xl">
-                            <DialogHeader>
-                                <DialogTitle>{viewingDetails ? `${format(new Date(viewingDetails.date), 'dd MMMM yyyy', { locale: tr })} Tarihli Kayıt Detayları` : 'Detaylar'}</DialogTitle>
+                        <DialogContent className="max-w-7xl p-0 overflow-hidden bg-white rounded-2xl shadow-xl border-0 h-[85vh] flex flex-col">
+                            <DialogHeader className="bg-gradient-to-r from-slate-800 to-slate-900 px-8 py-6 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/10 p-2 rounded-xl backdrop-blur-md">
+                                        <Eye className="w-6 h-6 text-blue-300" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold text-white">
+                                            {viewingDetails ? `${format(new Date(viewingDetails.date), 'dd MMMM yyyy', { locale: tr })} Kayıt Detayları` : 'Detaylar'}
+                                        </DialogTitle>
+                                        <DialogDescription className="text-slate-400 text-sm mt-1">
+                                            Seçili tarihe ait tüm manuel ve tamir kayıtlarını inceleyin veya düzenleyin.
+                                        </DialogDescription>
+                                    </div>
+                                </div>
                             </DialogHeader>
-                            {viewingDetails && (
-                                <Tabs defaultValue="manual">
-                                    <TabsList>
-                                        <TabsTrigger value="manual">Manuel Hat Kayıtları ({viewingDetails.manuals.length})</TabsTrigger>
-                                        <TabsTrigger value="repair">Tamir Hattı Kayıtları ({viewingDetails.repairs.length})</TabsTrigger>
-                                    </TabsList>
-                                    <TabsContent value="manual" className="mt-4 max-h-[60vh] overflow-y-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50 sticky top-0"><tr>{['Tarih/Saat', 'Vardiya', 'Operatör', 'Hat', 'Parça Kodu', 'Adet', 'Süre (sn)', 'Maliyet', 'İşlem'].map(h => <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
-                                            <tbody className="divide-y">
-                                                {viewingDetails.manuals.map(rec => {
-                                                    const durationSeconds = rec.duration_seconds || 0;
-                                                    const cost = calculateCost(rec.quantity, rec.line_id, durationSeconds);
-                                                    return (
-                                                        <tr key={rec.id}>
-                                                            <td className="px-4 py-2">
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-medium">{format(new Date(rec.record_date), 'dd.MM.yyyy')}</span>
-                                                                    <span className="text-xs text-gray-500">{rec.created_at ? format(new Date(rec.created_at), 'HH:mm:ss') : '-'}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-2">{getShiftLabel(rec.shift)}</td>
-                                                            <td className="px-4 py-2">{rec.operator_name}</td>
-                                                            <td className="px-4 py-2">{rec.line_name}</td>
-                                                            <td className="px-4 py-2 font-semibold">{rec.part_code}</td>
-                                                            <td className="px-4 py-2"><span className="px-2 py-1 bg-blue-50 text-blue-700 rounded">{rec.quantity}</span></td>
-                                                            <td className="px-4 py-2"><span className="px-2 py-1 bg-gray-50 text-gray-700 rounded">{durationSeconds || 0}</span></td>
-                                                            <td className="px-4 py-2"><span className="font-semibold text-blue-700">{formatCurrency(cost)}</span></td>
-                                                            <td className="px-4 py-2"><Button variant="outline" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'manual' })}><Edit className="h-4 w-4" /></Button></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </TabsContent>
-                                    <TabsContent value="repair" className="mt-4 max-h-[60vh] overflow-y-auto">
-                                        <table className="w-full text-sm">
-                                            <thead className="bg-gray-50 sticky top-0"><tr>{['Tarih/Saat', 'Vardiya', 'Operatör', 'Kaynak Hat', 'Tamir Hattı', 'Adet', 'Süre (sn)', 'Maliyet', 'İşlem'].map(h => <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
-                                            <tbody className="divide-y">
-                                                {viewingDetails.repairs.map(rec => {
-                                                    const durationSeconds = rec.duration_seconds || 0;
-                                                    const cost = calculateCost(rec.quantity, rec.repair_line_id, durationSeconds);
-                                                    return (
-                                                        <tr key={rec.id}>
-                                                            <td className="px-4 py-2">
-                                                                <div className="flex flex-col">
-                                                                    <span className="font-medium">{format(new Date(rec.record_date), 'dd.MM.yyyy')}</span>
-                                                                    <span className="text-xs text-gray-500">{rec.created_at ? format(new Date(rec.created_at), 'HH:mm:ss') : '-'}</span>
-                                                                </div>
-                                                            </td>
-                                                            <td className="px-4 py-2">{getShiftLabel(rec.shift)}</td>
-                                                            <td className="px-4 py-2">{rec.operator_name}</td>
-                                                            <td className="px-4 py-2">{rec.source_line_name}</td>
-                                                            <td className="px-4 py-2">{rec.repair_line_name}</td>
-                                                            <td className="px-4 py-2"><span className="px-2 py-1 bg-orange-50 text-orange-700 rounded">{rec.quantity}</span></td>
-                                                            <td className="px-4 py-2"><span className="px-2 py-1 bg-gray-50 text-gray-700 rounded">{durationSeconds || 0}</span></td>
-                                                            <td className="px-4 py-2"><span className="font-semibold text-orange-700">{formatCurrency(cost)}</span></td>
-                                                            <td className="px-4 py-2"><Button variant="outline" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'repair' })}><Edit className="h-4 w-4" /></Button></td>
-                                                        </tr>
-                                                    );
-                                                })}
-                                            </tbody>
-                                        </table>
-                                    </TabsContent>
-                                </Tabs>
-                            )}
+
+                            <div className="flex-1 overflow-hidden p-6 bg-gray-50/50">
+                                {viewingDetails && (
+                                    <Tabs defaultValue="manual" className="h-full flex flex-col">
+                                        <TabsList className="grid w-full grid-cols-2 h-12 bg-white border border-gray-200 p-1 rounded-xl mb-6 shadow-sm shrink-0">
+                                            <TabsTrigger value="manual" className="rounded-lg data-[state=active]:bg-indigo-50 data-[state=active]:text-indigo-700 data-[state=active]:font-semibold text-gray-500 font-medium transition-all">
+                                                Manuel Hat Kayıtları ({viewingDetails.manuals.length})
+                                            </TabsTrigger>
+                                            <TabsTrigger value="repair" className="rounded-lg data-[state=active]:bg-orange-50 data-[state=active]:text-orange-700 data-[state=active]:font-semibold text-gray-500 font-medium transition-all">
+                                                Tamir Hattı Kayıtları ({viewingDetails.repairs.length})
+                                            </TabsTrigger>
+                                        </TabsList>
+
+                                        <div className="flex-1 overflow-hidden">
+                                            <TabsContent value="manual" className="h-full overflow-hidden mt-0 data-[state=inactive]:hidden">
+                                                <div className="h-full overflow-auto border border-gray-200 rounded-xl bg-white shadow-sm">
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-gray-50/80 sticky top-0 backdrop-blur-sm z-10 border-b border-gray-100">
+                                                            <tr>{['Tarih/Saat', 'Vardiya', 'Operatör', 'Hat', 'Parça Kodu', 'Adet', 'Süre (sn)', 'Maliyet', 'İşlem'].map(h =>
+                                                                <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                                                            )}</tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {viewingDetails.manuals.length === 0 ? (
+                                                                <tr><td colSpan="9" className="text-center py-10 text-gray-400">Kayıt bulunamadı.</td></tr>
+                                                            ) : (
+                                                                viewingDetails.manuals.map((rec, idx) => {
+                                                                    const durationSeconds = rec.duration_seconds || 0;
+                                                                    const cost = calculateCost(rec.quantity, rec.line_id, durationSeconds);
+                                                                    return (
+                                                                        <tr key={rec.id} className={`hover:bg-indigo-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                                                                            <td className="px-5 py-3">
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="font-medium text-gray-900">{format(new Date(rec.record_date), 'dd.MM.yyyy')}</span>
+                                                                                    <span className="text-xs text-gray-500 font-mono">{rec.created_at ? format(new Date(rec.created_at), 'HH:mm') : '-'}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-5 py-3"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{getShiftLabel(rec.shift)}</span></td>
+                                                                            <td className="px-5 py-3 text-gray-700 font-medium">{rec.operator_name}</td>
+                                                                            <td className="px-5 py-3 text-gray-600">{rec.line_name}</td>
+                                                                            <td className="px-5 py-3 font-semibold text-indigo-600 font-mono">{rec.part_code || '-'}</td>
+                                                                            <td className="px-5 py-3 font-medium text-gray-900">{rec.quantity}</td>
+                                                                            <td className="px-5 py-3 text-gray-500">{durationSeconds}s</td>
+                                                                            <td className="px-5 py-3 font-bold text-gray-900">{formatCurrency(cost)}</td>
+                                                                            <td className="px-5 py-3">
+                                                                                <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'manual' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors">
+                                                                                    <Edit className="h-4 w-4" />
+                                                                                </Button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </TabsContent>
+
+                                            <TabsContent value="repair" className="h-full overflow-hidden mt-0 data-[state=inactive]:hidden">
+                                                <div className="h-full overflow-auto border border-gray-200 rounded-xl bg-white shadow-sm">
+                                                    <table className="w-full text-sm">
+                                                        <thead className="bg-gray-50/80 sticky top-0 backdrop-blur-sm z-10 border-b border-gray-100">
+                                                            <tr>{['Tarih/Saat', 'Vardiya', 'Operatör', 'Kaynak Hat', 'Tamir Hattı', 'Adet', 'Süre (sn)', 'Maliyet', 'İşlem'].map(h =>
+                                                                <th key={h} className="px-5 py-3.5 text-left text-xs font-semibold text-gray-500 uppercase tracking-wider">{h}</th>
+                                                            )}</tr>
+                                                        </thead>
+                                                        <tbody className="divide-y divide-gray-100">
+                                                            {viewingDetails.repairs.length === 0 ? (
+                                                                <tr><td colSpan="9" className="text-center py-10 text-gray-400">Kayıt bulunamadı.</td></tr>
+                                                            ) : (
+                                                                viewingDetails.repairs.map((rec, idx) => {
+                                                                    const durationSeconds = rec.duration_seconds || 0;
+                                                                    const cost = calculateCost(rec.quantity, rec.repair_line_id, durationSeconds);
+                                                                    return (
+                                                                        <tr key={rec.id} className={`hover:bg-orange-50/40 transition-colors ${idx % 2 === 0 ? 'bg-white' : 'bg-gray-50/30'}`}>
+                                                                            <td className="px-5 py-3">
+                                                                                <div className="flex flex-col">
+                                                                                    <span className="font-medium text-gray-900">{format(new Date(rec.record_date), 'dd.MM.yyyy')}</span>
+                                                                                    <span className="text-xs text-gray-500 font-mono">{rec.created_at ? format(new Date(rec.created_at), 'HH:mm') : '-'}</span>
+                                                                                </div>
+                                                                            </td>
+                                                                            <td className="px-5 py-3"><span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-gray-100 text-gray-800">{getShiftLabel(rec.shift)}</span></td>
+                                                                            <td className="px-5 py-3 text-gray-700 font-medium">{rec.operator_name}</td>
+                                                                            <td className="px-5 py-3 text-gray-600">{rec.source_line_name}</td>
+                                                                            <td className="px-5 py-3 text-orange-600 font-medium">{rec.repair_line_name}</td>
+                                                                            <td className="px-5 py-3 font-medium text-gray-900">{rec.quantity}</td>
+                                                                            <td className="px-5 py-3 text-gray-500">{durationSeconds}s</td>
+                                                                            <td className="px-5 py-3 font-bold text-gray-900">{formatCurrency(cost)}</td>
+                                                                            <td className="px-5 py-3">
+                                                                                <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'repair' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition-colors">
+                                                                                    <Edit className="h-4 w-4" />
+                                                                                </Button>
+                                                                            </td>
+                                                                        </tr>
+                                                                    );
+                                                                })
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </TabsContent>
+                                        </div>
+                                    </Tabs>
+                                )}
+                            </div>
                         </DialogContent>
                     </Dialog>
 
+                    {/* Edit Record Dialog */}
                     <Dialog open={!!editingRecord} onOpenChange={() => setEditingRecord(null)}>
-                        <DialogContent>
-                            <DialogHeader>
-                                <DialogTitle>Kaydı Düzenle</DialogTitle>
+                        <DialogContent className="max-w-3xl p-0 overflow-hidden bg-white rounded-2xl shadow-xl border-0 h-[600px] flex flex-col">
+                            <DialogHeader className="bg-gradient-to-r from-teal-600 to-emerald-600 px-8 py-5 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                                        <Edit className="w-5 h-5 text-white" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold text-white">Kaydı Düzenle</DialogTitle>
+                                        <DialogDescription className="text-teal-100 text-sm mt-0.5">
+                                            {editingRecord?.recordType === 'manual' ? 'Manuel üretim' : 'Tamir hattı'} kaydı için bilgileri güncelleyin.
+                                        </DialogDescription>
+                                    </div>
+                                </div>
                             </DialogHeader>
-                            {editingRecord && (
-                                <EditRecordForm
-                                    key={editingRecord.id}
-                                    record={editingRecord}
-                                    recordType={editingRecord.recordType}
-                                    onSave={handleEditSave}
-                                    lines={lines}
-                                    employees={employees}
-                                />
-                            )}
+                            <div className="flex-1 overflow-hidden bg-gray-50/50">
+                                {editingRecord && (
+                                    <EditRecordForm
+                                        key={editingRecord.id}
+                                        record={editingRecord}
+                                        recordType={editingRecord.recordType}
+                                        onSave={handleEditSave}
+                                        lines={lines}
+                                        employees={employees}
+                                    />
+                                )}
+                            </div>
                         </DialogContent>
                     </Dialog>
 
+                    {/* Delete Confirmation Dialog */}
                     <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-                        <DialogContent className="sm:max-w-md">
-                            <DialogHeader><DialogTitle>Silme Onayı</DialogTitle></DialogHeader>
-                            <DialogDescription>{deleteConfirm && `${format(new Date(deleteConfirm.date), 'dd.MM.yyyy')} tarihli tüm manuel ve tamir kayıtlarını kalıcı olarak silmek istediğinizden emin misiniz? Bu işlem geri alınamaz.`}</DialogDescription>
-                            <DialogFooter className="mt-4">
-                                <Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button>
-                                <Button variant="destructive" onClick={handleDelete}>Sil</Button>
-                            </DialogFooter>
+                        <DialogContent className="sm:max-w-md p-0 overflow-hidden border-0 rounded-2xl shadow-2xl bg-white">
+                            <DialogHeader className="bg-red-50 p-6 border-b border-red-100">
+                                <div className="flex items-center gap-4">
+                                    <div className="h-12 w-12 rounded-full bg-red-100 flex items-center justify-center shrink-0">
+                                        <Trash2 className="h-6 w-6 text-red-600" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold text-red-900">Silme Onayı</DialogTitle>
+                                        <DialogDescription className="text-red-700/80 mt-1">Bu işlem geri alınamaz!</DialogDescription>
+                                    </div>
+                                </div>
+                            </DialogHeader>
+                            <div className="p-6 space-y-6">
+                                <div className="text-base text-gray-600 leading-relaxed">
+                                    {deleteConfirm && <span className="font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded mr-1">{format(new Date(deleteConfirm.date), 'dd MMMM yyyy', { locale: tr })}</span>}
+                                    tarihli tüm manuel ve tamir kayıtlarını kalıcı olarak silmek üzeresiniz.
+                                    <br /><br />
+                                    Devam etmek istediğinizden emin misiniz?
+                                </div>
+
+                                <DialogFooter className="gap-3 sm:justify-between w-full">
+                                    <Button variant="outline" onClick={() => setDeleteConfirm(null)} className="flex-1 h-12 border-gray-300 hover:bg-gray-50 text-gray-700 font-medium text-base rounded-xl transition-all">
+                                        İptal
+                                    </Button>
+                                    <Button variant="destructive" onClick={handleDelete} className="flex-1 h-12 bg-red-600 hover:bg-red-700 text-white font-semibold text-base rounded-xl shadow-lg shadow-red-200 hover:shadow-red-300 transition-all">
+                                        Evet, Sil
+                                    </Button>
+                                </DialogFooter>
+                            </div>
                         </DialogContent>
                     </Dialog>
 
-                    {/* Aylık Toplam Dialog */}
+                    {/* Monthly Total Dialog */}
                     <Dialog open={showMonthlyDialog} onOpenChange={setShowMonthlyDialog}>
-                        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader className="px-6">
-                                <DialogTitle className="text-2xl font-bold">Aylık Toplam Üretim</DialogTitle>
-                                <DialogDescription className="text-base">
-                                    Fabrika genelindeki aylık toplam üretim adedini girin. Manuel ve tamir adetleri otomatik hesaplanacaktır.
-                                </DialogDescription>
+                        <DialogContent className="sm:max-w-3xl p-0 overflow-hidden bg-white rounded-2xl shadow-xl border-0 h-[85vh] flex flex-col">
+                            <DialogHeader className="bg-gradient-to-r from-emerald-600 to-green-600 px-8 py-5 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                                        <TrendingUp className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold text-white">Aylık Toplam Üretim</DialogTitle>
+                                        <DialogDescription className="text-emerald-100/90 text-sm mt-0.5">
+                                            Fabrika genelindeki aylık toplam üretim verilerini girin ve analiz edin.
+                                        </DialogDescription>
+                                    </div>
+                                </div>
                             </DialogHeader>
-                            <div className="space-y-6 py-6 px-6">
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="space-y-2">
-                                        <Label className="text-base font-semibold">Yıl</Label>
+
+                            <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-gray-50/50">
+                                <div className="grid grid-cols-2 gap-6">
+                                    <div className="space-y-2.5">
+                                        <Label className="text-base font-semibold text-gray-700">Yıl</Label>
                                         <Select value={monthlyFormData.year} onValueChange={(value) => setMonthlyFormData({ ...monthlyFormData, year: value })}>
-                                            <SelectTrigger className="h-12">
+                                            <SelectTrigger className="h-12 border-gray-300 focus:border-emerald-500 rounded-xl bg-white shadow-sm text-base">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {[2024, 2025, 2026].map(y => (
-                                                    <SelectItem key={y} value={String(y)}>{y}</SelectItem>
+                                                    <SelectItem key={y} value={String(y)} className="text-base py-2.5">{y}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
-                                    <div className="space-y-2">
-                                        <Label className="text-base font-semibold">Ay</Label>
+                                    <div className="space-y-2.5">
+                                        <Label className="text-base font-semibold text-gray-700">Ay</Label>
                                         <Select value={monthlyFormData.month} onValueChange={(value) => setMonthlyFormData({ ...monthlyFormData, month: value })}>
-                                            <SelectTrigger className="h-12">
+                                            <SelectTrigger className="h-12 border-gray-300 focus:border-emerald-500 rounded-xl bg-white shadow-sm text-base">
                                                 <SelectValue />
                                             </SelectTrigger>
                                             <SelectContent>
                                                 {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(m => (
-                                                    <SelectItem key={m} value={m}>{format(new Date(2000, Number(m) - 1, 1), 'MMMM', { locale: tr })}</SelectItem>
+                                                    <SelectItem key={m} value={m} className="text-base py-2.5">{format(new Date(2000, Number(m) - 1, 1), 'MMMM', { locale: tr })}</SelectItem>
                                                 ))}
                                             </SelectContent>
                                         </Select>
                                     </div>
                                 </div>
 
-                                <div className="space-y-2">
-                                    <Label className="text-base font-semibold">Aylık Toplam Üretim Adedi</Label>
-                                    <Input
-                                        type="number"
-                                        placeholder="Örn: 50000"
-                                        className="h-14 text-lg"
-                                        value={monthlyFormData.total_production}
-                                        onChange={(e) => setMonthlyFormData({ ...monthlyFormData, total_production: e.target.value })}
-                                    />
-                                    <p className="text-sm text-muted-foreground">
-                                        Bu aydaki tüm üretim (manuel + robot + diğer sistemler) toplamı
-                                    </p>
+                                <div className="space-y-3 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                                    <Label className="text-base font-semibold text-gray-800 flex items-center justify-between">
+                                        <span>Aylık Toplam Üretim Adedi</span>
+                                        <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Manuel + Robot + Diğer</span>
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            type="number"
+                                            placeholder="Örn: 50000"
+                                            className="h-16 text-2xl font-bold border-gray-200 focus:border-emerald-500 focus:ring-emerald-100 rounded-xl pl-6 pr-12 shadow-inner"
+                                            value={monthlyFormData.total_production}
+                                            onChange={(e) => setMonthlyFormData({ ...monthlyFormData, total_production: e.target.value })}
+                                        />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium select-none">Adet</div>
+                                    </div>
                                 </div>
 
                                 {(() => {
@@ -2587,34 +2944,22 @@ const ManualDataTracking = () => {
                                     const existing = monthlyTotals[yearMonth];
 
                                     return (
-                                        <div className="grid grid-cols-3 gap-4">
-                                            <Card className="bg-blue-50 border-blue-200">
-                                                <CardHeader className="pb-2">
-                                                    <CardTitle className="text-sm">Manuel Üretim</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p className="text-2xl font-bold text-blue-700">{totalManual}</p>
-                                                    <p className="text-xs text-muted-foreground">Kayıtlardan</p>
-                                                </CardContent>
-                                            </Card>
-                                            <Card className="bg-orange-50 border-orange-200">
-                                                <CardHeader className="pb-2">
-                                                    <CardTitle className="text-sm">Tamir</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p className="text-2xl font-bold text-orange-700">{totalRepair}</p>
-                                                    <p className="text-xs text-muted-foreground">Kayıtlardan</p>
-                                                </CardContent>
-                                            </Card>
-                                            <Card className="bg-purple-50 border-purple-200">
-                                                <CardHeader className="pb-2">
-                                                    <CardTitle className="text-sm">Toplam (M+T)</CardTitle>
-                                                </CardHeader>
-                                                <CardContent>
-                                                    <p className="text-2xl font-bold text-purple-700">{totalManual + totalRepair}</p>
-                                                    <p className="text-xs text-muted-foreground">Kayıtlardan</p>
-                                                </CardContent>
-                                            </Card>
+                                        <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                            <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-100 hover:border-blue-200 transition-colors">
+                                                <p className="text-sm font-medium text-blue-600 mb-1">Manuel Üretim</p>
+                                                <p className="text-2xl font-bold text-blue-700">{totalManual.toLocaleString('tr-TR')}</p>
+                                                <p className="text-xs text-blue-400 mt-2 font-medium">Sistem Kayıtları</p>
+                                            </div>
+                                            <div className="bg-orange-50/50 p-5 rounded-xl border border-orange-100 hover:border-orange-200 transition-colors">
+                                                <p className="text-sm font-medium text-orange-600 mb-1">Tamir</p>
+                                                <p className="text-2xl font-bold text-orange-700">{totalRepair.toLocaleString('tr-TR')}</p>
+                                                <p className="text-xs text-orange-400 mt-2 font-medium">Sistem Kayıtları</p>
+                                            </div>
+                                            <div className="bg-purple-50/50 p-5 rounded-xl border border-purple-100 hover:border-purple-200 transition-colors">
+                                                <p className="text-sm font-medium text-purple-600 mb-1">Toplam (M+T)</p>
+                                                <p className="text-2xl font-bold text-purple-700">{(totalManual + totalRepair).toLocaleString('tr-TR')}</p>
+                                                <p className="text-xs text-purple-400 mt-2 font-medium">Sistem Kayıtları</p>
+                                            </div>
                                         </div>
                                     );
                                 })()}
@@ -2622,10 +2967,8 @@ const ManualDataTracking = () => {
                                 {/* Oran Kartları */}
                                 {(() => {
                                     const yearMonth = `${monthlyFormData.year}-${String(monthlyFormData.month).padStart(2, '0')}`;
-
                                     const monthRecords = allManualRecords.filter(r => r.record_date && r.record_date.startsWith(yearMonth));
                                     const monthRepairs = allRepairRecords.filter(r => r.record_date && r.record_date.startsWith(yearMonth));
-
                                     const totalManual = monthRecords.reduce((sum, r) => sum + (r.quantity || 0), 0);
                                     const totalRepair = monthRepairs.reduce((sum, r) => sum + (r.quantity || 0), 0);
                                     const inputProduction = Number(monthlyFormData.total_production) || 0;
@@ -2635,27 +2978,32 @@ const ManualDataTracking = () => {
                                         const repairPercent = ((totalRepair / inputProduction) * 100).toFixed(1);
 
                                         return (
-                                            <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg">
-                                                <p className="font-semibold text-indigo-900 mb-3">Aylık Oranlar</p>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <Card className="bg-white border-indigo-200">
-                                                        <CardHeader className="pb-2">
-                                                            <CardTitle className="text-sm text-indigo-900">Manuel Oran %</CardTitle>
-                                                        </CardHeader>
-                                                        <CardContent>
-                                                            <p className="text-3xl font-bold text-indigo-600">%{manualPercent}</p>
-                                                            <p className="text-xs text-muted-foreground mt-1">{totalManual} / {inputProduction} adet</p>
-                                                        </CardContent>
-                                                    </Card>
-                                                    <Card className="bg-white border-purple-200">
-                                                        <CardHeader className="pb-2">
-                                                            <CardTitle className="text-sm text-purple-900">Tamir Oran %</CardTitle>
-                                                        </CardHeader>
-                                                        <CardContent>
-                                                            <p className="text-3xl font-bold text-purple-600">%{repairPercent}</p>
-                                                            <p className="text-xs text-muted-foreground mt-1">{totalRepair} / {inputProduction} adet</p>
-                                                        </CardContent>
-                                                    </Card>
+                                            <div className="p-6 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-2xl shadow-sm">
+                                                <p className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                                    <Activity className="w-4 h-4 text-emerald-600" />
+                                                    Hesaplanan Oranlar
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between items-end">
+                                                            <span className="text-sm text-gray-600 font-medium">Manuel Oran</span>
+                                                            <span className="text-2xl font-bold text-indigo-600">%{manualPercent}</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                                            <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: `${Math.min(manualPercent, 100)}%` }}></div>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 text-right">{totalManual} / {inputProduction}</p>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between items-end">
+                                                            <span className="text-sm text-gray-600 font-medium">Tamir Oran</span>
+                                                            <span className="text-2xl font-bold text-orange-600">%{repairPercent}</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                                            <div className="bg-orange-500 h-2.5 rounded-full" style={{ width: `${Math.min(repairPercent, 100)}%` }}></div>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 text-right">{totalRepair} / {inputProduction}</p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -2667,86 +3015,82 @@ const ManualDataTracking = () => {
                                     const yearMonth = `${monthlyFormData.year}-${monthlyFormData.month}`;
                                     const existing = monthlyTotals[yearMonth];
                                     return existing && (
-                                        <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                            <p className="font-semibold text-green-900 mb-2">✓ Mevcut Kayıt</p>
-                                            <div className="grid grid-cols-3 gap-4 text-sm">
-                                                <div>
-                                                    <p className="text-muted-foreground">Toplam Üretim</p>
-                                                    <p className="text-lg font-bold text-green-700">{existing.total_production}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-muted-foreground">Manuel</p>
-                                                    <p className="text-lg font-bold text-green-700">{existing.total_manual || 0}</p>
-                                                </div>
-                                                <div>
-                                                    <p className="text-muted-foreground">Tamir</p>
-                                                    <p className="text-lg font-bold text-green-700">{existing.total_repair || 0}</p>
-                                                </div>
+                                        <div className="flex items-center gap-4 p-4 bg-emerald-50 border border-emerald-200 rounded-xl">
+                                            <div className="bg-emerald-100 p-2 rounded-full">
+                                                <Check className="w-5 h-5 text-emerald-700" />
+                                            </div>
+                                            <div>
+                                                <p className="font-semibold text-emerald-900">Mevcut Kayıt Bulundu</p>
+                                                <p className="text-sm text-emerald-700/80">
+                                                    Bu ay için daha önce <span className="font-bold">{existing.total_production}</span> adet üretim girilmiş.
+                                                </p>
                                             </div>
                                         </div>
                                     );
                                 })()}
                             </div>
-                            <DialogFooter className="gap-2">
-                                <Button variant="outline" size="lg" onClick={() => setShowMonthlyDialog(false)}>İptal</Button>
-                                <Button size="lg" onClick={handleSaveMonthlyTotal}><Save className="mr-2 h-5 w-5" />Kaydet</Button>
-                            </DialogFooter>
+                            <div className="p-6 bg-white border-t border-gray-100 shrink-0 flex gap-3 justify-end">
+                                <Button variant="outline" size="lg" onClick={() => setShowMonthlyDialog(false)} className="h-12 px-6 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium">İptal</Button>
+                                <Button size="lg" onClick={handleSaveMonthlyTotal} className="h-12 px-8 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl font-semibold shadow-lg shadow-emerald-200 hover:shadow-emerald-300 transition-all">
+                                    <Save className="mr-2 h-5 w-5" />
+                                    Kaydet
+                                </Button>
+                            </div>
                         </DialogContent>
                     </Dialog>
 
-                    {/* Günlük Toplam Dialog */}
+                    {/* Daily Total Dialog */}
                     <Dialog open={showDailyDialog} onOpenChange={setShowDailyDialog}>
-                        <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
-                            <DialogHeader className="px-6">
-                                <DialogTitle className="text-2xl font-bold">Günlük Toplam Üretim</DialogTitle>
-                                <DialogDescription className="text-base">
-                                    {selectedDailyRecord && format(new Date(selectedDailyRecord.date), 'dd MMMM yyyy', { locale: tr })} için toplam üretim adedini girin
-                                </DialogDescription>
+                        <DialogContent className="sm:max-w-3xl p-0 overflow-hidden bg-white rounded-2xl shadow-xl border-0 h-[80vh] flex flex-col">
+                            <DialogHeader className="bg-gradient-to-r from-violet-600 to-indigo-600 px-8 py-5 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                                        <Calendar className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold text-white">Günlük Toplam Üretim</DialogTitle>
+                                        <DialogDescription className="text-violet-100/90 text-sm mt-0.5">
+                                            {selectedDailyRecord && format(new Date(selectedDailyRecord.date), 'dd MMMM yyyy', { locale: tr })} için toplam üretim verilerini girin.
+                                        </DialogDescription>
+                                    </div>
+                                </div>
                             </DialogHeader>
-                            <div className="space-y-6 py-6 px-6">
-                                <div className="space-y-2">
-                                    <Label className="text-base font-semibold">Günlük Toplam Üretim Adedi</Label>
-                                    <Input
-                                        type="number"
-                                        placeholder="Örn: 2500"
-                                        className="h-14 text-lg"
-                                        value={dailyFormData.total_production}
-                                        onChange={(e) => setDailyFormData({ ...dailyFormData, total_production: e.target.value })}
-                                    />
-                                    <p className="text-sm text-muted-foreground">
-                                        Bu gün tüm üretim (manuel + robot + diğer) toplamı
-                                    </p>
+
+                            <div className="flex-1 overflow-y-auto p-8 space-y-8 bg-gray-50/50">
+                                <div className="space-y-3 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                                    <Label className="text-base font-semibold text-gray-800 flex items-center justify-between">
+                                        <span>Günlük Toplam Üretim Adedi</span>
+                                        <span className="text-xs font-normal text-gray-500 bg-gray-100 px-2 py-1 rounded-full">Manuel + Robot + Diğer</span>
+                                    </Label>
+                                    <div className="relative">
+                                        <Input
+                                            type="number"
+                                            placeholder="Örn: 2500"
+                                            className="h-16 text-2xl font-bold border-gray-200 focus:border-violet-500 focus:ring-violet-100 rounded-xl pl-6 pr-12 shadow-inner"
+                                            value={dailyFormData.total_production}
+                                            onChange={(e) => setDailyFormData({ ...dailyFormData, total_production: e.target.value })}
+                                        />
+                                        <div className="absolute right-4 top-1/2 -translate-y-1/2 text-gray-400 font-medium select-none">Adet</div>
+                                    </div>
                                 </div>
 
                                 {selectedDailyRecord && (
-                                    <div className="grid grid-cols-3 gap-4">
-                                        <Card className="bg-blue-50 border-blue-200">
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm">Manuel Üretim</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <p className="text-2xl font-bold text-blue-700">{selectedDailyRecord.manual_quantity}</p>
-                                                <p className="text-xs text-muted-foreground">{selectedDailyRecord.manual_count} kayıt</p>
-                                            </CardContent>
-                                        </Card>
-                                        <Card className="bg-orange-50 border-orange-200">
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm">Tamir</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <p className="text-2xl font-bold text-orange-700">{selectedDailyRecord.repair_quantity}</p>
-                                                <p className="text-xs text-muted-foreground">{selectedDailyRecord.repair_count} kayıt</p>
-                                            </CardContent>
-                                        </Card>
-                                        <Card className="bg-purple-50 border-purple-200">
-                                            <CardHeader className="pb-2">
-                                                <CardTitle className="text-sm">Toplam (M+T)</CardTitle>
-                                            </CardHeader>
-                                            <CardContent>
-                                                <p className="text-2xl font-bold text-purple-700">{selectedDailyRecord.manual_quantity + selectedDailyRecord.repair_quantity}</p>
-                                                <p className="text-xs text-muted-foreground">Kayıtlardan</p>
-                                            </CardContent>
-                                        </Card>
+                                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                                        <div className="bg-blue-50/50 p-5 rounded-xl border border-blue-100 hover:border-blue-200 transition-colors">
+                                            <p className="text-sm font-medium text-blue-600 mb-1">Manuel Üretim</p>
+                                            <p className="text-2xl font-bold text-blue-700">{selectedDailyRecord.manual_quantity}</p>
+                                            <p className="text-xs text-blue-400 mt-2 font-medium">{selectedDailyRecord.manual_count} kayıt</p>
+                                        </div>
+                                        <div className="bg-orange-50/50 p-5 rounded-xl border border-orange-100 hover:border-orange-200 transition-colors">
+                                            <p className="text-sm font-medium text-orange-600 mb-1">Tamir</p>
+                                            <p className="text-2xl font-bold text-orange-700">{selectedDailyRecord.repair_quantity}</p>
+                                            <p className="text-xs text-orange-400 mt-2 font-medium">{selectedDailyRecord.repair_count} kayıt</p>
+                                        </div>
+                                        <div className="bg-purple-50/50 p-5 rounded-xl border border-purple-100 hover:border-purple-200 transition-colors">
+                                            <p className="text-sm font-medium text-purple-600 mb-1">Toplam (M+T)</p>
+                                            <p className="text-2xl font-bold text-purple-700">{selectedDailyRecord.manual_quantity + selectedDailyRecord.repair_quantity}</p>
+                                            <p className="text-xs text-purple-400 mt-2 font-medium">Sistem Kayıtları</p>
+                                        </div>
                                     </div>
                                 )}
 
@@ -2761,27 +3105,32 @@ const ManualDataTracking = () => {
                                         const repairPercent = ((totalRepair / inputProduction) * 100).toFixed(1);
 
                                         return (
-                                            <div className="p-4 bg-gradient-to-r from-indigo-50 to-purple-50 border border-indigo-200 rounded-lg">
-                                                <p className="font-semibold text-indigo-900 mb-3">Günlük Oranlar</p>
-                                                <div className="grid grid-cols-2 gap-4">
-                                                    <Card className="bg-white border-indigo-200">
-                                                        <CardHeader className="pb-2">
-                                                            <CardTitle className="text-sm text-indigo-900">Manuel Oran %</CardTitle>
-                                                        </CardHeader>
-                                                        <CardContent>
-                                                            <p className="text-3xl font-bold text-indigo-600">%{manualPercent}</p>
-                                                            <p className="text-xs text-muted-foreground mt-1">{totalManual} / {inputProduction} adet</p>
-                                                        </CardContent>
-                                                    </Card>
-                                                    <Card className="bg-white border-purple-200">
-                                                        <CardHeader className="pb-2">
-                                                            <CardTitle className="text-sm text-purple-900">Tamir Oran %</CardTitle>
-                                                        </CardHeader>
-                                                        <CardContent>
-                                                            <p className="text-3xl font-bold text-purple-600">%{repairPercent}</p>
-                                                            <p className="text-xs text-muted-foreground mt-1">{totalRepair} / {inputProduction} adet</p>
-                                                        </CardContent>
-                                                    </Card>
+                                            <div className="p-6 bg-gradient-to-br from-white to-gray-50 border border-gray-200 rounded-2xl shadow-sm">
+                                                <p className="font-semibold text-gray-800 mb-4 flex items-center gap-2">
+                                                    <Activity className="w-4 h-4 text-violet-600" />
+                                                    Hesaplanan Oranlar
+                                                </p>
+                                                <div className="grid grid-cols-2 gap-6">
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between items-end">
+                                                            <span className="text-sm text-gray-600 font-medium">Manuel Oran</span>
+                                                            <span className="text-2xl font-bold text-indigo-600">%{manualPercent}</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                                            <div className="bg-indigo-500 h-2.5 rounded-full" style={{ width: `${Math.min(manualPercent, 100)}%` }}></div>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 text-right">{totalManual} / {inputProduction}</p>
+                                                    </div>
+                                                    <div className="space-y-2">
+                                                        <div className="flex justify-between items-end">
+                                                            <span className="text-sm text-gray-600 font-medium">Tamir Oran</span>
+                                                            <span className="text-2xl font-bold text-orange-600">%{repairPercent}</span>
+                                                        </div>
+                                                        <div className="w-full bg-gray-100 rounded-full h-2.5 overflow-hidden">
+                                                            <div className="bg-orange-500 h-2.5 rounded-full" style={{ width: `${Math.min(repairPercent, 100)}%` }}></div>
+                                                        </div>
+                                                        <p className="text-xs text-gray-400 text-right">{totalRepair} / {inputProduction}</p>
+                                                    </div>
                                                 </div>
                                             </div>
                                         );
@@ -2790,29 +3139,137 @@ const ManualDataTracking = () => {
                                 })()}
 
                                 {selectedDailyRecord?.daily_total && (
-                                    <div className="p-4 bg-green-50 border border-green-200 rounded-lg">
-                                        <p className="font-semibold text-green-900 mb-2">✓ Mevcut Kayıt</p>
-                                        <div className="grid grid-cols-3 gap-4 text-sm">
-                                            <div>
-                                                <p className="text-muted-foreground">Toplam Üretim</p>
-                                                <p className="text-lg font-bold text-green-700">{selectedDailyRecord.daily_total.total_production}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground">Manuel</p>
-                                                <p className="text-lg font-bold text-green-700">{selectedDailyRecord.daily_total.total_manual || 0}</p>
-                                            </div>
-                                            <div>
-                                                <p className="text-muted-foreground">Tamir</p>
-                                                <p className="text-lg font-bold text-green-700">{selectedDailyRecord.daily_total.total_repair || 0}</p>
-                                            </div>
+                                    <div className="flex items-center gap-4 p-4 bg-violet-50 border border-violet-200 rounded-xl">
+                                        <div className="bg-violet-100 p-2 rounded-full">
+                                            <Check className="w-5 h-5 text-violet-700" />
+                                        </div>
+                                        <div>
+                                            <p className="font-semibold text-violet-900">Mevcut Kayıt Bulundu</p>
+                                            <p className="text-sm text-violet-700/80">
+                                                Bu gün için daha önce <span className="font-bold">{selectedDailyRecord.daily_total.total_production}</span> adet üretim girilmiş.
+                                            </p>
                                         </div>
                                     </div>
                                 )}
                             </div>
-                            <DialogFooter className="gap-2">
-                                <Button variant="outline" size="lg" onClick={() => setShowDailyDialog(false)}>İptal</Button>
-                                <Button size="lg" onClick={handleSaveDailyTotal}><Save className="mr-2 h-5 w-5" />Kaydet</Button>
-                            </DialogFooter>
+                            <div className="p-6 bg-white border-t border-gray-100 shrink-0 flex gap-3 justify-end">
+                                <Button variant="outline" size="lg" onClick={() => setShowDailyDialog(false)} className="h-12 px-6 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium">İptal</Button>
+                                <Button size="lg" onClick={handleSaveDailyTotal} className="h-12 px-8 bg-violet-600 hover:bg-violet-700 text-white rounded-xl font-semibold shadow-lg shadow-violet-200 hover:shadow-violet-300 transition-all">
+                                    <Save className="mr-2 h-5 w-5" />
+                                    Kaydet
+                                </Button>
+                            </div>
+                        </DialogContent>
+                    </Dialog>
+
+                    {/* Hat Bazlı Üretim Adetleri Dialog */}
+                    <Dialog open={showProductionCountsDialog} onOpenChange={setShowProductionCountsDialog}>
+                        <DialogContent className="sm:max-w-4xl p-0 overflow-hidden bg-white rounded-2xl shadow-xl border-0 h-[85vh] flex flex-col">
+                            <DialogHeader className="bg-gradient-to-r from-orange-600 to-amber-600 px-8 py-5 shrink-0">
+                                <div className="flex items-center gap-3">
+                                    <div className="bg-white/20 p-2 rounded-lg backdrop-blur-sm">
+                                        <Factory className="w-6 h-6 text-white" />
+                                    </div>
+                                    <div>
+                                        <DialogTitle className="text-xl font-bold text-white">Hat Bazlı Üretim Adetleri</DialogTitle>
+                                        <DialogDescription className="text-orange-100/90 text-sm mt-0.5">
+                                            Her hat için aylık toplam üretim verilerini girin. Sistem otomatik olarak dağılım oranlarını hesaplayacaktır.
+                                        </DialogDescription>
+                                    </div>
+                                </div>
+                            </DialogHeader>
+
+                            <div className="flex-1 overflow-y-auto p-8 space-y-6 bg-gray-50/50">
+                                <div className="grid grid-cols-2 gap-6 bg-white p-6 rounded-2xl border border-gray-100 shadow-sm">
+                                    <div className="space-y-2.5">
+                                        <Label className="text-base font-semibold text-gray-700">Yıl</Label>
+                                        <Select value={prodCountsFormData.year} onValueChange={(value) => {
+                                            setProdCountsFormData(prev => ({ ...prev, year: value }));
+                                            updateProductionCountsMonth(value, prodCountsFormData.month);
+                                        }}>
+                                            <SelectTrigger className="h-12 border-gray-300 focus:border-orange-500 rounded-xl bg-white shadow-sm text-base">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {[2024, 2025, 2026].map(y => (
+                                                    <SelectItem key={y} value={String(y)} className="text-base py-2.5">{y}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                    <div className="space-y-2.5">
+                                        <Label className="text-base font-semibold text-gray-700">Ay</Label>
+                                        <Select value={prodCountsFormData.month} onValueChange={(value) => {
+                                            setProdCountsFormData(prev => ({ ...prev, month: value }));
+                                            updateProductionCountsMonth(prodCountsFormData.year, value);
+                                        }}>
+                                            <SelectTrigger className="h-12 border-gray-300 focus:border-orange-500 rounded-xl bg-white shadow-sm text-base">
+                                                <SelectValue />
+                                            </SelectTrigger>
+                                            <SelectContent>
+                                                {['01', '02', '03', '04', '05', '06', '07', '08', '09', '10', '11', '12'].map(m => (
+                                                    <SelectItem key={m} value={m} className="text-base py-2.5">{format(new Date(2000, Number(m) - 1, 1), 'MMMM', { locale: tr })}</SelectItem>
+                                                ))}
+                                            </SelectContent>
+                                        </Select>
+                                    </div>
+                                </div>
+
+                                <div className="space-y-4">
+                                    <Label className="text-lg font-bold text-gray-800 flex items-center gap-2">
+                                        <ListOrdered className="w-5 h-5 text-gray-500" />
+                                        Hat Listesi ve Üretim Girişi
+                                    </Label>
+                                    <div className="border border-gray-200 rounded-xl overflow-hidden shadow-sm bg-white">
+                                        <table className="w-full text-sm">
+                                            <thead className="bg-gray-50/80 sticky top-0 border-b border-gray-100">
+                                                <tr>
+                                                    <th className="px-6 py-4 text-left font-semibold text-gray-600 w-1/2">Hat Adı</th>
+                                                    <th className="px-6 py-4 text-left font-semibold text-gray-600 w-1/2">Üretim Adedi</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody className="divide-y divide-gray-100">
+                                                {(prodCountsFormData.entries || []).map((entry, idx) => (
+                                                    <tr key={entry.line_id} className="hover:bg-gray-50/50 transition-colors group">
+                                                        <td className="px-6 py-3 font-medium text-gray-800 text-base">{entry.line_name}</td>
+                                                        <td className="px-6 py-3">
+                                                            <div className="relative">
+                                                                <Input
+                                                                    type="number"
+                                                                    placeholder="0"
+                                                                    className="h-11 border-gray-200 focus:border-orange-500 focus:ring-orange-100 rounded-lg text-right font-semibold pr-10 hover:border-orange-300 transition-colors"
+                                                                    value={entry.production_qty}
+                                                                    onChange={(e) => {
+                                                                        const newEntries = [...prodCountsFormData.entries];
+                                                                        newEntries[idx] = { ...newEntries[idx], production_qty: e.target.value };
+                                                                        setProdCountsFormData(prev => ({ ...prev, entries: newEntries }));
+                                                                    }}
+                                                                />
+                                                                <div className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 text-xs pointer-events-none">Adet</div>
+                                                            </div>
+                                                        </td>
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                            <tfoot className="bg-gray-50 font-semibold border-t border-gray-200">
+                                                <tr>
+                                                    <td className="px-6 py-4 text-right text-gray-600">Toplam:</td>
+                                                    <td className="px-6 py-4 text-right text-orange-600 text-lg">
+                                                        {(prodCountsFormData.entries || []).reduce((sum, e) => sum + (Number(e.production_qty) || 0), 0).toLocaleString('tr-TR')}
+                                                    </td>
+                                                </tr>
+                                            </tfoot>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
+                            <div className="p-6 bg-white border-t border-gray-100 shrink-0 flex gap-3 justify-end">
+                                <Button variant="outline" size="lg" onClick={() => setShowProductionCountsDialog(false)} className="h-12 px-6 border-gray-300 rounded-xl text-gray-700 hover:bg-gray-50 font-medium">İptal</Button>
+                                <Button size="lg" onClick={handleSaveProductionCounts} className="h-12 px-8 bg-orange-600 hover:bg-orange-700 text-white rounded-xl font-semibold shadow-lg shadow-orange-200 hover:shadow-orange-300 transition-all">
+                                    <Save className="mr-2 h-5 w-5" />
+                                    Kaydet
+                                </Button>
+                            </div>
                         </DialogContent>
                     </Dialog>
 

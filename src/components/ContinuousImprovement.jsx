@@ -1,1624 +1,1846 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
-    import { motion } from 'framer-motion';
-    import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3 } from 'lucide-react';
-    import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-    import { Button } from '@/components/ui/button';
-    import { Input } from '@/components/ui/input';
-    import { Label } from '@/components/ui/label';
-    import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-    import { DateRangePicker } from '@/components/ui/date-range-picker';
-    import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
-    import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-    import { useToast } from '@/components/ui/use-toast';
-    import { supabase } from '@/lib/customSupabaseClient';
-    import { useAuth } from '@/contexts/SupabaseAuthContext';
-    import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
-    import { format, startOfMonth, endOfMonth, subDays, startOfQuarter, endOfQuarter, parseISO, startOfDay, endOfDay, startOfYear, endOfYear } from 'date-fns';
-    import { tr } from 'date-fns/locale';
-    import { Combobox } from '@/components/ui/combobox';
-    import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
+import { motion } from 'framer-motion';
+import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3, Eye } from 'lucide-react';
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Label } from '@/components/ui/label';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { useToast } from '@/components/ui/use-toast';
+import { supabase } from '@/lib/customSupabaseClient';
+import { useAuth } from '@/contexts/SupabaseAuthContext';
+import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
+import { format, startOfMonth, endOfMonth, subDays, startOfQuarter, endOfQuarter, parseISO, startOfDay, endOfDay, startOfYear, endOfYear } from 'date-fns';
+import { tr } from 'date-fns/locale';
+import { Combobox } from '@/components/ui/combobox';
+import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
 
-    const initialFormState = {
-      improvement_date: new Date().toISOString().split('T')[0],
-      created_at: new Date().toISOString(),
-      type: 'cycle_time',
-      description: '',
-      line_id: null,
-      robot_id: null,
-      part_code: '',
-      responsible_id: null,
-      prev_time: '',
-      new_time: '',
-      annual_quantity: '',
-      status: 'Tamamlandı',
-      attachments: [],
-      before_image: null,
-      after_image: null,
-      cost_snapshot: null,
-    };
+const initialFormState = {
+  improvement_date: new Date().toISOString().split('T')[0],
+  created_at: new Date().toISOString(),
+  type: 'cycle_time',
+  description: '',
+  line_id: null,
+  robot_id: null,
+  part_code: '',
+  responsible_id: null,
+  prev_time: '',
+  new_time: '',
+  annual_quantity: '',
+  status: 'Tamamlandı',
+  attachments: [],
+  before_image: null,
+  after_image: null,
+  before_images: [],
+  after_images: [],
+  cost_snapshot: null,
+};
 
-    const statusMap = {
-        'Planlandı': { label: 'Planlandı', color: 'bg-yellow-100 text-yellow-800' },
-        'Devam Ediyor': { label: 'Devam Ediyor', color: 'bg-blue-100 text-blue-800' },
-        'Tamamlandı': { label: 'Tamamlandı', color: 'bg-green-100 text-green-800' },
-        'İptal Edildi': { label: 'İptal Edildi', color: 'bg-red-100 text-red-800' },
-    };
+const statusMap = {
+  'Planlandı': { label: 'Planlandı', color: 'bg-yellow-100 text-yellow-800' },
+  'Devam Ediyor': { label: 'Devam Ediyor', color: 'bg-blue-100 text-blue-800' },
+  'Tamamlandı': { label: 'Tamamlandı', color: 'bg-green-100 text-green-800' },
+  'İptal Edildi': { label: 'İptal Edildi', color: 'bg-red-100 text-red-800' },
+};
 
-    const getStatusStyle = (status) => statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
+const getStatusStyle = (status) => statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
 
-    const ImprovementFilters = ({ filters, setFilters, lines }) => {
-        return (
-            <div className="p-4 bg-gray-50 rounded-lg mb-4 flex flex-wrap items-center gap-4">
-                <DateRangePicker
-                    value={filters.dateRange}
-                    onChange={(range) => setFilters(prev => ({ ...prev, dateRange: range || { from: new Date('2020-01-01'), to: new Date() } }))}
-                    placeholder="Tüm Zamanlar"
-                    className="w-[280px]"
-                />
-                <Input 
-                    placeholder="Parça Kodu Ara..." 
-                    value={filters.partCode || ''} 
-                    onChange={e => setFilters(prev => ({ ...prev, partCode: e.target.value }))} 
-                    className="w-[200px]"
-                />
-                <Select value={filters.type} onValueChange={v => setFilters(prev => ({ ...prev, type: v }))}>
-                    <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">Tüm Tipler</SelectItem><SelectItem value="cycle_time">Çevrim Süresi</SelectItem><SelectItem value="quality">Kalite</SelectItem><SelectItem value="cost">Maliyet</SelectItem><SelectItem value="ergonomics">Ergonomi</SelectItem><SelectItem value="other">Diğer</SelectItem></SelectContent>
-                </Select>
-                <Select value={filters.line} onValueChange={v => setFilters(prev => ({ ...prev, line: v }))}>
-                    <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
-                    <SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
-                </Select>
-            </div>
-        );
-    };
+const ImprovementFilters = ({ filters, setFilters, lines }) => {
+  return (
+    <div className="p-4 bg-gray-50 rounded-lg mb-4 flex flex-wrap items-center gap-4">
+      <DateRangePicker
+        value={filters.dateRange}
+        onChange={(range) => setFilters(prev => ({ ...prev, dateRange: range || { from: new Date('2020-01-01'), to: new Date() } }))}
+        placeholder="Tüm Zamanlar"
+        className="w-[280px]"
+      />
+      <Input
+        placeholder="Parça Kodu Ara..."
+        value={filters.partCode || ''}
+        onChange={e => setFilters(prev => ({ ...prev, partCode: e.target.value }))}
+        className="w-[200px]"
+      />
+      <Select value={filters.type} onValueChange={v => setFilters(prev => ({ ...prev, type: v }))}>
+        <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectItem value="all">Tüm Tipler</SelectItem><SelectItem value="cycle_time">Çevrim Süresi</SelectItem><SelectItem value="quality">Kalite</SelectItem><SelectItem value="cost">Maliyet</SelectItem><SelectItem value="ergonomics">Ergonomi</SelectItem><SelectItem value="other">Diğer</SelectItem></SelectContent>
+      </Select>
+      <Select value={filters.line} onValueChange={v => setFilters(prev => ({ ...prev, line: v }))}>
+        <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
+        <SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
+      </Select>
+    </div>
+  );
+};
 
-    const KpiCards = ({ improvements, calculateImpact, getLineName }) => {
-        const totalAnnualImpact = useMemo(() => improvements.reduce((sum, item) => sum + calculateImpact(item), 0), [improvements, calculateImpact]);
-        const completionRate = useMemo(() => {
-            const completed = improvements.filter(i => i.status === 'Tamamlandı').length;
-            return improvements.length > 0 ? (completed / improvements.length) * 100 : 0;
-        }, [improvements]);
-        const topImpactLine = useMemo(() => {
-            if (improvements.length === 0) return { name: 'N/A', impact: 0 };
-            const impactByLine = improvements.reduce((acc, item) => {
-                const lineId = item.line_id;
-                const impact = calculateImpact(item);
-                if (!acc[lineId]) acc[lineId] = 0;
-                acc[lineId] += impact;
-                return acc;
-            }, {});
-            const topEntry = Object.entries(impactByLine).sort((a, b) => b[1] - a[1])[0];
-            if (!topEntry) return { name: 'N/A', impact: 0 };
-            return { name: getLineName(topEntry[0]), impact: topEntry[1] };
-        }, [improvements, calculateImpact, getLineName]);
+const KpiCards = ({ improvements, calculateImpact, getLineName }) => {
+  const totalAnnualImpact = useMemo(() => improvements.reduce((sum, item) => sum + calculateImpact(item), 0), [improvements, calculateImpact]);
+  const completionRate = useMemo(() => {
+    const completed = improvements.filter(i => i.status === 'Tamamlandı').length;
+    return improvements.length > 0 ? (completed / improvements.length) * 100 : 0;
+  }, [improvements]);
+  const topImpactLine = useMemo(() => {
+    if (improvements.length === 0) return { name: 'N/A', impact: 0 };
+    const impactByLine = improvements.reduce((acc, item) => {
+      const lineId = item.line_id;
+      const impact = calculateImpact(item);
+      if (!acc[lineId]) acc[lineId] = 0;
+      acc[lineId] += impact;
+      return acc;
+    }, {});
+    const topEntry = Object.entries(impactByLine).sort((a, b) => b[1] - a[1])[0];
+    if (!topEntry) return { name: 'N/A', impact: 0 };
+    return { name: getLineName(topEntry[0]), impact: topEntry[1] };
+  }, [improvements, calculateImpact, getLineName]);
 
-        return (
-            <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Toplam Yıllık Etki</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(totalAnnualImpact)}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Toplam İyileştirme</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{improvements.length}</div></CardContent></Card>
-                <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Tamamlanma Oranı</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">%{completionRate.toFixed(1)}</div></CardContent></Card>
-                <Card className="bg-amber-50 border-amber-200"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-amber-800">En Yüksek Etkili Hat</CardTitle><Crown className="h-4 w-4 text-amber-600" /></CardHeader><CardContent><div className="text-xl font-bold">{topImpactLine.name}</div><p className="text-xs text-muted-foreground">{formatCurrency(topImpactLine.impact)}</p></CardContent></Card>
-            </div>
-        );
-    };
+  return (
+    <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-6">
+      <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Toplam Yıllık Etki</CardTitle><TrendingUp className="h-4 w-4 text-muted-foreground" /></CardHeader><CardContent><div className="text-2xl font-bold">{formatCurrency(totalAnnualImpact)}</div></CardContent></Card>
+      <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Toplam İyileştirme</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">{improvements.length}</div></CardContent></Card>
+      <Card><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium">Tamamlanma Oranı</CardTitle></CardHeader><CardContent><div className="text-2xl font-bold">%{completionRate.toFixed(1)}</div></CardContent></Card>
+      <Card className="bg-amber-50 border-amber-200"><CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2"><CardTitle className="text-sm font-medium text-amber-800">En Yüksek Etkili Hat</CardTitle><Crown className="h-4 w-4 text-amber-600" /></CardHeader><CardContent><div className="text-xl font-bold">{topImpactLine.name}</div><p className="text-xs text-muted-foreground">{formatCurrency(topImpactLine.impact)}</p></CardContent></Card>
+    </div>
+  );
+};
 
-    const ImprovementTable = ({ improvements, calculateImpact, getLineName, setViewingItem, handlePrint, openDialog, setDeleteConfirm }) => (
-        <div className="border rounded-lg overflow-x-auto">
-            <table className="w-full">
-                <thead className="bg-gray-50"><tr>{['Kayıt Tarihi/Saat', 'İyileştirme Tarihi', 'Açıklama', 'Parça Kodu', 'Hat', 'Süre (Ö/Y)', 'Yıllık Etki', 'Durum', ''].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
-                <tbody className="divide-y">
-                    {improvements.map(item => {
-                        const statusStyle = getStatusStyle(item.status);
-                        return (
-                            <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingItem(item)}>
-                                <td className="px-4 py-2 whitespace-nowrap">
-                                    <div className="flex flex-col">
-                                        <span className="text-xs font-medium">{item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy') : '-'}</span>
-                                        <span className="text-xs text-gray-500">{item.created_at ? format(new Date(item.created_at), 'HH:mm:ss') : '-'}</span>
-                                    </div>
-                                </td>
-                                <td className="px-4 py-2 whitespace-nowrap">{format(parseISO(item.improvement_date), 'dd.MM.yyyy')}</td>
-                                <td className="px-4 py-2 max-w-sm truncate" title={item.description}>{item.description}</td>
-                                <td className="px-4 py-2 whitespace-nowrap font-semibold">{item.part_code || 'N/A'}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">{getLineName(item.line_id)}</td>
-                                <td className="px-4 py-2 whitespace-nowrap">{item.prev_time}s → {item.new_time}s</td>
-                                <td className="px-4 py-2 font-medium text-green-600 whitespace-nowrap">{formatCurrency(calculateImpact(item))}</td>
-                                <td className="px-4 py-2"><span className={cn('px-2 inline-flex text-xs leading-5 font-semibold rounded-full', statusStyle.color)}>{statusStyle.label}</span></td>
-                                <td className="px-4 py-2 text-right whitespace-nowrap">
-                                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handlePrint(item); }}><FileText className="h-4 w-4" /></Button>
-                                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openDialog(item); }}><Edit className="h-4 w-4" /></Button>
-                                    <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
-                                </td>
-                            </tr>
-                        )
-                    })}
-                </tbody>
-            </table>
-            {improvements.length === 0 && <p className="text-center py-8">Veri bulunamadı.</p>}
-        </div>
+const ImprovementTable = ({ improvements, calculateImpact, getLineName, setViewingItem, handlePrint, openDialog, setDeleteConfirm }) => (
+  <div className="border rounded-lg overflow-x-auto">
+    <table className="w-full">
+      <thead className="bg-gray-50"><tr>{['Kayıt Tarihi/Saat', 'İyileştirme Tarihi', 'Açıklama', 'Parça Kodu', 'Hat', 'Süre (Ö/Y)', 'Yıllık Etki', 'Durum', ''].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
+      <tbody className="divide-y">
+        {improvements.map(item => {
+          const statusStyle = getStatusStyle(item.status);
+          return (
+            <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingItem(item)}>
+              <td className="px-4 py-2 whitespace-nowrap">
+                <div className="flex flex-col">
+                  <span className="text-xs font-medium">{item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy') : '-'}</span>
+                  <span className="text-xs text-gray-500">{item.created_at ? format(new Date(item.created_at), 'HH:mm:ss') : '-'}</span>
+                </div>
+              </td>
+              <td className="px-4 py-2 whitespace-nowrap">{format(parseISO(item.improvement_date), 'dd.MM.yyyy')}</td>
+              <td className="px-4 py-2 max-w-sm truncate" title={item.description}>{item.description}</td>
+              <td className="px-4 py-2 whitespace-nowrap font-semibold">{item.part_code || 'N/A'}</td>
+              <td className="px-4 py-2 whitespace-nowrap">{getLineName(item.line_id)}</td>
+              <td className="px-4 py-2 whitespace-nowrap">{item.prev_time}s → {item.new_time}s</td>
+              <td className="px-4 py-2 font-medium text-green-600 whitespace-nowrap">{formatCurrency(calculateImpact(item))}</td>
+              <td className="px-4 py-2"><span className={cn('px-2 inline-flex text-xs leading-5 font-semibold rounded-full', statusStyle.color)}>{statusStyle.label}</span></td>
+              <td className="px-4 py-2 text-right whitespace-nowrap">
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); handlePrint(item); }}><FileText className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); openDialog(item); }}><Edit className="h-4 w-4" /></Button>
+                <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); setDeleteConfirm(item); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+              </td>
+            </tr>
+          )
+        })}
+      </tbody>
+    </table>
+    {improvements.length === 0 && <p className="text-center py-8">Veri bulunamadı.</p>}
+  </div>
+);
+
+const ContinuousImprovement = () => {
+  const [improvements, setImprovements] = useState([]);
+  const [lines, setLines] = useState([]);
+  const [robots, setRobots] = useState([]);
+  const [employees, setEmployees] = useState([]);
+  const [filters, setFilters] = useState({
+    dateRange: { from: new Date('2020-01-01'), to: new Date() },
+    type: 'all',
+    line: 'all',
+    partCode: '',
+  });
+  const [showDialog, setShowDialog] = useState(false);
+  const [editingItem, setEditingItem] = useState(null);
+  const [viewingItem, setViewingItem] = useState(null);
+  const [formState, setFormState] = useState(initialFormState);
+  const [deleteConfirm, setDeleteConfirm] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [partCodeDuplicate, setPartCodeDuplicate] = useState(null);
+  // Aylık metrik state
+  const [showMetricsDialog, setShowMetricsDialog] = useState(false);
+  const [metricsItem, setMetricsItem] = useState(null);
+  const [monthlyMetrics, setMonthlyMetrics] = useState([]);
+  const [metricsForm, setMetricsForm] = useState({ year_month: format(new Date(), 'yyyy-MM'), shipped_qty: '', notes: '' });
+  const { toast } = useToast();
+  const { user } = useAuth();
+
+  const employeeOptions = useMemo(() => employees.map(emp => ({
+    value: emp.id,
+    label: `${emp.registration_number} - ${emp.first_name} ${emp.last_name}`
+  })), [employees]);
+
+  const getLineName = useCallback((lineId) => lines.find(l => l.id === lineId)?.name || 'N/A', [lines]);
+  const getRobotName = useCallback((robotId) => robots.find(r => r.id === robotId)?.name || 'N/A', [robots]);
+  const getEmployeeName = useCallback((employeeId) => {
+    const emp = employees.find(e => e.id === employeeId);
+    return emp ? `${emp.first_name} ${emp.last_name}` : 'N/A';
+  }, [employees]);
+
+  const fetchData = useCallback(async () => {
+    try {
+      const [improvementsData, linesData, robotsData, employeesData] = await Promise.all([
+        supabase.from('improvements').select('*').order('improvement_date', { ascending: false }),
+        supabase.from('lines').select('*').eq('deleted', false),
+        supabase.from('robots').select('*').eq('deleted', false),
+        supabase.from('employees').select('*').eq('is_active', true),
+      ]);
+
+      if (improvementsData.error) throw improvementsData.error;
+      if (linesData.error) throw linesData.error;
+      if (robotsData.error) throw robotsData.error;
+      if (employeesData.error) throw employeesData.error;
+
+      setImprovements(improvementsData.data);
+      setLines(linesData.data);
+      setRobots(robotsData.data);
+      setEmployees(employeesData.data);
+    } catch (error) {
+      toast({ title: "Veri Yüklenemedi", description: error.message, variant: "destructive" });
+    }
+  }, [toast]);
+
+  useEffect(() => {
+    fetchData();
+  }, [fetchData]);
+
+  const getActiveCost = useCallback((lineId, date) => {
+    const line = lines.find(l => l.id === lineId);
+
+    if (!line) {
+      return null;
+    }
+
+    if (!line.costs || !Array.isArray(line.costs) || line.costs.length === 0) {
+      return null;
+    }
+
+    const targetDate = parseISO(date);
+
+    const validCosts = line.costs.filter(c => {
+      if (!c.validFrom) return false;
+      const costDate = parseISO(c.validFrom);
+      return costDate <= targetDate;
+    });
+
+    if (validCosts.length === 0) {
+      const oldestCost = line.costs.sort((a, b) =>
+        parseISO(a.validFrom) - parseISO(b.validFrom)
+      )[0];
+      return oldestCost;
+    }
+
+    const sortedCosts = validCosts.sort((a, b) =>
+      parseISO(b.validFrom) - parseISO(a.validFrom)
     );
 
-    const ContinuousImprovement = () => {
-      const [improvements, setImprovements] = useState([]);
-      const [lines, setLines] = useState([]);
-      const [robots, setRobots] = useState([]);
-      const [employees, setEmployees] = useState([]);
-      const [filters, setFilters] = useState({
-        dateRange: { from: new Date('2020-01-01'), to: new Date() },
-        type: 'all',
-        line: 'all',
-        partCode: '',
+    const selectedCost = sortedCosts[0];
+
+    return selectedCost;
+  }, [lines]);
+
+  const calculateImpact = useCallback((item) => {
+    if (!item || !item.improvement_date || !item.line_id) return 0;
+
+    let costSnapshot = item.cost_snapshot;
+
+    if (!costSnapshot || typeof costSnapshot.totalCostPerSecond === 'undefined') {
+      costSnapshot = getActiveCost(item.line_id, item.improvement_date);
+    }
+
+    const prevTime = Number(item.prev_time) || 0;
+    const newTime = Number(item.new_time) || 0;
+    const annualQuantity = Number(item.annual_quantity) || 0;
+    const costPerSecond = Number(costSnapshot?.totalCostPerSecond) || 0;
+
+    const timeSaving = prevTime - newTime;
+    if (timeSaving <= 0) return 0;
+
+    return timeSaving * annualQuantity * costPerSecond;
+  }, [getActiveCost]);
+
+  const formCalculatedImpact = useMemo(() => {
+    if (!formState.line_id) return 0;
+    const activeCost = getActiveCost(formState.line_id, formState.improvement_date);
+    const itemForCalc = { ...formState, cost_snapshot: activeCost };
+    return calculateImpact(itemForCalc);
+  }, [formState, getActiveCost, calculateImpact]);
+
+  // Parça kodu değiştiğinde duplikasyon kontrolü
+  useEffect(() => {
+    if (formState.part_code && !editingItem) {
+      const existingImprovements = improvements.filter(i => i.part_code === formState.part_code);
+      if (existingImprovements.length > 0) {
+        setPartCodeDuplicate(existingImprovements.length);
+      } else {
+        setPartCodeDuplicate(null);
+      }
+    } else {
+      setPartCodeDuplicate(null);
+    }
+  }, [formState.part_code, improvements, editingItem]);
+
+  const handleSave = async () => {
+    try {
+      // Zorunlu alan kontrolü
+      if (!formState.improvement_date) {
+        toast({ title: "Hata", description: "İyileştirme tarihi zorunludur.", variant: "destructive" });
+        return;
+      }
+
+      if (!formState.description || formState.description.trim() === '') {
+        toast({ title: "Hata", description: "Açıklama zorunludur.", variant: "destructive" });
+        return;
+      }
+
+      // line_id kontrolü - boş string de kontrol edilmeli
+      const lineId = formState.line_id && formState.line_id !== '' ? formState.line_id : null;
+      if (!lineId) {
+        toast({ title: "Hata", description: "Hat seçimi zorunludur.", variant: "destructive" });
+        return;
+      }
+
+      // Aynı parça kodu kontrolü
+      const partCode = formState.part_code && formState.part_code.trim() !== '' ? formState.part_code.trim() : null;
+      if (!editingItem && partCode) {
+        const existingImprovements = improvements.filter(i => i.part_code === partCode);
+        if (existingImprovements.length > 0) {
+          const confirmed = window.confirm(
+            `Bu parça kodu (${partCode}) için daha önce ${existingImprovements.length} adet iyileştirme kaydı yapılmış.\n\nYine de kaydetmek istiyor musunuz?`
+          );
+          if (!confirmed) {
+            return;
+          }
+        }
+      }
+
+      const activeCost = getActiveCost(lineId, formState.improvement_date);
+      const impact = calculateImpact({
+        ...formState,
+        line_id: lineId,
+        cost_snapshot: activeCost
       });
-      const [showDialog, setShowDialog] = useState(false);
-      const [editingItem, setEditingItem] = useState(null);
-      const [viewingItem, setViewingItem] = useState(null);
-      const [formState, setFormState] = useState(initialFormState);
-      const [deleteConfirm, setDeleteConfirm] = useState(null);
-      const [uploading, setUploading] = useState(false);
-      const [partCodeDuplicate, setPartCodeDuplicate] = useState(null);
-      const { toast } = useToast();
-      const { user } = useAuth();
-      
-      const employeeOptions = useMemo(() => employees.map(emp => ({
-          value: emp.id,
-          label: `${emp.registration_number} - ${emp.first_name} ${emp.last_name}`
-      })), [employees]);
 
-      const getLineName = useCallback((lineId) => lines.find(l => l.id === lineId)?.name || 'N/A', [lines]);
-      const getRobotName = useCallback((robotId) => robots.find(r => r.id === robotId)?.name || 'N/A', [robots]);
-      const getEmployeeName = useCallback((employeeId) => {
-        const emp = employees.find(e => e.id === employeeId);
-        return emp ? `${emp.first_name} ${emp.last_name}` : 'N/A';
-      }, [employees]);
+      // Helper function: boş string'leri null'a çevir
+      const cleanValue = (value) => {
+        if (value === '' || value === undefined) return null;
+        if (typeof value === 'string' && value.trim() === '') return null;
+        return value;
+      };
 
-      const fetchData = useCallback(async () => {
-        try {
-          const [improvementsData, linesData, robotsData, employeesData] = await Promise.all([
-            supabase.from('improvements').select('*').order('improvement_date', { ascending: false }),
-            supabase.from('lines').select('*').eq('deleted', false),
-            supabase.from('robots').select('*').eq('deleted', false),
-            supabase.from('employees').select('*').eq('is_active', true),
-          ]);
+      // Veritabanına gönderilecek veriyi hazırla
+      const dataToSave = {
+        improvement_date: formState.improvement_date,
+        type: formState.type || 'cycle_time',
+        description: formState.description.trim(),
+        line_id: lineId,
+        robot_id: cleanValue(formState.robot_id),
+        part_code: partCode,
+        responsible_id: cleanValue(formState.responsible_id),
+        prev_time: formState.prev_time && formState.prev_time !== '' ? parseFloat(formState.prev_time) : null,
+        new_time: formState.new_time && formState.new_time !== '' ? parseFloat(formState.new_time) : null,
+        annual_quantity: formState.annual_quantity && formState.annual_quantity !== '' ? parseFloat(formState.annual_quantity) : null,
+        status: formState.status || 'Tamamlandı',
+        attachments: formState.attachments && Array.isArray(formState.attachments) && formState.attachments.length > 0 ? formState.attachments : null,
+        before_image: cleanValue(formState.before_image),
+        after_image: cleanValue(formState.after_image),
+        before_images: (formState.before_images && formState.before_images.length > 0) ? formState.before_images : [],
+        after_images: (formState.after_images && formState.after_images.length > 0) ? formState.after_images : [],
+        cost_snapshot: activeCost,
+      };
 
-          if (improvementsData.error) throw improvementsData.error;
-          if (linesData.error) throw linesData.error;
-          if (robotsData.error) throw robotsData.error;
-          if (employeesData.error) throw employeesData.error;
-          
-          setImprovements(improvementsData.data);
-          setLines(linesData.data);
-          setRobots(robotsData.data);
-          setEmployees(employeesData.data);
-        } catch (error) {
-          toast({ title: "Veri Yüklenemedi", description: error.message, variant: "destructive" });
-        }
-      }, [toast]);
-      
-      useEffect(() => {
+      // Yeni kayıt için created_at ekle
+      if (!editingItem) {
+        dataToSave.created_at = new Date().toISOString();
+      }
+
+      let response;
+      if (editingItem) {
+        // Güncelleme işlemi
+        const { id, created_at, ...updateData } = dataToSave;
+        response = await supabase
+          .from('improvements')
+          .update(updateData)
+          .eq('id', editingItem.id)
+          .select();
+      } else {
+        // Yeni kayıt işlemi
+        const { id, ...insertData } = dataToSave;
+        response = await supabase
+          .from('improvements')
+          .insert(insertData)
+          .select();
+      }
+
+      if (response.error) {
+        console.error('Supabase Error:', response.error);
+        console.error('Data being sent:', dataToSave);
+        toast({
+          title: "Kayıt Başarısız",
+          description: response.error.message || "Kayıt sırasında bir hata oluştu.",
+          variant: "destructive"
+        });
+      } else if (response.data && response.data.length > 0) {
+        toast({ title: "Başarılı", description: "İyileştirme başarıyla kaydedildi." });
+        logAction(editingItem ? 'UPDATE' : 'CREATE', `Improvement: ${response.data[0].id}`, user);
+        setShowDialog(false);
+        setEditingItem(null);
+        setFormState(initialFormState);
         fetchData();
-      }, [fetchData]);
-
-      const getActiveCost = useCallback((lineId, date) => {
-        const line = lines.find(l => l.id === lineId);
-        
-        if (!line) {
-          return null;
-        }
-      
-        if (!line.costs || !Array.isArray(line.costs) || line.costs.length === 0) {
-          return null;
-        }
-      
-        const targetDate = parseISO(date);
-      
-        const validCosts = line.costs.filter(c => {
-          if (!c.validFrom) return false;
-          const costDate = parseISO(c.validFrom);
-          return costDate <= targetDate;
+      } else {
+        toast({
+          title: "Kayıt Başarısız",
+          description: "Kayıt yapıldı ancak veri döndürülmedi.",
+          variant: "destructive"
         });
-      
-        if (validCosts.length === 0) {
-          const oldestCost = line.costs.sort((a, b) => 
-            parseISO(a.validFrom) - parseISO(b.validFrom)
-          )[0];
-          return oldestCost;
+      }
+    } catch (error) {
+      console.error('Save Error:', error);
+      toast({
+        title: "Kayıt Başarısız",
+        description: error.message || "Beklenmeyen bir hata oluştu.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!deleteConfirm) return;
+    const { error } = await supabase.from('improvements').delete().eq('id', deleteConfirm.id);
+    if (error) {
+      toast({ title: "Silme Başarısız", description: error.message, variant: "destructive" });
+    } else {
+      toast({ title: "Silindi", description: "İyileştirme başarıyla silindi.", variant: "destructive" });
+      logAction('DELETE', `Improvement: ${deleteConfirm.id}`, user);
+      fetchData();
+    }
+    setDeleteConfirm(null);
+    setViewingItem(null);
+  };
+
+  // ===== Aylık Metrik Fonksiyonları =====
+  const openMetricsDialog = async (item) => {
+    setMetricsItem(item);
+    setMetricsForm({ year_month: format(new Date(), 'yyyy-MM'), shipped_qty: '', notes: '' });
+    try {
+      const { data, error } = await supabase
+        .from('ci_monthly_metrics')
+        .select('*')
+        .eq('improvement_id', item.id)
+        .order('year_month', { ascending: false });
+      if (error) throw error;
+      setMonthlyMetrics(data || []);
+    } catch (err) {
+      toast({ title: 'Metrikler Yüklenemedi', description: err.message, variant: 'destructive' });
+      setMonthlyMetrics([]);
+    }
+    setShowMetricsDialog(true);
+  };
+
+  const handleSaveMetric = async () => {
+    if (!metricsItem || !metricsForm.year_month) return;
+    try {
+      const payload = {
+        improvement_id: metricsItem.id,
+        year_month: metricsForm.year_month,
+        shipped_qty: parseInt(metricsForm.shipped_qty) || 0,
+        notes: metricsForm.notes || null,
+        updated_at: new Date().toISOString(),
+      };
+      // Upsert
+      const { data: existing } = await supabase
+        .from('ci_monthly_metrics')
+        .select('id')
+        .eq('improvement_id', metricsItem.id)
+        .eq('year_month', metricsForm.year_month)
+        .single();
+
+      if (existing) {
+        await supabase.from('ci_monthly_metrics').update(payload).eq('id', existing.id);
+      } else {
+        await supabase.from('ci_monthly_metrics').insert(payload);
+      }
+      toast({ title: 'Başarılı', description: `${metricsForm.year_month} metriği kaydedildi.` });
+      // Refresh
+      const { data } = await supabase.from('ci_monthly_metrics').select('*').eq('improvement_id', metricsItem.id).order('year_month', { ascending: false });
+      setMonthlyMetrics(data || []);
+      setMetricsForm({ year_month: format(new Date(), 'yyyy-MM'), shipped_qty: '', notes: '' });
+    } catch (err) {
+      toast({ title: 'Kayıt Başarısız', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleDeleteMetric = async (metricId) => {
+    try {
+      await supabase.from('ci_monthly_metrics').delete().eq('id', metricId);
+      setMonthlyMetrics(prev => prev.filter(m => m.id !== metricId));
+      toast({ title: 'Silindi', description: 'Aylık metrik silindi.', variant: 'destructive' });
+    } catch (err) {
+      toast({ title: 'Silme Başarısız', description: err.message, variant: 'destructive' });
+    }
+  };
+
+  const handleFileChange = async (event) => {
+    if (!event.target.files || event.target.files.length === 0) return;
+    setUploading(true);
+
+    const file = event.target.files[0];
+    const fileName = `${Date.now()}_${file.name}`;
+    const { data, error } = await supabase.storage.from('attachments').upload(`continuous_improvement/${fileName}`, file);
+
+    if (error) {
+      toast({ title: "Dosya Yüklenemedi", description: error.message, variant: "destructive" });
+    } else {
+      const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(data.path);
+      setFormState(prev => ({ ...prev, attachments: [...(prev.attachments || []), { name: file.name, url: publicUrl, size: file.size, type: file.type }] }));
+      toast({ title: "Dosya Yüklendi", description: file.name });
+    }
+    setUploading(false);
+  };
+
+  const handleImageUpload = async (event, imageType) => {
+    if (!event.target.files || event.target.files.length === 0) return;
+    setUploading(true);
+
+    const files = Array.from(event.target.files);
+    const uploadedUrls = [];
+
+    for (const file of files) {
+      const fileName = `${Date.now()}_${file.name}`;
+      const { data, error } = await supabase.storage.from('attachments').upload(`continuous_improvement/images/${fileName}`, file);
+
+      if (error) {
+        toast({ title: "Resim Yüklenemedi", description: `${file.name}: ${error.message}`, variant: "destructive" });
+      } else {
+        const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(data.path);
+        uploadedUrls.push(publicUrl);
+      }
+    }
+
+    if (uploadedUrls.length > 0) {
+      // JSONB array'e ekle
+      const arrayField = imageType === 'before_image' ? 'before_images' : 'after_images';
+      setFormState(prev => ({
+        ...prev,
+        // Eski tekil alanı da güncelle (geriye uyum)
+        [imageType]: uploadedUrls[uploadedUrls.length - 1],
+        // Yeni çoklu alan
+        [arrayField]: [...(prev[arrayField] || []), ...uploadedUrls]
+      }));
+      toast({ title: "Resim Yüklendi", description: `${uploadedUrls.length} resim yüklendi.` });
+    }
+    setUploading(false);
+  };
+
+  const removeAttachment = (indexToRemove) => {
+    const fileToRemove = formState.attachments[indexToRemove];
+    setFormState(prev => ({ ...prev, attachments: prev.attachments.filter((_, index) => index !== indexToRemove) }));
+    toast({ title: "Ek Kaldırıldı", description: fileToRemove.name, variant: "default" });
+  };
+
+  const handlePrint = async (item) => {
+    const reportId = `RPR-SI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
+    const reportData = {
+      title: 'Sürekli İyileştirme Raporu',
+      reportId,
+      signatureFields: [
+        { title: 'Hazırlayan', name: 'Tuğçe MAVİ BATTAL', role: ' ' },
+        { title: 'Kontrol Eden', name: '', role: '..................' },
+        { title: 'Onaylayan', name: '', role: '..................' }
+      ]
+    };
+    if (item) {
+      reportData.singleItemData = {
+        'İyileştirme Konusu': item.description,
+        'Parça Kodu': item.part_code || 'N/A',
+        'Hat / Robot': `${getLineName(item.line_id)} / ${getRobotName(item.robot_id)}`,
+        'Sorumlu': getEmployeeName(item.responsible_id),
+        'Önceki Süre': `${item.prev_time} sn`,
+        'Yeni Süre': `${item.new_time} sn`,
+        'Kazanç': `${(item.prev_time - item.new_time).toFixed(2)} sn`,
+        'Yıllık Etki': formatCurrency(calculateImpact(item)),
+      };
+      reportData.attachments = item.attachments;
+      // Fotoğrafları rapora ekle
+      const beforeImgs = (item.before_images && item.before_images.length > 0) ? item.before_images : (item.before_image ? [item.before_image] : []);
+      const afterImgs = (item.after_images && item.after_images.length > 0) ? item.after_images : (item.after_image ? [item.after_image] : []);
+      if (beforeImgs.length > 0 || afterImgs.length > 0) {
+        reportData.images = { before: beforeImgs, after: afterImgs };
+      }
+    } else {
+      const totalAnnualImpact = filteredImprovements.reduce((sum, item) => sum + calculateImpact(item), 0);
+      reportData.kpiCards = [
+        { title: 'Toplam Yıllık Etki', value: formatCurrency(totalAnnualImpact) },
+        { title: 'Toplam İyileştirme', value: filteredImprovements.length },
+        { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredImprovements.length || 1)) },
+      ];
+      reportData.tableData = {
+        headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Önceki Süre', 'Yeni Süre', 'Yıllık Etki'],
+        rows: filteredImprovements.map(s => [
+          format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
+          s.description,
+          s.part_code || 'N/A',
+          getLineName(s.line_id),
+          s.prev_time,
+          s.new_time,
+          formatCurrency(calculateImpact(s))
+        ])
+      };
+    }
+
+    await openPrintWindow(reportData, toast);
+  };
+
+  // Tip isimlerini Türkçeleştir
+  const getTypeNameTR = (type) => {
+    const normalized = (type || '').trim().toLowerCase();
+    if (normalized === 'cycle_time') return 'Çevrim Süresi';
+    if (normalized === 'quality') return 'Kalite';
+    if (normalized === 'cost') return 'Maliyet';
+    if (normalized === 'ergonomics') return 'Ergonomi';
+    if (normalized === 'other') return 'Diğer';
+    if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
+    return type || 'Diğer';
+  };
+
+  const handleGenerateDetailedReport = async () => {
+    try {
+      toast({ title: "Detaylı rapor hazırlanıyor...", description: "Tüm veriler toplanıyor, lütfen bekleyin." });
+
+      const dateFrom = filters.dateRange?.from ? format(startOfDay(filters.dateRange.from), 'yyyy-MM-dd') : format(startOfDay(new Date('2020-01-01')), 'yyyy-MM-dd');
+      const dateTo = filters.dateRange?.to ? format(endOfDay(filters.dateRange.to), 'yyyy-MM-dd') : format(endOfDay(new Date()), 'yyyy-MM-dd');
+
+      // Tüm detaylı verileri çek
+      const [improvementsData, linesData, robotsData, employeesData] = await Promise.all([
+        supabase.from('improvements')
+          .select('*, line:lines(name), robot:robots(name), responsible:employees(first_name, last_name)')
+          .eq('deleted', false)
+          .gte('improvement_date', dateFrom)
+          .lte('improvement_date', dateTo)
+          .order('improvement_date', { ascending: false }),
+        supabase.from('lines').select('*').eq('deleted', false),
+        supabase.from('robots').select('*').eq('deleted', false),
+        supabase.from('employees').select('*').eq('is_active', true)
+      ]);
+
+      const allImprovements = improvementsData.data || [];
+      const allLines = linesData.data || [];
+      const allRobots = robotsData.data || [];
+      const allEmployees = employeesData.data || [];
+
+      // Filtrelenmiş veriler
+      const filteredData = allImprovements.filter(item => {
+        const typeMatch = filters.type === 'all' || item.type === filters.type;
+        const lineMatch = filters.line === 'all' || item.line_id === filters.line;
+        const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
+        return typeMatch && lineMatch && partCodeMatch;
+      });
+
+      const totalAnnualImpact = filteredData.reduce((sum, item) => sum + calculateImpact(item), 0);
+      const completedCount = filteredData.filter(i => i.status === 'Tamamlandı').length;
+      const inProgressCount = filteredData.filter(i => i.status === 'Devam Ediyor').length;
+      const plannedCount = filteredData.filter(i => i.status === 'Planlandı').length;
+
+      // Hat bazlı analiz
+      const byLine = filteredData.reduce((acc, i) => {
+        const lineName = i.line?.name || 'Belirtilmemiş';
+        if (!acc[lineName]) {
+          acc[lineName] = { count: 0, impact: 0, completed: 0, timeSaved: 0, avgTimeSaving: 0 };
         }
-      
-        const sortedCosts = validCosts.sort((a, b) => 
-          parseISO(b.validFrom) - parseISO(a.validFrom)
-        );
-      
-        const selectedCost = sortedCosts[0];
-        
-        return selectedCost;
-      }, [lines]);
+        acc[lineName].count++;
+        acc[lineName].impact += calculateImpact(i);
+        acc[lineName].timeSaved += ((i.prev_time || 0) - (i.new_time || 0)) * (i.annual_quantity || 0);
+        if (i.status === 'Tamamlandı') acc[lineName].completed++;
+        return acc;
+      }, {});
 
-      const calculateImpact = useCallback((item) => {
-          if (!item || !item.improvement_date || !item.line_id) return 0;
-          
-          let costSnapshot = item.cost_snapshot;
-          
-          if (!costSnapshot || typeof costSnapshot.totalCostPerSecond === 'undefined') {
-              costSnapshot = getActiveCost(item.line_id, item.improvement_date);
-          }
-          
-          const prevTime = Number(item.prev_time) || 0;
-          const newTime = Number(item.new_time) || 0;
-          const annualQuantity = Number(item.annual_quantity) || 0;
-          const costPerSecond = Number(costSnapshot?.totalCostPerSecond) || 0;
-
-          const timeSaving = prevTime - newTime;
-          if (timeSaving <= 0) return 0;
-
-          return timeSaving * annualQuantity * costPerSecond;
-      }, [getActiveCost]);
-
-      const formCalculatedImpact = useMemo(() => {
-        if (!formState.line_id) return 0;
-        const activeCost = getActiveCost(formState.line_id, formState.improvement_date);
-        const itemForCalc = { ...formState, cost_snapshot: activeCost };
-        return calculateImpact(itemForCalc);
-      }, [formState, getActiveCost, calculateImpact]);
-
-      // Parça kodu değiştiğinde duplikasyon kontrolü
-      useEffect(() => {
-        if (formState.part_code && !editingItem) {
-          const existingImprovements = improvements.filter(i => i.part_code === formState.part_code);
-          if (existingImprovements.length > 0) {
-            setPartCodeDuplicate(existingImprovements.length);
-          } else {
-            setPartCodeDuplicate(null);
-          }
-        } else {
-          setPartCodeDuplicate(null);
+      // Tip bazlı analiz
+      const byType = filteredData.reduce((acc, i) => {
+        const type = i.type || 'Diğer';
+        if (!acc[type]) {
+          acc[type] = { count: 0, impact: 0, avgImpact: 0 };
         }
-      }, [formState.part_code, improvements, editingItem]);
+        acc[type].count++;
+        acc[type].impact += calculateImpact(i);
+        return acc;
+      }, {});
 
-      const handleSave = async () => {
-          try {
-              // Zorunlu alan kontrolü
-              if (!formState.improvement_date) {
-                  toast({ title: "Hata", description: "İyileştirme tarihi zorunludur.", variant: "destructive" });
-                  return;
-              }
-              
-              if (!formState.description || formState.description.trim() === '') {
-                  toast({ title: "Hata", description: "Açıklama zorunludur.", variant: "destructive" });
-                  return;
-              }
-              
-              // line_id kontrolü - boş string de kontrol edilmeli
-              const lineId = formState.line_id && formState.line_id !== '' ? formState.line_id : null;
-              if (!lineId) {
-                  toast({ title: "Hata", description: "Hat seçimi zorunludur.", variant: "destructive" });
-                  return;
-              }
-
-              // Aynı parça kodu kontrolü
-              const partCode = formState.part_code && formState.part_code.trim() !== '' ? formState.part_code.trim() : null;
-              if (!editingItem && partCode) {
-                  const existingImprovements = improvements.filter(i => i.part_code === partCode);
-                  if (existingImprovements.length > 0) {
-                      const confirmed = window.confirm(
-                          `Bu parça kodu (${partCode}) için daha önce ${existingImprovements.length} adet iyileştirme kaydı yapılmış.\n\nYine de kaydetmek istiyor musunuz?`
-                      );
-                      if (!confirmed) {
-                          return;
-                      }
-                  }
-              }
-
-              const activeCost = getActiveCost(lineId, formState.improvement_date);
-              const impact = calculateImpact({ 
-                  ...formState, 
-                  line_id: lineId,
-                  cost_snapshot: activeCost 
-              });
-              
-              // Helper function: boş string'leri null'a çevir
-              const cleanValue = (value) => {
-                  if (value === '' || value === undefined) return null;
-                  if (typeof value === 'string' && value.trim() === '') return null;
-                  return value;
-              };
-              
-              // Veritabanına gönderilecek veriyi hazırla
-              const dataToSave = {
-                  improvement_date: formState.improvement_date,
-                  type: formState.type || 'cycle_time',
-                  description: formState.description.trim(),
-                  line_id: lineId,
-                  robot_id: cleanValue(formState.robot_id),
-                  part_code: partCode,
-                  responsible_id: cleanValue(formState.responsible_id),
-                  prev_time: formState.prev_time && formState.prev_time !== '' ? parseFloat(formState.prev_time) : null,
-                  new_time: formState.new_time && formState.new_time !== '' ? parseFloat(formState.new_time) : null,
-                  annual_quantity: formState.annual_quantity && formState.annual_quantity !== '' ? parseFloat(formState.annual_quantity) : null,
-                  status: formState.status || 'Tamamlandı',
-                  attachments: formState.attachments && Array.isArray(formState.attachments) && formState.attachments.length > 0 ? formState.attachments : null,
-                  before_image: cleanValue(formState.before_image),
-                  after_image: cleanValue(formState.after_image),
-                  cost_snapshot: activeCost,
-              };
-              
-              // Yeni kayıt için created_at ekle
-              if (!editingItem) {
-                  dataToSave.created_at = new Date().toISOString();
-              }
-      
-              let response;
-              if (editingItem) {
-                  // Güncelleme işlemi
-                  const { id, created_at, ...updateData } = dataToSave;
-                  response = await supabase
-                      .from('improvements')
-                      .update(updateData)
-                      .eq('id', editingItem.id)
-                      .select();
-              } else {
-                  // Yeni kayıt işlemi
-                  const { id, ...insertData } = dataToSave;
-                  response = await supabase
-                      .from('improvements')
-                      .insert(insertData)
-                      .select();
-              }
-      
-              if (response.error) {
-                  console.error('Supabase Error:', response.error);
-                  console.error('Data being sent:', dataToSave);
-                  toast({ 
-                      title: "Kayıt Başarısız", 
-                      description: response.error.message || "Kayıt sırasında bir hata oluştu.", 
-                      variant: "destructive" 
-                  });
-              } else if (response.data && response.data.length > 0) {
-                  toast({ title: "Başarılı", description: "İyileştirme başarıyla kaydedildi." });
-                  logAction(editingItem ? 'UPDATE' : 'CREATE', `Improvement: ${response.data[0].id}`, user);
-                  setShowDialog(false);
-                  setEditingItem(null);
-                  setFormState(initialFormState);
-                  fetchData();
-              } else {
-                  toast({ 
-                      title: "Kayıt Başarısız", 
-                      description: "Kayıt yapıldı ancak veri döndürülmedi.", 
-                      variant: "destructive" 
-                  });
-              }
-          } catch (error) {
-              console.error('Save Error:', error);
-              toast({ 
-                  title: "Kayıt Başarısız", 
-                  description: error.message || "Beklenmeyen bir hata oluştu.", 
-                  variant: "destructive" 
-              });
-          }
-      };
-
-      const handleDelete = async () => {
-        if (!deleteConfirm) return;
-        const { error } = await supabase.from('improvements').delete().eq('id', deleteConfirm.id);
-        if (error) {
-          toast({ title: "Silme Başarısız", description: error.message, variant: "destructive" });
-        } else {
-          toast({ title: "Silindi", description: "İyileştirme başarıyla silindi.", variant: "destructive" });
-          logAction('DELETE', `Improvement: ${deleteConfirm.id}`, user);
-          fetchData();
+      // Sorumlu personel bazlı analiz
+      const byResponsible = filteredData.reduce((acc, i) => {
+        const responsibleName = i.responsible ? `${i.responsible.first_name} ${i.responsible.last_name}` : 'Belirtilmemiş';
+        if (!acc[responsibleName]) {
+          acc[responsibleName] = { count: 0, impact: 0, completed: 0 };
         }
-        setDeleteConfirm(null);
-        setViewingItem(null);
-      };
-      
-        const handleFileChange = async (event) => {
-        if (!event.target.files || event.target.files.length === 0) return;
-        setUploading(true);
-        
-        const file = event.target.files[0];
-        const fileName = `${Date.now()}_${file.name}`;
-        const { data, error } = await supabase.storage.from('attachments').upload(`continuous_improvement/${fileName}`, file);
-        
-        if (error) {
-          toast({ title: "Dosya Yüklenemedi", description: error.message, variant: "destructive" });
-        } else {
-          const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(data.path);
-          setFormState(prev => ({ ...prev, attachments: [...(prev.attachments || []), { name: file.name, url: publicUrl, size: file.size, type: file.type }] }));
-          toast({ title: "Dosya Yüklendi", description: file.name });
+        acc[responsibleName].count++;
+        acc[responsibleName].impact += calculateImpact(i);
+        if (i.status === 'Tamamlandı') acc[responsibleName].completed++;
+        return acc;
+      }, {});
+
+      // Parça bazlı analiz
+      const byPart = filteredData.reduce((acc, i) => {
+        const partCode = i.part_code || 'Belirtilmemiş';
+        if (!acc[partCode]) {
+          acc[partCode] = { count: 0, impact: 0, avgTimeSaving: 0 };
         }
-        setUploading(false);
-      };
+        acc[partCode].count++;
+        acc[partCode].impact += calculateImpact(i);
+        acc[partCode].avgTimeSaving += (i.prev_time || 0) - (i.new_time || 0);
+        return acc;
+      }, {});
 
-      const handleImageUpload = async (event, imageType) => {
-        if (!event.target.files || event.target.files.length === 0) return;
-        setUploading(true);
-        
-        const file = event.target.files[0];
-        const fileName = `${Date.now()}_${file.name}`;
-        const { data, error } = await supabase.storage.from('attachments').upload(`continuous_improvement/images/${fileName}`, file);
-        
-        if (error) {
-          toast({ title: "Resim Yüklenemedi", description: error.message, variant: "destructive" });
-        } else {
-          const { data: { publicUrl } } = supabase.storage.from('attachments').getPublicUrl(data.path);
-          setFormState(prev => ({ ...prev, [imageType]: publicUrl }));
-          toast({ title: "Resim Yüklendi", description: file.name });
+      // Robot bazlı analiz
+      const byRobot = filteredData.reduce((acc, i) => {
+        const robotName = i.robot?.name || 'Belirtilmemiş';
+        if (!acc[robotName]) {
+          acc[robotName] = { count: 0, impact: 0 };
         }
-        setUploading(false);
+        acc[robotName].count++;
+        acc[robotName].impact += calculateImpact(i);
+        return acc;
+      }, {});
+
+      // Top 10 en etkili iyileştirmeler
+      const top10Improvements = [...filteredData]
+        .sort((a, b) => calculateImpact(b) - calculateImpact(a))
+        .slice(0, 10);
+
+      // Top 10 en etkili hatlar
+      const top10Lines = Object.entries(byLine)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
+      // Top 10 en etkili personeller
+      const top10Responsible = Object.entries(byResponsible)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
+      // Ortalama süre kazancı hesapla
+      Object.keys(byLine).forEach(lineName => {
+        const lineData = byLine[lineName];
+        lineData.avgTimeSaving = lineData.count > 0 ? lineData.timeSaved / lineData.count : 0;
+      });
+
+      Object.keys(byType).forEach(type => {
+        const typeData = byType[type];
+        typeData.avgImpact = typeData.count > 0 ? typeData.impact / typeData.count : 0;
+      });
+
+      Object.keys(byPart).forEach(partCode => {
+        const partData = byPart[partCode];
+        partData.avgTimeSaving = partData.count > 0 ? partData.avgTimeSaving / partData.count : 0;
+      });
+
+      const reportId = `RPR-SI-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
+      const reportData = {
+        title: 'Sürekli İyileştirme - Detaylı Yönetici Raporu',
+        reportId,
+        filters: {
+          'Rapor Dönemi': `${format(filters.dateRange?.from || new Date('2020-01-01'), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`,
+          'Filtreler': `Tip: ${filters.type === 'all' ? 'Tümü' : filters.type}, Hat: ${filters.line === 'all' ? 'Tümü' : getLineName(filters.line)}, Parça Kodu: ${filters.partCode || 'Yok'}`,
+          'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+          'Toplam Gün': Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
+        },
+        kpiCards: [
+          { title: 'Toplam Yıllık Etki', value: formatCurrency(totalAnnualImpact) },
+          { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
+          { title: 'Tamamlanan', value: completedCount.toString() },
+          { title: 'Devam Eden', value: inProgressCount.toString() },
+          { title: 'Planlanan', value: plannedCount.toString() },
+          { title: 'Tamamlanma Oranı', value: filteredData.length > 0 ? `${Math.round((completedCount / filteredData.length) * 100)}%` : '0%' },
+          { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredData.length || 1)) },
+          { title: 'Aktif Hat Sayısı', value: Object.keys(byLine).length.toString() },
+          { title: 'İyileştirme Tipleri', value: Object.keys(byType).length.toString() },
+          { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() },
+          { title: 'Farklı Robot Sayısı', value: Object.keys(byRobot).length.toString() },
+          { title: 'Sorumlu Personel Sayısı', value: Object.keys(byResponsible).length.toString() }
+        ],
+        tableData: {
+          headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Robot', 'Sorumlu', 'Tip', 'Önceki Süre', 'Yeni Süre', 'Kazanç', 'Yıllık Etki', 'Durum'],
+          rows: filteredData.map(s => [
+            format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
+            s.description ? (s.description.length > 40 ? s.description.substring(0, 40) + '...' : s.description) : '-',
+            s.part_code || 'N/A',
+            s.line?.name || 'N/A',
+            s.robot?.name || 'N/A',
+            s.responsible ? `${s.responsible.first_name} ${s.responsible.last_name}` : 'N/A',
+            getTypeNameTR(s.type),
+            `${s.prev_time || 0} sn`,
+            `${s.new_time || 0} sn`,
+            `${((s.prev_time || 0) - (s.new_time || 0)).toFixed(2)} sn`,
+            formatCurrency(calculateImpact(s)),
+            getStatusStyle(s.status).label
+          ])
+        },
+        signatureFields: [
+          { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
+          { title: 'Kontrol Eden', name: '', role: '..................' },
+          { title: 'Onaylayan', name: '', role: '..................' }
+        ]
       };
 
-      const removeAttachment = (indexToRemove) => {
-        const fileToRemove = formState.attachments[indexToRemove];
-        setFormState(prev => ({ ...prev, attachments: prev.attachments.filter((_, index) => index !== indexToRemove) }));
-        toast({ title: "Ek Kaldırıldı", description: fileToRemove.name, variant: "default" });
-      };
-      
-      const handlePrint = async (item) => {
-        const reportId = `RPR-SI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
-        const reportData = {
-            title: 'Sürekli İyileştirme Raporu',
-            reportId,
-            signatureFields: [
-                { title: 'Hazırlayan', name: 'Tuğçe MAVİ BATTAL', role: ' ' },
-                { title: 'Kontrol Eden', name: '', role: '..................' },
-                { title: 'Onaylayan', name: '', role: '..................' }
-            ]
-        };
-         if (item) {
-            reportData.singleItemData = {
-                'İyileştirme Konusu': item.description,
-                'Parça Kodu': item.part_code || 'N/A',
-                'Hat / Robot': `${getLineName(item.line_id)} / ${getRobotName(item.robot_id)}`,
-                'Sorumlu': getEmployeeName(item.responsible_id),
-                'Önceki Süre': `${item.prev_time} sn`,
-                'Yeni Süre': `${item.new_time} sn`,
-                'Kazanç': `${(item.prev_time - item.new_time).toFixed(2)} sn`,
-                'Yıllık Etki': formatCurrency(calculateImpact(item)),
-            };
-            reportData.attachments = item.attachments;
-        } else {
-            const totalAnnualImpact = filteredImprovements.reduce((sum, item) => sum + calculateImpact(item), 0);
-            reportData.kpiCards = [
-              { title: 'Toplam Yıllık Etki', value: formatCurrency(totalAnnualImpact) },
-              { title: 'Toplam İyileştirme', value: filteredImprovements.length },
-              { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredImprovements.length || 1)) },
-            ];
-            reportData.tableData = {
-                headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Önceki Süre', 'Yeni Süre', 'Yıllık Etki'],
-                rows: filteredImprovements.map(s => [
-                    format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
-                    s.description,
-                    s.part_code || 'N/A',
-                    getLineName(s.line_id),
-                    s.prev_time,
-                    s.new_time,
-                    formatCurrency(calculateImpact(s))
-                ])
-            };
-        }
-        
-        await openPrintWindow(reportData, toast);
-      };
-
-      // Tip isimlerini Türkçeleştir
-      const getTypeNameTR = (type) => {
-        const normalized = (type || '').trim().toLowerCase();
-        if (normalized === 'cycle_time') return 'Çevrim Süresi';
-        if (normalized === 'quality') return 'Kalite';
-        if (normalized === 'cost') return 'Maliyet';
-        if (normalized === 'ergonomics') return 'Ergonomi';
-        if (normalized === 'other') return 'Diğer';
-        if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
-        return type || 'Diğer';
-      };
-
-      const handleGenerateDetailedReport = async () => {
-        try {
-          toast({ title: "Detaylı rapor hazırlanıyor...", description: "Tüm veriler toplanıyor, lütfen bekleyin." });
-
-          const dateFrom = filters.dateRange?.from ? format(startOfDay(filters.dateRange.from), 'yyyy-MM-dd') : format(startOfDay(new Date('2020-01-01')), 'yyyy-MM-dd');
-          const dateTo = filters.dateRange?.to ? format(endOfDay(filters.dateRange.to), 'yyyy-MM-dd') : format(endOfDay(new Date()), 'yyyy-MM-dd');
-
-          // Tüm detaylı verileri çek
-          const [improvementsData, linesData, robotsData, employeesData] = await Promise.all([
-            supabase.from('improvements')
-              .select('*, line:lines(name), robot:robots(name), responsible:employees(first_name, last_name)')
-              .eq('deleted', false)
-              .gte('improvement_date', dateFrom)
-              .lte('improvement_date', dateTo)
-              .order('improvement_date', { ascending: false }),
-            supabase.from('lines').select('*').eq('deleted', false),
-            supabase.from('robots').select('*').eq('deleted', false),
-            supabase.from('employees').select('*').eq('is_active', true)
-          ]);
-
-          const allImprovements = improvementsData.data || [];
-          const allLines = linesData.data || [];
-          const allRobots = robotsData.data || [];
-          const allEmployees = employeesData.data || [];
-
-          // Filtrelenmiş veriler
-          const filteredData = allImprovements.filter(item => {
-            const typeMatch = filters.type === 'all' || item.type === filters.type;
-            const lineMatch = filters.line === 'all' || item.line_id === filters.line;
-            const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
-            return typeMatch && lineMatch && partCodeMatch;
-          });
-
-          const totalAnnualImpact = filteredData.reduce((sum, item) => sum + calculateImpact(item), 0);
-          const completedCount = filteredData.filter(i => i.status === 'Tamamlandı').length;
-          const inProgressCount = filteredData.filter(i => i.status === 'Devam Ediyor').length;
-          const plannedCount = filteredData.filter(i => i.status === 'Planlandı').length;
-
-          // Hat bazlı analiz
-          const byLine = filteredData.reduce((acc, i) => {
-            const lineName = i.line?.name || 'Belirtilmemiş';
-            if (!acc[lineName]) {
-              acc[lineName] = { count: 0, impact: 0, completed: 0, timeSaved: 0, avgTimeSaving: 0 };
-            }
-            acc[lineName].count++;
-            acc[lineName].impact += calculateImpact(i);
-            acc[lineName].timeSaved += ((i.prev_time || 0) - (i.new_time || 0)) * (i.annual_quantity || 0);
-            if (i.status === 'Tamamlandı') acc[lineName].completed++;
-            return acc;
-          }, {});
-
-          // Tip bazlı analiz
-          const byType = filteredData.reduce((acc, i) => {
-            const type = i.type || 'Diğer';
-            if (!acc[type]) {
-              acc[type] = { count: 0, impact: 0, avgImpact: 0 };
-            }
-            acc[type].count++;
-            acc[type].impact += calculateImpact(i);
-            return acc;
-          }, {});
-
-          // Sorumlu personel bazlı analiz
-          const byResponsible = filteredData.reduce((acc, i) => {
-            const responsibleName = i.responsible ? `${i.responsible.first_name} ${i.responsible.last_name}` : 'Belirtilmemiş';
-            if (!acc[responsibleName]) {
-              acc[responsibleName] = { count: 0, impact: 0, completed: 0 };
-            }
-            acc[responsibleName].count++;
-            acc[responsibleName].impact += calculateImpact(i);
-            if (i.status === 'Tamamlandı') acc[responsibleName].completed++;
-            return acc;
-          }, {});
-
-          // Parça bazlı analiz
-          const byPart = filteredData.reduce((acc, i) => {
-            const partCode = i.part_code || 'Belirtilmemiş';
-            if (!acc[partCode]) {
-              acc[partCode] = { count: 0, impact: 0, avgTimeSaving: 0 };
-            }
-            acc[partCode].count++;
-            acc[partCode].impact += calculateImpact(i);
-            acc[partCode].avgTimeSaving += (i.prev_time || 0) - (i.new_time || 0);
-            return acc;
-          }, {});
-
-          // Robot bazlı analiz
-          const byRobot = filteredData.reduce((acc, i) => {
-            const robotName = i.robot?.name || 'Belirtilmemiş';
-            if (!acc[robotName]) {
-              acc[robotName] = { count: 0, impact: 0 };
-            }
-            acc[robotName].count++;
-            acc[robotName].impact += calculateImpact(i);
-            return acc;
-          }, {});
-
-          // Top 10 en etkili iyileştirmeler
-          const top10Improvements = [...filteredData]
-            .sort((a, b) => calculateImpact(b) - calculateImpact(a))
-            .slice(0, 10);
-
-          // Top 10 en etkili hatlar
-          const top10Lines = Object.entries(byLine)
-            .map(([name, data]) => ({ name, ...data }))
-            .sort((a, b) => b.impact - a.impact)
-            .slice(0, 10);
-
-          // Top 10 en etkili personeller
-          const top10Responsible = Object.entries(byResponsible)
-            .map(([name, data]) => ({ name, ...data }))
-            .sort((a, b) => b.impact - a.impact)
-            .slice(0, 10);
-
-          // Ortalama süre kazancı hesapla
-          Object.keys(byLine).forEach(lineName => {
-            const lineData = byLine[lineName];
-            lineData.avgTimeSaving = lineData.count > 0 ? lineData.timeSaved / lineData.count : 0;
-          });
-
-          Object.keys(byType).forEach(type => {
-            const typeData = byType[type];
-            typeData.avgImpact = typeData.count > 0 ? typeData.impact / typeData.count : 0;
-          });
-
-          Object.keys(byPart).forEach(partCode => {
-            const partData = byPart[partCode];
-            partData.avgTimeSaving = partData.count > 0 ? partData.avgTimeSaving / partData.count : 0;
-          });
-
-          const reportId = `RPR-SI-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
-          const reportData = {
-            title: 'Sürekli İyileştirme - Detaylı Yönetici Raporu',
-            reportId,
-            filters: {
-              'Rapor Dönemi': `${format(filters.dateRange?.from || new Date('2020-01-01'), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`,
-              'Filtreler': `Tip: ${filters.type === 'all' ? 'Tümü' : filters.type}, Hat: ${filters.line === 'all' ? 'Tümü' : getLineName(filters.line)}, Parça Kodu: ${filters.partCode || 'Yok'}`,
-              'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-              'Toplam Gün': Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
-            },
-            kpiCards: [
-              { title: 'Toplam Yıllık Etki', value: formatCurrency(totalAnnualImpact) },
-              { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
-              { title: 'Tamamlanan', value: completedCount.toString() },
-              { title: 'Devam Eden', value: inProgressCount.toString() },
-              { title: 'Planlanan', value: plannedCount.toString() },
-              { title: 'Tamamlanma Oranı', value: filteredData.length > 0 ? `${Math.round((completedCount / filteredData.length) * 100)}%` : '0%' },
-              { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredData.length || 1)) },
-              { title: 'Aktif Hat Sayısı', value: Object.keys(byLine).length.toString() },
-              { title: 'İyileştirme Tipleri', value: Object.keys(byType).length.toString() },
-              { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() },
-              { title: 'Farklı Robot Sayısı', value: Object.keys(byRobot).length.toString() },
-              { title: 'Sorumlu Personel Sayısı', value: Object.keys(byResponsible).length.toString() }
-            ],
-            tableData: {
-              headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Robot', 'Sorumlu', 'Tip', 'Önceki Süre', 'Yeni Süre', 'Kazanç', 'Yıllık Etki', 'Durum'],
-              rows: filteredData.map(s => [
-                format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
-                s.description ? (s.description.length > 40 ? s.description.substring(0, 40) + '...' : s.description) : '-',
-                s.part_code || 'N/A',
-                s.line?.name || 'N/A',
-                s.robot?.name || 'N/A',
-                s.responsible ? `${s.responsible.first_name} ${s.responsible.last_name}` : 'N/A',
-                getTypeNameTR(s.type),
-                `${s.prev_time || 0} sn`,
-                `${s.new_time || 0} sn`,
-                `${((s.prev_time || 0) - (s.new_time || 0)).toFixed(2)} sn`,
-                formatCurrency(calculateImpact(s)),
-                getStatusStyle(s.status).label
-              ])
-            },
-            signatureFields: [
-              { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
-              { title: 'Kontrol Eden', name: '', role: '..................' },
-              { title: 'Onaylayan', name: '', role: '..................' }
-            ]
-          };
-
-          // Top 10 En Etkili İyileştirmeler
-          reportData.tableData.rows.push(
-            ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-            ['TOP 10 EN ETKİLİ İYİLEŞTİRMELER', '', '', '', '', '', '', '', '', '', '', '', ''],
-            ['Sıra', 'Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Yıllık Etki', 'Süre Kazancı', 'Durum', '', '', '', ''],
-            ...top10Improvements.map((imp, index) => [
-              (index + 1).toString(),
-              format(parseISO(imp.improvement_date), 'dd.MM.yyyy'),
-              imp.description ? (imp.description.length > 30 ? imp.description.substring(0, 30) + '...' : imp.description) : '-',
-              imp.part_code || 'N/A',
-              imp.line?.name || 'N/A',
-              formatCurrency(calculateImpact(imp)),
-              `${((imp.prev_time || 0) - (imp.new_time || 0)).toFixed(2)} sn`,
-              getStatusStyle(imp.status).label,
-              '', '', '', ''
-            ])
-          );
-
-          // Top 10 En Etkili Hatlar
-          reportData.tableData.rows.push(
-            ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-            ['TOP 10 EN ETKİLİ HATLAR', '', '', '', '', '', '', '', '', '', '', '', ''],
-            ['Sıra', 'Hat Adı', 'Toplam Etki', 'İyileştirme Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', 'Ortalama Süre Kazancı', '', '', '', '', ''],
-            ...top10Lines.map((line, index) => [
-              (index + 1).toString(),
-              line.name,
-              formatCurrency(line.impact),
-              line.count.toString(),
-              line.completed.toString(),
-              `${Math.round((line.completed / line.count) * 100)}%`,
-              `${line.avgTimeSaving.toFixed(2)} sn`,
-              '', '', '', '', ''
-            ])
-          );
-
-          // Top 10 En Etkili Personeller
-          reportData.tableData.rows.push(
-            ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-            ['TOP 10 EN ETKİLİ SORUMLU PERSONEL', '', '', '', '', '', '', '', '', '', '', '', ''],
-            ['Sıra', 'Personel', 'Toplam Etki', 'İyileştirme Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', '', '', '', '', '', ''],
-            ...top10Responsible.map((resp, index) => [
-              (index + 1).toString(),
-              resp.name,
-              formatCurrency(resp.impact),
-              resp.count.toString(),
-              resp.completed.toString(),
-              `${Math.round((resp.completed / resp.count) * 100)}%`,
-              '', '', '', '', '', ''
-            ])
-          );
-
-          // Tip bazlı detaylı analiz
-          reportData.tableData.rows.push(
-            ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-            ['İYİLEŞTİRME TİPİ BAZLI ANALİZ', '', '', '', '', '', '', '', '', '', '', ''],
-            ['Tip', 'Sayı', 'Toplam Etki', 'Ortalama Etki', '', '', '', '', '', '', '', ''],
-            ...Object.entries(byType).map(([type, data]) => [
-              getTypeNameTR(type),
-              data.count.toString(),
-              formatCurrency(data.impact),
-              formatCurrency(data.avgImpact),
-              '', '', '', '', '', '', '', ''
-            ])
-          );
-
-          // Parça bazlı analiz
-          const topParts = Object.entries(byPart)
-            .map(([code, data]) => ({ code, ...data }))
-            .sort((a, b) => b.impact - a.impact)
-            .slice(0, 15);
-
-          reportData.tableData.rows.push(
-            ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-            ['PARÇA BAZLI ANALİZ (TOP 15)', '', '', '', '', '', '', '', '', '', '', ''],
-            ['Parça Kodu', 'İyileştirme Sayısı', 'Toplam Etki', 'Ortalama Süre Kazancı', '', '', '', '', '', '', '', ''],
-            ...topParts.map(part => [
-              part.code,
-              part.count.toString(),
-              formatCurrency(part.impact),
-              `${part.avgTimeSaving.toFixed(2)} sn`,
-              '', '', '', '', '', '', '', ''
-            ])
-          );
-
-          // Robot bazlı analiz
-          const topRobots = Object.entries(byRobot)
-            .map(([name, data]) => ({ name, ...data }))
-            .sort((a, b) => b.impact - a.impact)
-            .slice(0, 10);
-
-          if (topRobots.length > 0) {
-            reportData.tableData.rows.push(
-              ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-              ['ROBOT BAZLI ANALİZ (TOP 10)', '', '', '', '', '', '', '', '', '', '', ''],
-              ['Robot Adı', 'İyileştirme Sayısı', 'Toplam Etki', '', '', '', '', '', '', '', '', ''],
-              ...topRobots.map(robot => [
-                robot.name,
-                robot.count.toString(),
-                formatCurrency(robot.impact),
-                '', '', '', '', '', '', '', '', ''
-              ])
-            );
-          }
-
-          await openPrintWindow(reportData, toast);
-        } catch (error) {
-          console.error('Detaylı rapor hatası:', error);
-          toast({
-            title: "Rapor Oluşturulamadı",
-            description: error.message || "Rapor oluşturulurken bir hata oluştu.",
-            variant: "destructive"
-          });
-        }
-      };
-
-      const openDialog = (item = null) => {
-        if (item) {
-          setEditingItem(item);
-          const activeCost = getActiveCost(item.line_id, item.improvement_date);
-          
-          setFormState({ 
-            ...initialFormState, 
-            ...item, 
-            improvement_date: item.improvement_date,
-            cost_snapshot: item.cost_snapshot || activeCost,
-          });
-        } else {
-          setEditingItem(null);
-          setFormState(initialFormState);
-        }
-        setShowDialog(true);
-      };
-
-      const filteredImprovements = useMemo(() => {
-        return improvements.filter(item => {
-          try {
-            const date = parseISO(item.improvement_date);
-            const inDateRange = !filters.dateRange.from || !filters.dateRange.to || (date >= filters.dateRange.from && date <= filters.dateRange.to);
-            const typeMatch = filters.type === 'all' || item.type === filters.type;
-            const lineMatch = filters.line === 'all' || item.line_id === filters.line;
-            const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
-            return inDateRange && typeMatch && lineMatch && partCodeMatch;
-          } catch(e) {
-            return false;
-          }
-        });
-      }, [improvements, filters]);
-      
-      const renderForm = () => (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="space-y-2"><Label>Tarih</Label><Input type="date" value={formState.improvement_date} onChange={(e) => setFormState({ ...formState, improvement_date: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Tip</Label><Select value={formState.type} onValueChange={v => setFormState({ ...formState, type: v })}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent><SelectItem value="cycle_time">Çevrim Süresi</SelectItem><SelectItem value="quality">Kalite</SelectItem><SelectItem value="cost">Maliyet</SelectItem><SelectItem value="ergonomics">Ergonomi</SelectItem><SelectItem value="other">Diğer</SelectItem></SelectContent></Select></div>
-            <div className="md:col-span-2 space-y-2"><Label>Açıklama</Label><Input placeholder="İyileştirmenin kısa tanımı" value={formState.description} onChange={(e) => setFormState({ ...formState, description: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Hat</Label><Select value={formState.line_id || ''} onValueChange={v => setFormState({ ...formState, line_id: v })}><SelectTrigger><SelectValue placeholder="Hat seçin"/></SelectTrigger><SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2"><Label>Robot</Label><Select value={formState.robot_id || ''} onValueChange={v => setFormState({ ...formState, robot_id: v })}><SelectTrigger><SelectValue placeholder="Robot seçin"/></SelectTrigger><SelectContent>{robots.filter(r => !formState.line_id || r.line_id === formState.line_id).map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
-            <div className="space-y-2">
-              <Label>Parça Kodu</Label>
-              <Input value={formState.part_code} onChange={(e) => setFormState({ ...formState, part_code: e.target.value })} />
-              {partCodeDuplicate && (
-                <div className="mt-1 p-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700">
-                  ⚠️ Bu parça kodu için daha önce {partCodeDuplicate} adet iyileştirme kaydı yapılmış!
-                </div>
-              )}
-            </div>
-            <div className="space-y-2"><Label>Sorumlu</Label><Combobox options={employeeOptions} value={formState.responsible_id} onSelect={v => setFormState({ ...formState, responsible_id: v})} placeholder="Sorumlu seçin" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı."/></div>
-            <div className="space-y-2"><Label>Önceki Süre (sn)</Label><Input type="number" value={formState.prev_time} onChange={(e) => setFormState({ ...formState, prev_time: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Yeni Süre (sn)</Label><Input type="number" value={formState.new_time} onChange={(e) => setFormState({ ...formState, new_time: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Yıllık Adet</Label><Input type="number" value={formState.annual_quantity} onChange={(e) => setFormState({ ...formState, annual_quantity: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Durum</Label><Select value={formState.status} onValueChange={v => setFormState({ ...formState, status: v})}><SelectTrigger><SelectValue/></SelectTrigger><SelectContent>{Object.keys(statusMap).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
-          </div>
-          <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
-            <Label className="text-sm text-green-800">Hesaplanan Yıllık Etki</Label>
-            <p className="text-2xl font-bold text-green-600">{formatCurrency(formCalculatedImpact)}</p>
-          </div>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
-            <div className="space-y-2">
-              <Label>Önceki Durum Resmi</Label>
-              <div className="p-4 border-2 border-dashed rounded-lg text-center">
-                {formState.before_image ? (
-                  <div className="space-y-2">
-                    <img src={formState.before_image} alt="Önceki durum" className="w-full h-40 object-cover rounded" />
-                    <Button variant="outline" size="sm" onClick={() => setFormState(prev => ({ ...prev, before_image: null }))}>
-                      <X className="h-4 w-4 mr-2" />Kaldır
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Button asChild variant="outline" size="sm" disabled={uploading}>
-                      <label htmlFor="before-image-upload" className="cursor-pointer">
-                        <Upload className="h-4 w-4 mr-2" />Resim Yükle
-                      </label>
-                    </Button>
-                    <Input id="before-image-upload" type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'before_image')} disabled={uploading} accept="image/*" />
-                  </>
-                )}
-              </div>
-            </div>
-            <div className="space-y-2">
-              <Label>Sonraki Durum Resmi</Label>
-              <div className="p-4 border-2 border-dashed rounded-lg text-center">
-                {formState.after_image ? (
-                  <div className="space-y-2">
-                    <img src={formState.after_image} alt="Sonraki durum" className="w-full h-40 object-cover rounded" />
-                    <Button variant="outline" size="sm" onClick={() => setFormState(prev => ({ ...prev, after_image: null }))}>
-                      <X className="h-4 w-4 mr-2" />Kaldır
-                    </Button>
-                  </div>
-                ) : (
-                  <>
-                    <Button asChild variant="outline" size="sm" disabled={uploading}>
-                      <label htmlFor="after-image-upload" className="cursor-pointer">
-                        <Upload className="h-4 w-4 mr-2" />Resim Yükle
-                      </label>
-                    </Button>
-                    <Input id="after-image-upload" type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'after_image')} disabled={uploading} accept="image/*" />
-                  </>
-                )}
-              </div>
-            </div>
-          </div>
-          <div className="space-y-2 mt-4">
-            <Label>Kanıt Dokümanları</Label>
-            <div className="p-4 border-2 border-dashed rounded-lg text-center">
-                <Button asChild variant="outline" size="sm">
-                    <label htmlFor="file-upload-ci" className="cursor-pointer">
-                        <Upload className="h-4 w-4 mr-2" /> Dosya Yükle
-                    </label>
-                </Button>
-                <Input id="file-upload-ci" type="file" className="hidden" onChange={handleFileChange} disabled={uploading} accept=".pdf,.jpg,.jpeg,.png,.gif,.xls,.xlsx"/>
-                {uploading && <p className="text-sm text-gray-500 mt-2">Yükleniyor...</p>}
-            </div>
-            {(formState.attachments && formState.attachments.length > 0) && (
-                <div className="mt-2 space-y-2">
-                    {formState.attachments.map((file, index) => (
-                        <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
-                             <div className="flex items-center gap-2">
-                                <Paperclip className="h-4 w-4" />
-                                <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate" title={file.name}>{file.name}</a>
-                            </div>
-                            <Button variant="ghost" size="sm" onClick={() => removeAttachment(index)}><X className="h-4 w-4" /></Button>
-                        </div>
-                    ))}
-                </div>
-            )}
-          </div>
-        </>
+      // Top 10 En Etkili İyileştirmeler
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['TOP 10 EN ETKİLİ İYİLEŞTİRMELER', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['Sıra', 'Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Yıllık Etki', 'Süre Kazancı', 'Durum', '', '', '', ''],
+        ...top10Improvements.map((imp, index) => [
+          (index + 1).toString(),
+          format(parseISO(imp.improvement_date), 'dd.MM.yyyy'),
+          imp.description ? (imp.description.length > 30 ? imp.description.substring(0, 30) + '...' : imp.description) : '-',
+          imp.part_code || 'N/A',
+          imp.line?.name || 'N/A',
+          formatCurrency(calculateImpact(imp)),
+          `${((imp.prev_time || 0) - (imp.new_time || 0)).toFixed(2)} sn`,
+          getStatusStyle(imp.status).label,
+          '', '', '', ''
+        ])
       );
 
-      const renderDetailView = () => (
-        <div className="space-y-4">
-            <div className="grid grid-cols-2 gap-4 text-sm">
-                <div className="col-span-2"><p className="font-semibold text-gray-500">Açıklama:</p><p className="font-medium text-lg">{viewingItem.description}</p></div>
-                <div><p className="font-semibold text-gray-500">Parça Kodu:</p><p className="font-semibold">{viewingItem.part_code || 'N/A'}</p></div>
-                <div><p className="font-semibold text-gray-500">Hat / Robot:</p><p>{getLineName(viewingItem.line_id)} / {getRobotName(viewingItem.robot_id)}</p></div>
-                <div><p className="font-semibold text-gray-500">Sorumlu:</p><p>{getEmployeeName(viewingItem.responsible_id)}</p></div>
-                <div><p className="font-semibold text-gray-500">İyileştirme Tarihi:</p><p>{format(parseISO(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
-                <div><p className="font-semibold text-gray-500">Kayıt Tarihi/Saat:</p><p>{viewingItem.created_at ? format(new Date(viewingItem.created_at), 'dd.MM.yyyy HH:mm:ss') : '-'}</p></div>
-                <div><p className="font-semibold text-gray-500">Durum:</p><p>{getStatusStyle(viewingItem.status).label}</p></div>
+      // Top 10 En Etkili Hatlar
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['TOP 10 EN ETKİLİ HATLAR', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['Sıra', 'Hat Adı', 'Toplam Etki', 'İyileştirme Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', 'Ortalama Süre Kazancı', '', '', '', '', ''],
+        ...top10Lines.map((line, index) => [
+          (index + 1).toString(),
+          line.name,
+          formatCurrency(line.impact),
+          line.count.toString(),
+          line.completed.toString(),
+          `${Math.round((line.completed / line.count) * 100)}%`,
+          `${line.avgTimeSaving.toFixed(2)} sn`,
+          '', '', '', '', ''
+        ])
+      );
+
+      // Top 10 En Etkili Personeller
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['TOP 10 EN ETKİLİ SORUMLU PERSONEL', '', '', '', '', '', '', '', '', '', '', '', ''],
+        ['Sıra', 'Personel', 'Toplam Etki', 'İyileştirme Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', '', '', '', '', '', ''],
+        ...top10Responsible.map((resp, index) => [
+          (index + 1).toString(),
+          resp.name,
+          formatCurrency(resp.impact),
+          resp.count.toString(),
+          resp.completed.toString(),
+          `${Math.round((resp.completed / resp.count) * 100)}%`,
+          '', '', '', '', '', ''
+        ])
+      );
+
+      // Tip bazlı detaylı analiz
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['İYİLEŞTİRME TİPİ BAZLI ANALİZ', '', '', '', '', '', '', '', '', '', '', ''],
+        ['Tip', 'Sayı', 'Toplam Etki', 'Ortalama Etki', '', '', '', '', '', '', '', ''],
+        ...Object.entries(byType).map(([type, data]) => [
+          getTypeNameTR(type),
+          data.count.toString(),
+          formatCurrency(data.impact),
+          formatCurrency(data.avgImpact),
+          '', '', '', '', '', '', '', ''
+        ])
+      );
+
+      // Parça bazlı analiz
+      const topParts = Object.entries(byPart)
+        .map(([code, data]) => ({ code, ...data }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 15);
+
+      reportData.tableData.rows.push(
+        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+        ['PARÇA BAZLI ANALİZ (TOP 15)', '', '', '', '', '', '', '', '', '', '', ''],
+        ['Parça Kodu', 'İyileştirme Sayısı', 'Toplam Etki', 'Ortalama Süre Kazancı', '', '', '', '', '', '', '', ''],
+        ...topParts.map(part => [
+          part.code,
+          part.count.toString(),
+          formatCurrency(part.impact),
+          `${part.avgTimeSaving.toFixed(2)} sn`,
+          '', '', '', '', '', '', '', ''
+        ])
+      );
+
+      // Robot bazlı analiz
+      const topRobots = Object.entries(byRobot)
+        .map(([name, data]) => ({ name, ...data }))
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
+      if (topRobots.length > 0) {
+        reportData.tableData.rows.push(
+          ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
+          ['ROBOT BAZLI ANALİZ (TOP 10)', '', '', '', '', '', '', '', '', '', '', ''],
+          ['Robot Adı', 'İyileştirme Sayısı', 'Toplam Etki', '', '', '', '', '', '', '', '', ''],
+          ...topRobots.map(robot => [
+            robot.name,
+            robot.count.toString(),
+            formatCurrency(robot.impact),
+            '', '', '', '', '', '', '', '', ''
+          ])
+        );
+      }
+
+      await openPrintWindow(reportData, toast);
+    } catch (error) {
+      console.error('Detaylı rapor hatası:', error);
+      toast({
+        title: "Rapor Oluşturulamadı",
+        description: error.message || "Rapor oluşturulurken bir hata oluştu.",
+        variant: "destructive"
+      });
+    }
+  };
+
+  const openDialog = (item = null) => {
+    if (item) {
+      setEditingItem(item);
+      const activeCost = getActiveCost(item.line_id, item.improvement_date);
+
+      setFormState({
+        ...initialFormState,
+        ...item,
+        improvement_date: item.improvement_date,
+        cost_snapshot: item.cost_snapshot || activeCost,
+      });
+    } else {
+      setEditingItem(null);
+      setFormState(initialFormState);
+    }
+    setShowDialog(true);
+  };
+
+  const filteredImprovements = useMemo(() => {
+    return improvements.filter(item => {
+      try {
+        const date = parseISO(item.improvement_date);
+        const inDateRange = !filters.dateRange.from || !filters.dateRange.to || (date >= filters.dateRange.from && date <= filters.dateRange.to);
+        const typeMatch = filters.type === 'all' || item.type === filters.type;
+        const lineMatch = filters.line === 'all' || item.line_id === filters.line;
+        const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
+        return inDateRange && typeMatch && lineMatch && partCodeMatch;
+      } catch (e) {
+        return false;
+      }
+    });
+  }, [improvements, filters]);
+
+  const renderForm = () => (
+    <>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div className="space-y-2"><Label>Tarih</Label><Input type="date" value={formState.improvement_date} onChange={(e) => setFormState({ ...formState, improvement_date: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Tip</Label><Select value={formState.type} onValueChange={v => setFormState({ ...formState, type: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="cycle_time">Çevrim Süresi</SelectItem><SelectItem value="quality">Kalite</SelectItem><SelectItem value="cost">Maliyet</SelectItem><SelectItem value="ergonomics">Ergonomi</SelectItem><SelectItem value="other">Diğer</SelectItem></SelectContent></Select></div>
+        <div className="md:col-span-2 space-y-2"><Label>Açıklama</Label><Input placeholder="İyileştirmenin kısa tanımı" value={formState.description} onChange={(e) => setFormState({ ...formState, description: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Hat</Label><Select value={formState.line_id || ''} onValueChange={v => setFormState({ ...formState, line_id: v })}><SelectTrigger><SelectValue placeholder="Hat seçin" /></SelectTrigger><SelectContent>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-2"><Label>Robot</Label><Select value={formState.robot_id || ''} onValueChange={v => setFormState({ ...formState, robot_id: v })}><SelectTrigger><SelectValue placeholder="Robot seçin" /></SelectTrigger><SelectContent>{robots.filter(r => !formState.line_id || r.line_id === formState.line_id).map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-2">
+          <Label>Parça Kodu</Label>
+          <Input value={formState.part_code} onChange={(e) => setFormState({ ...formState, part_code: e.target.value })} />
+          {partCodeDuplicate && (
+            <div className="mt-1 p-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700">
+              ⚠️ Bu parça kodu için daha önce {partCodeDuplicate} adet iyileştirme kaydı yapılmış!
             </div>
-            {(viewingItem.before_image || viewingItem.after_image) && (
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-                {viewingItem.before_image && (
-                  <div>
-                    <p className="font-semibold text-gray-500 mb-2">Önceki Durum</p>
-                    <img src={viewingItem.before_image} alt="Önceki durum" className="w-full h-60 object-cover rounded-lg border" />
-                  </div>
-                )}
-                {viewingItem.after_image && (
-                  <div>
-                    <p className="font-semibold text-gray-500 mb-2">Sonraki Durum</p>
-                    <img src={viewingItem.after_image} alt="Sonraki durum" className="w-full h-60 object-cover rounded-lg border" />
-                  </div>
-                )}
-              </div>
-            )}
-            <div className="grid grid-cols-3 gap-4 pt-4">
-                 <Card><CardHeader className="p-4"><CardTitle className="text-sm">Önceki Süre</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.prev_time} sn</p></CardContent></Card>
-                 <Card><CardHeader className="p-4"><CardTitle className="text-sm">Yeni Süre</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.new_time} sn</p></CardContent></Card>
-                 <Card><CardHeader className="p-4"><CardTitle className="text-sm">Yıllık Adet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.annual_quantity}</p></CardContent></Card>
-            </div>
-            <Card className="bg-green-50 border-green-200"><CardHeader className="p-4"><CardTitle className="text-base text-green-800">Yıllık Etki</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-3xl font-bold text-green-600">{formatCurrency(calculateImpact(viewingItem))}</p></CardContent></Card>
-             {viewingItem.attachments && viewingItem.attachments.length > 0 && (
-              <div>
-                <h4 className="text-md font-semibold mb-2">Kanıt Dokümanları</h4>
-                <div className="space-y-2">
-                  {viewingItem.attachments.map((file, index) => (
-                    <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200">
-                      <Paperclip className="h-4 w-4" />
-                      <span className="text-sm font-medium text-blue-600 hover:underline">{file.name}</span>
-                    </a>
+          )}
+        </div>
+        <div className="space-y-2"><Label>Sorumlu</Label><Combobox options={employeeOptions} value={formState.responsible_id} onSelect={v => setFormState({ ...formState, responsible_id: v })} placeholder="Sorumlu seçin" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı." /></div>
+        <div className="space-y-2"><Label>Önceki Süre (sn)</Label><Input type="number" value={formState.prev_time} onChange={(e) => setFormState({ ...formState, prev_time: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Yeni Süre (sn)</Label><Input type="number" value={formState.new_time} onChange={(e) => setFormState({ ...formState, new_time: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Yıllık Adet</Label><Input type="number" value={formState.annual_quantity} onChange={(e) => setFormState({ ...formState, annual_quantity: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Durum</Label><Select value={formState.status} onValueChange={v => setFormState({ ...formState, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.keys(statusMap).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
+      </div>
+      <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
+        <Label className="text-sm text-green-800">Hesaplanan Yıllık Etki</Label>
+        <p className="text-2xl font-bold text-green-600">{formatCurrency(formCalculatedImpact)}</p>
+      </div>
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+        <div className="space-y-2">
+          <Label>Önceki Durum Resimleri</Label>
+          <div className="p-4 border-2 border-dashed rounded-lg">
+            {(formState.before_images && formState.before_images.length > 0) ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {formState.before_images.map((url, idx) => (
+                    <div key={idx} className="relative group">
+                      <img src={url} alt={`Önceki ${idx + 1}`} className="w-full h-24 object-cover rounded" />
+                      <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => {
+                        setFormState(prev => ({
+                          ...prev,
+                          before_images: prev.before_images.filter((_, i) => i !== idx),
+                          before_image: prev.before_images.length > 1 ? prev.before_images.filter((_, i) => i !== idx)[0] : null
+                        }));
+                      }}>
+                        <X className="h-3 w-3" />
+                      </Button>
+                    </div>
                   ))}
                 </div>
+                <Button asChild variant="outline" size="sm" disabled={uploading}>
+                  <label htmlFor="before-image-upload" className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-2" />Daha Fazla Ekle
+                  </label>
+                </Button>
+                <Input id="before-image-upload" type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'before_image')} disabled={uploading} accept="image/*" multiple />
+              </div>
+            ) : formState.before_image ? (
+              <div className="space-y-2">
+                <img src={formState.before_image} alt="Önceki durum" className="w-full h-40 object-cover rounded" />
+                <Button variant="outline" size="sm" onClick={() => setFormState(prev => ({ ...prev, before_image: null }))}>
+                  <X className="h-4 w-4 mr-2" />Kaldır
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <Button asChild variant="outline" size="sm" disabled={uploading}>
+                  <label htmlFor="before-image-upload" className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-2" />Resim Yükle
+                  </label>
+                </Button>
+                <Input id="before-image-upload" type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'before_image')} disabled={uploading} accept="image/*" multiple />
               </div>
             )}
+          </div>
         </div>
-    );
-
-      // Analiz verileri
-      const analysisData = useMemo(() => {
-        const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
-        const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-        
-        const filtered = filteredImprovements.filter(i => {
-          const itemDate = format(parseISO(i.improvement_date), 'yyyy-MM-dd');
-          return itemDate >= from && itemDate <= to;
-        });
-        
-        // Tip bazlı analiz - gerçek tip değerlerini kullan
-        const byType = filtered.reduce((acc, item) => {
-          const type = item.type || 'other';
-          // Tip değerini normalize et
-          const normalizedType = type.trim().toLowerCase();
-          if (!acc[normalizedType]) {
-            acc[normalizedType] = { 
-              count: 0, 
-              totalImpact: 0, 
-              avgImpact: 0,
-              originalType: type // Orijinal tip değerini sakla
-            };
-          }
-          acc[normalizedType].count += 1;
-          const impact = calculateImpact(item);
-          acc[normalizedType].totalImpact += impact;
-          return acc;
-        }, {});
-        
-        Object.keys(byType).forEach(type => {
-          byType[type].avgImpact = byType[type].count > 0 ? byType[type].totalImpact / byType[type].count : 0;
-        });
-        
-        // Hat bazlı analiz
-        const byLine = filtered.reduce((acc, item) => {
-          const lineId = item.line_id;
-          if (!lineId) return acc;
-          const lineName = getLineName(lineId);
-          if (!acc[lineId]) {
-            acc[lineId] = { lineName, count: 0, totalImpact: 0, avgImpact: 0 };
-          }
-          acc[lineId].count += 1;
-          const impact = calculateImpact(item);
-          acc[lineId].totalImpact += impact;
-          return acc;
-        }, {});
-        
-        Object.keys(byLine).forEach(lineId => {
-          byLine[lineId].avgImpact = byLine[lineId].count > 0 ? byLine[lineId].totalImpact / byLine[lineId].count : 0;
-        });
-        
-        // Durum bazlı analiz
-        const byStatus = filtered.reduce((acc, item) => {
-          const rawStatus = item.status || 'Belirtilmemiş';
-          const status = getStatusStyle(rawStatus).label; // Türkçe status label'ı kullan
-          if (!acc[status]) {
-            acc[status] = { count: 0, totalImpact: 0 };
-          }
-          acc[status].count += 1;
-          acc[status].totalImpact += calculateImpact(item);
-          return acc;
-        }, {});
-        
-        // Aylık trend analizi
-        const monthlyTrend = {};
-        filtered.forEach(item => {
-          const month = format(parseISO(item.improvement_date), 'yyyy-MM');
-          if (!monthlyTrend[month]) {
-            monthlyTrend[month] = { month, count: 0, totalImpact: 0 };
-          }
-          monthlyTrend[month].count += 1;
-          monthlyTrend[month].totalImpact += calculateImpact(item);
-        });
-        
-        const monthlyTrendArray = Object.values(monthlyTrend)
-          .sort((a, b) => a.month.localeCompare(b.month))
-          .map(m => ({
-            ...m,
-            monthLabel: format(parseISO(m.month + '-01'), 'MMM yyyy', { locale: tr })
-          }));
-        
-        // Top 10 en etkili iyileştirmeler
-        const top10Improvements = [...filtered]
-          .map(item => ({ ...item, impact: calculateImpact(item) }))
-          .sort((a, b) => b.impact - a.impact)
-          .slice(0, 10);
-        
-        // Parça bazlı analiz
-        const byPart = filtered
-          .filter(item => item.part_code)
-          .reduce((acc, item) => {
-            const partCode = item.part_code;
-            if (!acc[partCode]) {
-              acc[partCode] = { partCode, count: 0, totalImpact: 0 };
-            }
-            acc[partCode].count += 1;
-            acc[partCode].totalImpact += calculateImpact(item);
-            return acc;
-          }, {});
-        
-        const top10Parts = Object.values(byPart)
-          .sort((a, b) => b.totalImpact - a.totalImpact)
-          .slice(0, 10);
-        
-        return {
-          byType,
-          byLine,
-          byStatus,
-          monthlyTrend: monthlyTrendArray,
-          top10Improvements,
-          top10Parts,
-          totalImpact: filtered.reduce((sum, item) => sum + calculateImpact(item), 0),
-          totalCount: filtered.length
-        };
-      }, [filteredImprovements, filters, calculateImpact, getLineName]);
-      
-      const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
-      
-      return (
-        <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
-          <Card>
-            <CardHeader>
-              <div className="flex justify-between items-center">
-                <div>
-                  <CardTitle className="flex items-center space-x-2"><TrendingUp className="h-5 w-5" /><span>Sürekli İyileştirme</span></CardTitle>
-                  <CardDescription>Yapılan iyileştirmeleri, etkilerini ve durumlarını takip edin.</CardDescription>
-                </div>
-                <div className="flex space-x-2">
-                    <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2"/>Yeni İyileştirme</Button>
-                    <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2"/>Yazdır</Button>
-                    <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2"/>Detaylı Rapor</Button>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <Tabs defaultValue="data" className="w-full">
-                <TabsList className="grid w-full grid-cols-2">
-                  <TabsTrigger value="data">Veri Takip</TabsTrigger>
-                  <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
-                </TabsList>
-                
-                <TabsContent value="data" className="space-y-4">
-                  <ImprovementFilters filters={filters} setFilters={setFilters} lines={lines} />
-                  <KpiCards improvements={filteredImprovements} calculateImpact={calculateImpact} getLineName={getLineName} />
-                  <ImprovementTable 
-                    improvements={filteredImprovements} 
-                    calculateImpact={calculateImpact} 
-                    getLineName={getLineName}
-                    setViewingItem={setViewingItem}
-                    handlePrint={handlePrint}
-                    openDialog={openDialog}
-                    setDeleteConfirm={setDeleteConfirm}
-                  />
-                </TabsContent>
-                
-                <TabsContent value="analysis" className="space-y-6">
-                  {/* Özet KPI Kartları */}
-                  <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-                    <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Toplam İyileştirme</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-3xl font-bold text-blue-700">{analysisData.totalCount}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Kayıt sayısı</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-green-50 to-green-100">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Toplam Etki</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-3xl font-bold text-green-700">{formatCurrency(analysisData.totalImpact)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Yıllık kazanç</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Ortalama Etki</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-3xl font-bold text-purple-700">
-                          {formatCurrency(analysisData.totalCount > 0 ? analysisData.totalImpact / analysisData.totalCount : 0)}
-                        </div>
-                        <p className="text-xs text-muted-foreground mt-1">İyileştirme başına</p>
-                      </CardContent>
-                    </Card>
-                    <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
-                      <CardHeader className="pb-2">
-                        <CardTitle className="text-sm">Farklı Hat</CardTitle>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="text-3xl font-bold text-orange-700">{Object.keys(analysisData.byLine).length}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Hat sayısı</p>
-                      </CardContent>
-                    </Card>
-                  </div>
-                  
-                  {/* Tip Bazlı Analiz */}
-                  {Object.keys(analysisData.byType).length > 0 && (
-                    <div className="space-y-6">
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>İyileştirme Tipi Bazlı Analiz</CardTitle>
-                          <CardDescription>Tip bazında iyileştirme sayıları ve etkileri</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={450}>
-                            <BarChart data={Object.entries(analysisData.byType)
-                              .map(([type, data]) => {
-                                // Tip ismini Türkçe'ye çevir
-                                const getTypeName = (t) => {
-                                  const normalized = t.trim().toLowerCase();
-                                  if (normalized === 'cycle_time') return 'Çevrim Süresi';
-                                  if (normalized === 'quality') return 'Kalite';
-                                  if (normalized === 'cost') return 'Maliyet';
-                                  if (normalized === 'ergonomics') return 'Ergonomi';
-                                  if (normalized === 'other') return 'Diğer';
-                                  // İngilizce kelimeleri Türkçe'ye çevir
-                                  if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
-                                  if (normalized === 'process' || normalized === 'processes') return 'Proses';
-                                  if (normalized === 'program' || normalized === 'programs') return 'Program';
-                                  if (normalized === 'method' || normalized === 'methods') return 'Metod';
-                                  if (normalized === 'tool' || normalized === 'tools') return 'Araç';
-                                  if (normalized === 'equipment' || normalized === 'equipments') return 'Ekipman';
-                                  if (normalized === 'material' || normalized === 'materials') return 'Malzeme';
-                                  if (normalized === 'technique' || normalized === 'techniques') return 'Teknik';
-                                  // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
-                                  return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
-                                };
-                                return {
-                                  tip: getTypeName(type),
-                                  sayi: data.count,
-                                  etki: data.totalImpact,
-                                  sortValue: data.count
-                                };
-                              })
-                              .sort((a, b) => b.sortValue - a.sortValue) // En çoktan aza doğru sırala
-                            }>
-                              <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                              <XAxis 
-                                dataKey="tip" 
-                                tick={{ fontSize: 13 }}
-                                stroke="#6b7280"
-                              />
-                              <YAxis 
-                                yAxisId="left" 
-                                tick={{ fontSize: 12 }}
-                                stroke="#6b7280"
-                              />
-                              <YAxis 
-                                yAxisId="right" 
-                                orientation="right"
-                                tick={{ fontSize: 12 }}
-                                stroke="#6b7280"
-                                tickFormatter={(value) => {
-                                  if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
-                                  if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
-                                  return `${value} ₺`;
-                                }}
-                              />
-                              <Tooltip 
-                                formatter={(value, name) => {
-                                  if (name === 'Toplam Etki (₺)') {
-                                    return [formatCurrency(value), 'Toplam Etki'];
-                                  }
-                                  return value;
-                                }}
-                                contentStyle={{ 
-                                  backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: '8px',
-                                  padding: '12px',
-                                  fontSize: '14px'
-                                }}
-                              />
-                              <Legend 
-                                wrapperStyle={{ paddingTop: '20px' }}
-                                iconType="rect"
-                                iconSize={12}
-                              />
-                              <Bar 
-                                yAxisId="left" 
-                                dataKey="sayi" 
-                                fill="#3b82f6" 
-                                name="Kayıt Sayısı"
-                                radius={[4, 4, 0, 0]}
-                              />
-                              <Bar 
-                                yAxisId="right" 
-                                dataKey="etki" 
-                                fill="#10b981" 
-                                name="Toplam Etki (₺)"
-                                radius={[4, 4, 0, 0]}
-                              />
-                            </BarChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
-                      
-                      <Card>
-                        <CardHeader>
-                          <CardTitle>İyileştirme Tipi Dağılımı</CardTitle>
-                          <CardDescription>Tip bazında yüzde dağılımı</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                          <ResponsiveContainer width="100%" height={450}>
-                            <PieChart>
-                              <Pie
-                                data={(() => {
-                                  const sortedData = Object.entries(analysisData.byType)
-                                    .map(([type, data]) => {
-                                      // Tip ismini Türkçe'ye çevir
-                                      const getTypeName = (t) => {
-                                        const normalized = t.trim().toLowerCase();
-                                        if (normalized === 'cycle_time') return 'Çevrim Süresi';
-                                        if (normalized === 'quality') return 'Kalite';
-                                        if (normalized === 'cost') return 'Maliyet';
-                                        if (normalized === 'ergonomics') return 'Ergonomi';
-                                        if (normalized === 'other') return 'Diğer';
-                                        // İngilizce kelimeleri Türkçe'ye çevir
-                                        if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
-                                        if (normalized === 'process' || normalized === 'processes') return 'Proses';
-                                        if (normalized === 'program' || normalized === 'programs') return 'Program';
-                                        if (normalized === 'method' || normalized === 'methods') return 'Metod';
-                                        if (normalized === 'tool' || normalized === 'tools') return 'Araç';
-                                        if (normalized === 'equipment' || normalized === 'equipments') return 'Ekipman';
-                                        if (normalized === 'material' || normalized === 'materials') return 'Malzeme';
-                                        if (normalized === 'technique' || normalized === 'techniques') return 'Teknik';
-                                        // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
-                                        return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
-                                      };
-                                      return {
-                                        name: getTypeName(type),
-                                        value: data.count,
-                                        originalType: type,
-                                        sortValue: data.count
-                                      };
-                                    })
-                                    .sort((a, b) => b.sortValue - a.sortValue); // En çoktan aza doğru sırala
-                                  return sortedData;
-                                })()}
-                                cx="50%"
-                                cy="45%"
-                                labelLine={true}
-                                label={({ name, percent }) => {
-                                  // Sadece yüzde 5'ten büyük olanları göster
-                                  if (percent < 0.05) return '';
-                                  return `${(percent * 100).toFixed(0)}%`;
-                                }}
-                                outerRadius={100}
-                                innerRadius={30}
-                                fill="#8884d8"
-                                dataKey="value"
-                                paddingAngle={2}
-                              >
-                                {(() => {
-                                  const sortedData = Object.entries(analysisData.byType)
-                                    .map(([type, data]) => ({ type, count: data.count }))
-                                    .sort((a, b) => b.count - a.count);
-                                  return sortedData.map((entry, index) => (
-                                    <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
-                                  ));
-                                })()}
-                              </Pie>
-                              <Tooltip 
-                                formatter={(value, name, props) => {
-                                  const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
-                                  const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
-                                  return [
-                                    <div key="tooltip">
-                                      <div className="font-semibold">{props.payload.name}</div>
-                                      <div>{value} kayıt ({percent}%)</div>
-                                    </div>
-                                  ];
-                                }}
-                                contentStyle={{ 
-                                  backgroundColor: 'rgba(255, 255, 255, 0.95)', 
-                                  border: '1px solid #e5e7eb',
-                                  borderRadius: '8px',
-                                  padding: '12px',
-                                  fontSize: '14px'
-                                }}
-                              />
-                              <Legend 
-                                verticalAlign="bottom"
-                                height={36}
-                                iconType="rect"
-                                iconSize={12}
-                                formatter={(value, entry) => {
-                                  const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
-                                  // Entry'den tip bilgisini al
-                                  const pieData = entry.payload;
-                                  const count = pieData?.value || 0;
-                                  const percent = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
-                                  return `${value} (${percent}%)`;
-                                }}
-                              />
-                            </PieChart>
-                          </ResponsiveContainer>
-                        </CardContent>
-                      </Card>
+        <div className="space-y-2">
+          <Label>Sonraki Durum Resimleri</Label>
+          <div className="p-4 border-2 border-dashed rounded-lg">
+            {(formState.after_images && formState.after_images.length > 0) ? (
+              <div className="space-y-2">
+                <div className="grid grid-cols-3 gap-2">
+                  {formState.after_images.map((url, idx) => (
+                    <div key={idx} className="relative group">
+                      <img src={url} alt={`Sonraki ${idx + 1}`} className="w-full h-24 object-cover rounded" />
+                      <Button variant="destructive" size="icon" className="absolute top-1 right-1 h-6 w-6 opacity-0 group-hover:opacity-100 transition-opacity" onClick={() => {
+                        setFormState(prev => ({
+                          ...prev,
+                          after_images: prev.after_images.filter((_, i) => i !== idx),
+                          after_image: prev.after_images.length > 1 ? prev.after_images.filter((_, i) => i !== idx)[0] : null
+                        }));
+                      }}>
+                        <X className="h-3 w-3" />
+                      </Button>
                     </div>
-                  )}
-                  
-                  {/* Hat Bazlı Analiz */}
-                  {Object.keys(analysisData.byLine).length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Hat Bazlı İyileştirme Analizi</CardTitle>
-                        <CardDescription>Her hat için iyileştirme sayıları ve toplam etkileri</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={400}>
-                          <BarChart data={Object.values(analysisData.byLine)
-                            .sort((a, b) => b.totalImpact - a.totalImpact)
-                            .slice(0, 10)
-                            .map(line => ({
-                              hat: line.lineName.length > 15 ? line.lineName.substring(0, 15) + '...' : line.lineName,
-                              sayi: line.count,
-                              etki: line.totalImpact,
-                              ortalama: line.avgImpact
-                            }))}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="hat" angle={-45} textAnchor="end" height={100} />
-                            <YAxis yAxisId="left" />
-                            <YAxis yAxisId="right" orientation="right" />
-                            <Tooltip 
-                              formatter={(value, name) => {
-                                if (name === 'etki' || name === 'ortalama') {
-                                  return formatCurrency(value);
-                                }
-                                return value;
-                              }}
-                            />
-                            <Legend />
-                            <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
-                            <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
-                            <Bar yAxisId="right" dataKey="ortalama" fill="#f97316" name="Ortalama Etki (₺)" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
-                  )}
-                  
-                  {/* Aylık Trend */}
-                  {analysisData.monthlyTrend.length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Aylık İyileştirme Trendi</CardTitle>
-                        <CardDescription>Zaman içinde iyileştirme sayıları ve etkileri</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={400}>
-                          <AreaChart data={analysisData.monthlyTrend}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="monthLabel" />
-                            <YAxis yAxisId="left" />
-                            <YAxis yAxisId="right" orientation="right" />
-                            <Tooltip 
-                              formatter={(value, name) => {
-                                if (name === 'totalImpact') {
-                                  return formatCurrency(value);
-                                }
-                                return value;
-                              }}
-                            />
-                            <Legend />
-                            <Area yAxisId="left" type="monotone" dataKey="count" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="Kayıt Sayısı" />
-                            <Line yAxisId="right" type="monotone" dataKey="totalImpact" stroke="#10b981" strokeWidth={2} name="Toplam Etki (₺)" />
-                          </AreaChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
-                  )}
-                  
-                  {/* Durum Bazlı Analiz */}
-                  {Object.keys(analysisData.byStatus).length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Durum Bazlı Analiz</CardTitle>
-                        <CardDescription>İyileştirme durumlarına göre dağılım</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                          <ResponsiveContainer width="100%" height={300}>
-                            <BarChart data={Object.entries(analysisData.byStatus).map(([status, data]) => ({
-                              durum: getStatusStyle(status).label,
+                  ))}
+                </div>
+                <Button asChild variant="outline" size="sm" disabled={uploading}>
+                  <label htmlFor="after-image-upload" className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-2" />Daha Fazla Ekle
+                  </label>
+                </Button>
+                <Input id="after-image-upload" type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'after_image')} disabled={uploading} accept="image/*" multiple />
+              </div>
+            ) : formState.after_image ? (
+              <div className="space-y-2">
+                <img src={formState.after_image} alt="Sonraki durum" className="w-full h-40 object-cover rounded" />
+                <Button variant="outline" size="sm" onClick={() => setFormState(prev => ({ ...prev, after_image: null }))}>
+                  <X className="h-4 w-4 mr-2" />Kaldır
+                </Button>
+              </div>
+            ) : (
+              <div className="text-center">
+                <Button asChild variant="outline" size="sm" disabled={uploading}>
+                  <label htmlFor="after-image-upload" className="cursor-pointer">
+                    <Upload className="h-4 w-4 mr-2" />Resim Yükle
+                  </label>
+                </Button>
+                <Input id="after-image-upload" type="file" className="hidden" onChange={(e) => handleImageUpload(e, 'after_image')} disabled={uploading} accept="image/*" multiple />
+              </div>
+            )}
+          </div>
+        </div>
+      </div>
+      <div className="space-y-2 mt-4">
+        <Label>Kanıt Dokümanları</Label>
+        <div className="p-4 border-2 border-dashed rounded-lg text-center">
+          <Button asChild variant="outline" size="sm">
+            <label htmlFor="file-upload-ci" className="cursor-pointer">
+              <Upload className="h-4 w-4 mr-2" /> Dosya Yükle
+            </label>
+          </Button>
+          <Input id="file-upload-ci" type="file" className="hidden" onChange={handleFileChange} disabled={uploading} accept=".pdf,.jpg,.jpeg,.png,.gif,.xls,.xlsx" />
+          {uploading && <p className="text-sm text-gray-500 mt-2">Yükleniyor...</p>}
+        </div>
+        {(formState.attachments && formState.attachments.length > 0) && (
+          <div className="mt-2 space-y-2">
+            {formState.attachments.map((file, index) => (
+              <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4" />
+                  <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate" title={file.name}>{file.name}</a>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => removeAttachment(index)}><X className="h-4 w-4" /></Button>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </>
+  );
+
+  const renderDetailView = () => (
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="col-span-2"><p className="font-semibold text-gray-500">Açıklama:</p><p className="font-medium text-lg">{viewingItem.description}</p></div>
+        <div><p className="font-semibold text-gray-500">Parça Kodu:</p><p className="font-semibold">{viewingItem.part_code || 'N/A'}</p></div>
+        <div><p className="font-semibold text-gray-500">Hat / Robot:</p><p>{getLineName(viewingItem.line_id)} / {getRobotName(viewingItem.robot_id)}</p></div>
+        <div><p className="font-semibold text-gray-500">Sorumlu:</p><p>{getEmployeeName(viewingItem.responsible_id)}</p></div>
+        <div><p className="font-semibold text-gray-500">İyileştirme Tarihi:</p><p>{format(parseISO(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
+        <div><p className="font-semibold text-gray-500">Kayıt Tarihi/Saat:</p><p>{viewingItem.created_at ? format(new Date(viewingItem.created_at), 'dd.MM.yyyy HH:mm:ss') : '-'}</p></div>
+        <div><p className="font-semibold text-gray-500">Durum:</p><p>{getStatusStyle(viewingItem.status).label}</p></div>
+      </div>
+      {((viewingItem.before_images && viewingItem.before_images.length > 0) || viewingItem.before_image || (viewingItem.after_images && viewingItem.after_images.length > 0) || viewingItem.after_image) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+          {((viewingItem.before_images && viewingItem.before_images.length > 0) || viewingItem.before_image) && (
+            <div>
+              <p className="font-semibold text-gray-500 mb-2">Önceki Durum</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(viewingItem.before_images && viewingItem.before_images.length > 0)
+                  ? viewingItem.before_images.map((url, idx) => (
+                    <img key={idx} src={url} alt={`Önceki ${idx + 1}`} className="w-full h-40 object-cover rounded-lg border" />
+                  ))
+                  : <img src={viewingItem.before_image} alt="Önceki durum" className="w-full h-60 object-cover rounded-lg border" />
+                }
+              </div>
+            </div>
+          )}
+          {((viewingItem.after_images && viewingItem.after_images.length > 0) || viewingItem.after_image) && (
+            <div>
+              <p className="font-semibold text-gray-500 mb-2">Sonraki Durum</p>
+              <div className="grid grid-cols-2 gap-2">
+                {(viewingItem.after_images && viewingItem.after_images.length > 0)
+                  ? viewingItem.after_images.map((url, idx) => (
+                    <img key={idx} src={url} alt={`Sonraki ${idx + 1}`} className="w-full h-40 object-cover rounded-lg border" />
+                  ))
+                  : <img src={viewingItem.after_image} alt="Sonraki durum" className="w-full h-60 object-cover rounded-lg border" />
+                }
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+      <div className="grid grid-cols-3 gap-4 pt-4">
+        <Card><CardHeader className="p-4"><CardTitle className="text-sm">Önceki Süre</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.prev_time} sn</p></CardContent></Card>
+        <Card><CardHeader className="p-4"><CardTitle className="text-sm">Yeni Süre</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.new_time} sn</p></CardContent></Card>
+        <Card><CardHeader className="p-4"><CardTitle className="text-sm">Yıllık Adet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.annual_quantity}</p></CardContent></Card>
+      </div>
+      <Card className="bg-green-50 border-green-200"><CardHeader className="p-4"><CardTitle className="text-base text-green-800">Yıllık Etki</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-3xl font-bold text-green-600">{formatCurrency(calculateImpact(viewingItem))}</p></CardContent></Card>
+      {viewingItem.attachments && viewingItem.attachments.length > 0 && (
+        <div>
+          <h4 className="text-md font-semibold mb-2">Kanıt Dokümanları</h4>
+          <div className="space-y-2">
+            {viewingItem.attachments.map((file, index) => (
+              <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200">
+                <Paperclip className="h-4 w-4" />
+                <span className="text-sm font-medium text-blue-600 hover:underline">{file.name}</span>
+              </a>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+
+  // Analiz verileri
+  const analysisData = useMemo(() => {
+    const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
+    const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+
+    const filtered = filteredImprovements.filter(i => {
+      const itemDate = format(parseISO(i.improvement_date), 'yyyy-MM-dd');
+      return itemDate >= from && itemDate <= to;
+    });
+
+    // Tip bazlı analiz - gerçek tip değerlerini kullan
+    const byType = filtered.reduce((acc, item) => {
+      const type = item.type || 'other';
+      // Tip değerini normalize et
+      const normalizedType = type.trim().toLowerCase();
+      if (!acc[normalizedType]) {
+        acc[normalizedType] = {
+          count: 0,
+          totalImpact: 0,
+          avgImpact: 0,
+          originalType: type // Orijinal tip değerini sakla
+        };
+      }
+      acc[normalizedType].count += 1;
+      const impact = calculateImpact(item);
+      acc[normalizedType].totalImpact += impact;
+      return acc;
+    }, {});
+
+    Object.keys(byType).forEach(type => {
+      byType[type].avgImpact = byType[type].count > 0 ? byType[type].totalImpact / byType[type].count : 0;
+    });
+
+    // Hat bazlı analiz
+    const byLine = filtered.reduce((acc, item) => {
+      const lineId = item.line_id;
+      if (!lineId) return acc;
+      const lineName = getLineName(lineId);
+      if (!acc[lineId]) {
+        acc[lineId] = { lineName, count: 0, totalImpact: 0, avgImpact: 0 };
+      }
+      acc[lineId].count += 1;
+      const impact = calculateImpact(item);
+      acc[lineId].totalImpact += impact;
+      return acc;
+    }, {});
+
+    Object.keys(byLine).forEach(lineId => {
+      byLine[lineId].avgImpact = byLine[lineId].count > 0 ? byLine[lineId].totalImpact / byLine[lineId].count : 0;
+    });
+
+    // Durum bazlı analiz
+    const byStatus = filtered.reduce((acc, item) => {
+      const rawStatus = item.status || 'Belirtilmemiş';
+      const status = getStatusStyle(rawStatus).label; // Türkçe status label'ı kullan
+      if (!acc[status]) {
+        acc[status] = { count: 0, totalImpact: 0 };
+      }
+      acc[status].count += 1;
+      acc[status].totalImpact += calculateImpact(item);
+      return acc;
+    }, {});
+
+    // Aylık trend analizi
+    const monthlyTrend = {};
+    filtered.forEach(item => {
+      const month = format(parseISO(item.improvement_date), 'yyyy-MM');
+      if (!monthlyTrend[month]) {
+        monthlyTrend[month] = { month, count: 0, totalImpact: 0 };
+      }
+      monthlyTrend[month].count += 1;
+      monthlyTrend[month].totalImpact += calculateImpact(item);
+    });
+
+    const monthlyTrendArray = Object.values(monthlyTrend)
+      .sort((a, b) => a.month.localeCompare(b.month))
+      .map(m => ({
+        ...m,
+        monthLabel: format(parseISO(m.month + '-01'), 'MMM yyyy', { locale: tr })
+      }));
+
+    // Top 10 en etkili iyileştirmeler
+    const top10Improvements = [...filtered]
+      .map(item => ({ ...item, impact: calculateImpact(item) }))
+      .sort((a, b) => b.impact - a.impact)
+      .slice(0, 10);
+
+    // Parça bazlı analiz
+    const byPart = filtered
+      .filter(item => item.part_code)
+      .reduce((acc, item) => {
+        const partCode = item.part_code;
+        if (!acc[partCode]) {
+          acc[partCode] = { partCode, count: 0, totalImpact: 0 };
+        }
+        acc[partCode].count += 1;
+        acc[partCode].totalImpact += calculateImpact(item);
+        return acc;
+      }, {});
+
+    const top10Parts = Object.values(byPart)
+      .sort((a, b) => b.totalImpact - a.totalImpact)
+      .slice(0, 10);
+
+    return {
+      byType,
+      byLine,
+      byStatus,
+      monthlyTrend: monthlyTrendArray,
+      top10Improvements,
+      top10Parts,
+      totalImpact: filtered.reduce((sum, item) => sum + calculateImpact(item), 0),
+      totalCount: filtered.length
+    };
+  }, [filteredImprovements, filters, calculateImpact, getLineName]);
+
+  const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
+
+  return (
+    <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} className="space-y-6">
+      <Card>
+        <CardHeader>
+          <div className="flex justify-between items-center">
+            <div>
+              <CardTitle className="flex items-center space-x-2"><TrendingUp className="h-5 w-5" /><span>Sürekli İyileştirme</span></CardTitle>
+              <CardDescription>Yapılan iyileştirmeleri, etkilerini ve durumlarını takip edin.</CardDescription>
+            </div>
+            <div className="flex space-x-2">
+              <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2" />Yeni İyileştirme</Button>
+              <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button>
+              <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
+            </div>
+          </div>
+        </CardHeader>
+        <CardContent>
+          <Tabs defaultValue="data" className="w-full">
+            <TabsList className="grid w-full grid-cols-2">
+              <TabsTrigger value="data">Veri Takip</TabsTrigger>
+              <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
+            </TabsList>
+
+            <TabsContent value="data" className="space-y-4">
+              <ImprovementFilters filters={filters} setFilters={setFilters} lines={lines} />
+              <KpiCards improvements={filteredImprovements} calculateImpact={calculateImpact} getLineName={getLineName} />
+              <ImprovementTable
+                improvements={filteredImprovements}
+                calculateImpact={calculateImpact}
+                getLineName={getLineName}
+                setViewingItem={setViewingItem}
+                handlePrint={handlePrint}
+                openDialog={openDialog}
+                setDeleteConfirm={setDeleteConfirm}
+              />
+            </TabsContent>
+
+            <TabsContent value="analysis" className="space-y-6">
+              {/* Özet KPI Kartları */}
+              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+                <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Toplam İyileştirme</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-blue-700">{analysisData.totalCount}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Kayıt sayısı</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-green-50 to-green-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Toplam Etki</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-green-700">{formatCurrency(analysisData.totalImpact)}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Yıllık kazanç</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-purple-50 to-purple-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Ortalama Etki</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-purple-700">
+                      {formatCurrency(analysisData.totalCount > 0 ? analysisData.totalImpact / analysisData.totalCount : 0)}
+                    </div>
+                    <p className="text-xs text-muted-foreground mt-1">İyileştirme başına</p>
+                  </CardContent>
+                </Card>
+                <Card className="bg-gradient-to-br from-orange-50 to-orange-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm">Farklı Hat</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-orange-700">{Object.keys(analysisData.byLine).length}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Hat sayısı</p>
+                  </CardContent>
+                </Card>
+              </div>
+
+              {/* Tip Bazlı Analiz */}
+              {Object.keys(analysisData.byType).length > 0 && (
+                <div className="space-y-6">
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>İyileştirme Tipi Bazlı Analiz</CardTitle>
+                      <CardDescription>Tip bazında iyileştirme sayıları ve etkileri</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={450}>
+                        <BarChart data={Object.entries(analysisData.byType)
+                          .map(([type, data]) => {
+                            // Tip ismini Türkçe'ye çevir
+                            const getTypeName = (t) => {
+                              const normalized = t.trim().toLowerCase();
+                              if (normalized === 'cycle_time') return 'Çevrim Süresi';
+                              if (normalized === 'quality') return 'Kalite';
+                              if (normalized === 'cost') return 'Maliyet';
+                              if (normalized === 'ergonomics') return 'Ergonomi';
+                              if (normalized === 'other') return 'Diğer';
+                              // İngilizce kelimeleri Türkçe'ye çevir
+                              if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
+                              if (normalized === 'process' || normalized === 'processes') return 'Proses';
+                              if (normalized === 'program' || normalized === 'programs') return 'Program';
+                              if (normalized === 'method' || normalized === 'methods') return 'Metod';
+                              if (normalized === 'tool' || normalized === 'tools') return 'Araç';
+                              if (normalized === 'equipment' || normalized === 'equipments') return 'Ekipman';
+                              if (normalized === 'material' || normalized === 'materials') return 'Malzeme';
+                              if (normalized === 'technique' || normalized === 'techniques') return 'Teknik';
+                              // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
+                              return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
+                            };
+                            return {
+                              tip: getTypeName(type),
                               sayi: data.count,
-                              etki: data.totalImpact
-                            }))}>
-                              <CartesianGrid strokeDasharray="3 3" />
-                              <XAxis dataKey="durum" />
-                              <YAxis yAxisId="left" />
-                              <YAxis yAxisId="right" orientation="right" />
-                              <Tooltip 
-                                formatter={(value, name) => {
-                                  if (name === 'etki') {
-                                    return formatCurrency(value);
-                                  }
-                                  return value;
-                                }}
-                              />
-                              <Legend />
-                              <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
-                              <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
-                            </BarChart>
-                          </ResponsiveContainer>
-                          
-                          <div className="space-y-2">
-                            {Object.entries(analysisData.byStatus).map(([status, data]) => (
-                              <div key={status} className="p-3 bg-gray-50 rounded border-l-4 border-blue-500">
-                                <div className="flex justify-between items-center">
-                                  <span className="font-semibold">{getStatusStyle(status).label}</span>
-                                  <div className="text-right">
-                                    <p className="text-lg font-bold text-blue-600">{data.count} kayıt</p>
-                                    <p className="text-sm text-gray-600">{formatCurrency(data.totalImpact)}</p>
-                                  </div>
+                              etki: data.totalImpact,
+                              sortValue: data.count
+                            };
+                          })
+                          .sort((a, b) => b.sortValue - a.sortValue) // En çoktan aza doğru sırala
+                        }>
+                          <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
+                          <XAxis
+                            dataKey="tip"
+                            tick={{ fontSize: 13 }}
+                            stroke="#6b7280"
+                          />
+                          <YAxis
+                            yAxisId="left"
+                            tick={{ fontSize: 12 }}
+                            stroke="#6b7280"
+                          />
+                          <YAxis
+                            yAxisId="right"
+                            orientation="right"
+                            tick={{ fontSize: 12 }}
+                            stroke="#6b7280"
+                            tickFormatter={(value) => {
+                              if (value >= 1000000) return `${(value / 1000000).toFixed(1)}M ₺`;
+                              if (value >= 1000) return `${(value / 1000).toFixed(0)}K ₺`;
+                              return `${value} ₺`;
+                            }}
+                          />
+                          <Tooltip
+                            formatter={(value, name) => {
+                              if (name === 'Toplam Etki (₺)') {
+                                return [formatCurrency(value), 'Toplam Etki'];
+                              }
+                              return value;
+                            }}
+                            contentStyle={{
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              padding: '12px',
+                              fontSize: '14px'
+                            }}
+                          />
+                          <Legend
+                            wrapperStyle={{ paddingTop: '20px' }}
+                            iconType="rect"
+                            iconSize={12}
+                          />
+                          <Bar
+                            yAxisId="left"
+                            dataKey="sayi"
+                            fill="#3b82f6"
+                            name="Kayıt Sayısı"
+                            radius={[4, 4, 0, 0]}
+                          />
+                          <Bar
+                            yAxisId="right"
+                            dataKey="etki"
+                            fill="#10b981"
+                            name="Toplam Etki (₺)"
+                            radius={[4, 4, 0, 0]}
+                          />
+                        </BarChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>İyileştirme Tipi Dağılımı</CardTitle>
+                      <CardDescription>Tip bazında yüzde dağılımı</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <ResponsiveContainer width="100%" height={450}>
+                        <PieChart>
+                          <Pie
+                            data={(() => {
+                              const sortedData = Object.entries(analysisData.byType)
+                                .map(([type, data]) => {
+                                  // Tip ismini Türkçe'ye çevir
+                                  const getTypeName = (t) => {
+                                    const normalized = t.trim().toLowerCase();
+                                    if (normalized === 'cycle_time') return 'Çevrim Süresi';
+                                    if (normalized === 'quality') return 'Kalite';
+                                    if (normalized === 'cost') return 'Maliyet';
+                                    if (normalized === 'ergonomics') return 'Ergonomi';
+                                    if (normalized === 'other') return 'Diğer';
+                                    // İngilizce kelimeleri Türkçe'ye çevir
+                                    if (normalized === 'parameter' || normalized === 'parameters') return 'Parametre';
+                                    if (normalized === 'process' || normalized === 'processes') return 'Proses';
+                                    if (normalized === 'program' || normalized === 'programs') return 'Program';
+                                    if (normalized === 'method' || normalized === 'methods') return 'Metod';
+                                    if (normalized === 'tool' || normalized === 'tools') return 'Araç';
+                                    if (normalized === 'equipment' || normalized === 'equipments') return 'Ekipman';
+                                    if (normalized === 'material' || normalized === 'materials') return 'Malzeme';
+                                    if (normalized === 'technique' || normalized === 'techniques') return 'Teknik';
+                                    // Bilinmeyen tipler için orijinal değeri göster (ilk harfi büyük)
+                                    return data.originalType || t.charAt(0).toUpperCase() + t.slice(1);
+                                  };
+                                  return {
+                                    name: getTypeName(type),
+                                    value: data.count,
+                                    originalType: type,
+                                    sortValue: data.count
+                                  };
+                                })
+                                .sort((a, b) => b.sortValue - a.sortValue); // En çoktan aza doğru sırala
+                              return sortedData;
+                            })()}
+                            cx="50%"
+                            cy="45%"
+                            labelLine={true}
+                            label={({ name, percent }) => {
+                              // Sadece yüzde 5'ten büyük olanları göster
+                              if (percent < 0.05) return '';
+                              return `${(percent * 100).toFixed(0)}%`;
+                            }}
+                            outerRadius={100}
+                            innerRadius={30}
+                            fill="#8884d8"
+                            dataKey="value"
+                            paddingAngle={2}
+                          >
+                            {(() => {
+                              const sortedData = Object.entries(analysisData.byType)
+                                .map(([type, data]) => ({ type, count: data.count }))
+                                .sort((a, b) => b.count - a.count);
+                              return sortedData.map((entry, index) => (
+                                <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                              ));
+                            })()}
+                          </Pie>
+                          <Tooltip
+                            formatter={(value, name, props) => {
+                              const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
+                              const percent = total > 0 ? ((value / total) * 100).toFixed(1) : 0;
+                              return [
+                                <div key="tooltip">
+                                  <div className="font-semibold">{props.payload.name}</div>
+                                  <div>{value} kayıt ({percent}%)</div>
                                 </div>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                  
-                  {/* Top 10 En Etkili İyileştirmeler */}
-                  {analysisData.top10Improvements.length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Top 10 En Etkili İyileştirmeler</CardTitle>
-                        <CardDescription>En yüksek etkiye sahip iyileştirmeler</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <div className="space-y-2">
-                          {analysisData.top10Improvements.map((item, index) => (
-                            <div key={item.id} className="p-3 bg-green-50 rounded border-l-4 border-green-500">
-                              <div className="flex justify-between items-start">
-                                <div className="flex items-center gap-3">
-                                  <span className="text-xl font-bold text-green-700">#{index + 1}</span>
-                                  <div>
-                                    <p className="font-semibold">{item.description}</p>
-                                    <p className="text-xs text-gray-600">
-                                      {getLineName(item.line_id)} | {item.type === 'cycle_time' ? 'Çevrim Süresi' : 
-                                                                      item.type === 'quality' ? 'Kalite' :
-                                                                      item.type === 'cost' ? 'Maliyet' :
-                                                                      item.type === 'ergonomics' ? 'Ergonomi' : 'Diğer'}
-                                    </p>
-                                  </div>
-                                </div>
-                                <div className="text-right">
-                                  <p className="text-lg font-bold text-green-600">{formatCurrency(item.impact)}</p>
-                                  <p className="text-xs text-gray-600">{format(parseISO(item.improvement_date), 'dd.MM.yyyy', { locale: tr })}</p>
-                                </div>
+                              ];
+                            }}
+                            contentStyle={{
+                              backgroundColor: 'rgba(255, 255, 255, 0.95)',
+                              border: '1px solid #e5e7eb',
+                              borderRadius: '8px',
+                              padding: '12px',
+                              fontSize: '14px'
+                            }}
+                          />
+                          <Legend
+                            verticalAlign="bottom"
+                            height={36}
+                            iconType="rect"
+                            iconSize={12}
+                            formatter={(value, entry) => {
+                              const total = Object.entries(analysisData.byType).reduce((sum, [, data]) => sum + data.count, 0);
+                              // Entry'den tip bilgisini al
+                              const pieData = entry.payload;
+                              const count = pieData?.value || 0;
+                              const percent = total > 0 ? ((count / total) * 100).toFixed(1) : 0;
+                              return `${value} (${percent}%)`;
+                            }}
+                          />
+                        </PieChart>
+                      </ResponsiveContainer>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
+
+              {/* Hat Bazlı Analiz */}
+              {Object.keys(analysisData.byLine).length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Hat Bazlı İyileştirme Analizi</CardTitle>
+                    <CardDescription>Her hat için iyileştirme sayıları ve toplam etkileri</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={Object.values(analysisData.byLine)
+                        .sort((a, b) => b.totalImpact - a.totalImpact)
+                        .slice(0, 10)
+                        .map(line => ({
+                          hat: line.lineName.length > 15 ? line.lineName.substring(0, 15) + '...' : line.lineName,
+                          sayi: line.count,
+                          etki: line.totalImpact,
+                          ortalama: line.avgImpact
+                        }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="hat" angle={-45} textAnchor="end" height={100} />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip
+                          formatter={(value, name) => {
+                            if (name === 'etki' || name === 'ortalama') {
+                              return formatCurrency(value);
+                            }
+                            return value;
+                          }}
+                        />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                        <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                        <Bar yAxisId="right" dataKey="ortalama" fill="#f97316" name="Ortalama Etki (₺)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Aylık Trend */}
+              {analysisData.monthlyTrend.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Aylık İyileştirme Trendi</CardTitle>
+                    <CardDescription>Zaman içinde iyileştirme sayıları ve etkileri</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <AreaChart data={analysisData.monthlyTrend}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="monthLabel" />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip
+                          formatter={(value, name) => {
+                            if (name === 'totalImpact') {
+                              return formatCurrency(value);
+                            }
+                            return value;
+                          }}
+                        />
+                        <Legend />
+                        <Area yAxisId="left" type="monotone" dataKey="count" stackId="1" stroke="#3b82f6" fill="#3b82f6" name="Kayıt Sayısı" />
+                        <Line yAxisId="right" type="monotone" dataKey="totalImpact" stroke="#10b981" strokeWidth={2} name="Toplam Etki (₺)" />
+                      </AreaChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Durum Bazlı Analiz */}
+              {Object.keys(analysisData.byStatus).length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Durum Bazlı Analiz</CardTitle>
+                    <CardDescription>İyileştirme durumlarına göre dağılım</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                      <ResponsiveContainer width="100%" height={300}>
+                        <BarChart data={Object.entries(analysisData.byStatus).map(([status, data]) => ({
+                          durum: getStatusStyle(status).label,
+                          sayi: data.count,
+                          etki: data.totalImpact
+                        }))}>
+                          <CartesianGrid strokeDasharray="3 3" />
+                          <XAxis dataKey="durum" />
+                          <YAxis yAxisId="left" />
+                          <YAxis yAxisId="right" orientation="right" />
+                          <Tooltip
+                            formatter={(value, name) => {
+                              if (name === 'etki') {
+                                return formatCurrency(value);
+                              }
+                              return value;
+                            }}
+                          />
+                          <Legend />
+                          <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                          <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                        </BarChart>
+                      </ResponsiveContainer>
+
+                      <div className="space-y-2">
+                        {Object.entries(analysisData.byStatus).map(([status, data]) => (
+                          <div key={status} className="p-3 bg-gray-50 rounded border-l-4 border-blue-500">
+                            <div className="flex justify-between items-center">
+                              <span className="font-semibold">{getStatusStyle(status).label}</span>
+                              <div className="text-right">
+                                <p className="text-lg font-bold text-blue-600">{data.count} kayıt</p>
+                                <p className="text-sm text-gray-600">{formatCurrency(data.totalImpact)}</p>
                               </div>
                             </div>
-                          ))}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
+
+              {/* Top 10 En Etkili İyileştirmeler */}
+              {analysisData.top10Improvements.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top 10 En Etkili İyileştirmeler</CardTitle>
+                    <CardDescription>En yüksek etkiye sahip iyileştirmeler</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="space-y-2">
+                      {analysisData.top10Improvements.map((item, index) => (
+                        <div key={item.id} className="p-3 bg-green-50 rounded border-l-4 border-green-500">
+                          <div className="flex justify-between items-start">
+                            <div className="flex items-center gap-3">
+                              <span className="text-xl font-bold text-green-700">#{index + 1}</span>
+                              <div>
+                                <p className="font-semibold">{item.description}</p>
+                                <p className="text-xs text-gray-600">
+                                  {getLineName(item.line_id)} | {item.type === 'cycle_time' ? 'Çevrim Süresi' :
+                                    item.type === 'quality' ? 'Kalite' :
+                                      item.type === 'cost' ? 'Maliyet' :
+                                        item.type === 'ergonomics' ? 'Ergonomi' : 'Diğer'}
+                                </p>
+                              </div>
+                            </div>
+                            <div className="text-right">
+                              <p className="text-lg font-bold text-green-600">{formatCurrency(item.impact)}</p>
+                              <p className="text-xs text-gray-600">{format(parseISO(item.improvement_date), 'dd.MM.yyyy', { locale: tr })}</p>
+                            </div>
+                          </div>
                         </div>
-                      </CardContent>
-                    </Card>
-                  )}
-                  
-                  {/* Top 10 Parça Bazlı Analiz */}
-                  {analysisData.top10Parts.length > 0 && (
-                    <Card>
-                      <CardHeader>
-                        <CardTitle>Top 10 Parça Bazlı İyileştirmeler</CardTitle>
-                        <CardDescription>En çok iyileştirme yapılan parçalar</CardDescription>
-                      </CardHeader>
-                      <CardContent>
-                        <ResponsiveContainer width="100%" height={400}>
-                          <BarChart data={analysisData.top10Parts.map(part => ({
-                            parca: part.partCode.length > 15 ? part.partCode.substring(0, 15) + '...' : part.partCode,
-                            sayi: part.count,
-                            etki: part.totalImpact
-                          }))}>
-                            <CartesianGrid strokeDasharray="3 3" />
-                            <XAxis dataKey="parca" angle={-45} textAnchor="end" height={100} />
-                            <YAxis yAxisId="left" />
-                            <YAxis yAxisId="right" orientation="right" />
-                            <Tooltip 
-                              formatter={(value, name) => {
-                                if (name === 'etki') {
-                                  return formatCurrency(value);
-                                }
-                                return value;
-                              }}
-                            />
-                            <Legend />
-                            <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
-                            <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
-                          </BarChart>
-                        </ResponsiveContainer>
-                      </CardContent>
-                    </Card>
-                  )}
-                </TabsContent>
-              </Tabs>
-            </CardContent>
-          </Card>
-          
-          <Dialog open={showDialog} onOpenChange={setShowDialog}>
-            <DialogContent className="sm:max-w-3xl">
-              <DialogHeader><DialogTitle>{editingItem ? 'İyileştirmeyi Düzenle' : 'Yeni İyileştirme Ekle'}</DialogTitle></DialogHeader>
-              <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{renderForm()}</div>
-              <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>İptal</Button><Button onClick={handleSave}><Save className="mr-2 h-4 w-4"/>{editingItem ? 'Güncelle' : 'Kaydet'}</Button></DialogFooter>
-            </DialogContent>
-          </Dialog>
-          
-          <Dialog open={!!viewingItem} onOpenChange={(isOpen) => !isOpen && setViewingItem(null)}>
-             <DialogContent className="sm:max-w-2xl">
-              <DialogHeader><DialogTitle>İyileştirme Detayı</DialogTitle></DialogHeader>
-              <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{viewingItem && renderDetailView()}</div>
-              <DialogFooter>
-                <Button variant="outline" onClick={() => handlePrint(viewingItem)}>Yazdır</Button>
-                <Button onClick={() => { openDialog(viewingItem); setViewingItem(null); }}>Düzenle</Button>
-                <Button variant="destructive" onClick={() => setDeleteConfirm(viewingItem)}>Sil</Button>
-              </DialogFooter>
-            </DialogContent>
-          </Dialog>
+                      ))}
+                    </div>
+                  </CardContent>
+                </Card>
+              )}
 
-          <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-            <DialogContent className="sm:max-w-md">
-              <DialogHeader><DialogTitle>Silme Onayı</DialogTitle></DialogHeader>
-              <DialogDescription>"{deleteConfirm?.description}" kaydını kalıcı olarak silmek istediğinizden emin misiniz?</DialogDescription>
-              <DialogFooter className="mt-4"><Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button><Button variant="destructive" onClick={handleDelete}>Sil</Button></DialogFooter>
-            </DialogContent>
-          </Dialog>
-        </motion.div>
-      );
-    };
+              {/* Top 10 Parça Bazlı Analiz */}
+              {analysisData.top10Parts.length > 0 && (
+                <Card>
+                  <CardHeader>
+                    <CardTitle>Top 10 Parça Bazlı İyileştirmeler</CardTitle>
+                    <CardDescription>En çok iyileştirme yapılan parçalar</CardDescription>
+                  </CardHeader>
+                  <CardContent>
+                    <ResponsiveContainer width="100%" height={400}>
+                      <BarChart data={analysisData.top10Parts.map(part => ({
+                        parca: part.partCode.length > 15 ? part.partCode.substring(0, 15) + '...' : part.partCode,
+                        sayi: part.count,
+                        etki: part.totalImpact
+                      }))}>
+                        <CartesianGrid strokeDasharray="3 3" />
+                        <XAxis dataKey="parca" angle={-45} textAnchor="end" height={100} />
+                        <YAxis yAxisId="left" />
+                        <YAxis yAxisId="right" orientation="right" />
+                        <Tooltip
+                          formatter={(value, name) => {
+                            if (name === 'etki') {
+                              return formatCurrency(value);
+                            }
+                            return value;
+                          }}
+                        />
+                        <Legend />
+                        <Bar yAxisId="left" dataKey="sayi" fill="#3b82f6" name="Kayıt Sayısı" />
+                        <Bar yAxisId="right" dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" />
+                      </BarChart>
+                    </ResponsiveContainer>
+                  </CardContent>
+                </Card>
+              )}
+            </TabsContent>
+          </Tabs>
+        </CardContent>
+      </Card>
 
-    export default ContinuousImprovement;
+      <Dialog open={showDialog} onOpenChange={setShowDialog}>
+        <DialogContent className="sm:max-w-3xl bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-emerald-600 to-emerald-500 p-6 text-white"><DialogTitle className="text-2xl font-bold flex items-center gap-2">{editingItem ? <Edit className="h-6 w-6 text-white/80" /> : <Plus className="h-6 w-6 text-white/80" />}{editingItem ? 'İyileştirmeyi Düzenle' : 'Yeni İyileştirme Ekle'}</DialogTitle><DialogDescription className="text-emerald-100 opacity-90">İyileştirme bilgilerini aşağıdan yönetebilirsiniz.</DialogDescription></DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{renderForm()}</div>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3"><Button variant="outline" onClick={() => setShowDialog(false)} className="rounded-lg border-gray-300 hover:bg-gray-100 hover:text-gray-900 transition-colors px-6">İptal</Button><Button onClick={handleSave} className="bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg shadow-md shadow-emerald-200 transition-all px-6"><Save className="mr-2 h-4 w-4" />{editingItem ? 'Güncelle' : 'Kaydet'}</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!viewingItem} onOpenChange={(isOpen) => !isOpen && setViewingItem(null)}>
+        <DialogContent className="sm:max-w-2xl bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-blue-600 to-blue-500 p-6 text-white"><DialogTitle className="text-2xl font-bold flex items-center gap-2"><Eye className="h-6 w-6 text-white/80" />İyileştirme Detayı</DialogTitle><DialogDescription className="text-blue-100 opacity-90">Kayıt detaylarını inceleyebilirsiniz.</DialogDescription></DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{viewingItem && renderDetailView()}</div>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" onClick={() => handlePrint(viewingItem)} className="rounded-lg border-gray-300 hover:bg-gray-100 transition-colors px-6">Yazdır</Button>
+            <Button variant="secondary" onClick={() => openMetricsDialog(viewingItem)} className="rounded-lg px-6"><CalendarIcon className="mr-2 h-4 w-4" />Aylık Metrikler</Button>
+            <Button onClick={() => { openDialog(viewingItem); setViewingItem(null); }} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md shadow-blue-200 transition-all px-6">Düzenle</Button>
+            <Button variant="destructive" onClick={() => setDeleteConfirm(viewingItem)} className="bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-200 px-6">Sil</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
+        <DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl border-0 overflow-hidden">
+          <DialogHeader className="bg-red-50 p-6 border-b border-red-100"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0"><Trash2 className="h-5 w-5 text-red-600" /></div><div><DialogTitle className="text-xl font-bold text-red-900">Silme Onayı</DialogTitle><DialogDescription className="text-red-700 mt-1">Bu işlem geri alınamaz.</DialogDescription></div></div></DialogHeader>
+          <div className="p-6"><p className="text-gray-600">"{deleteConfirm?.description}" kaydını kalıcı olarak silmek istediğinizden emin misiniz?</p></div>
+          <DialogFooter className="p-6 bg-gray-50 flex items-center justify-end gap-3 border-t border-gray-100"><Button variant="outline" onClick={() => setDeleteConfirm(null)} className="rounded-lg border-gray-300 hover:bg-gray-100 hover:text-gray-900 px-6 font-medium">İptal</Button><Button variant="destructive" onClick={handleDelete} className="bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-200 px-6 font-medium"><Trash2 className="mr-2 h-4 w-4" />Sil</Button></DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Aylık Metrik Dialog */}
+      <Dialog open={showMetricsDialog} onOpenChange={setShowMetricsDialog}>
+        <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-y-auto bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-amber-500 to-amber-400 p-6 text-white">
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2"><CalendarIcon className="h-6 w-6 text-white/80" />Aylık Metrikler</DialogTitle>
+            <DialogDescription className="text-amber-100 opacity-90">{metricsItem?.description} - Aylık sevkiyat adetleri</DialogDescription>
+          </DialogHeader>
+          <div className="space-y-6 p-6">
+            <div className="grid grid-cols-3 gap-4">
+              <div className="space-y-2">
+                <Label>Ay</Label>
+                <Input type="month" value={metricsForm.year_month} onChange={(e) => setMetricsForm(p => ({ ...p, year_month: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Sevkiyat Adedi</Label>
+                <Input type="number" placeholder="Örn: 1500" value={metricsForm.shipped_qty} onChange={(e) => setMetricsForm(p => ({ ...p, shipped_qty: e.target.value }))} />
+              </div>
+              <div className="space-y-2">
+                <Label>Not</Label>
+                <Input placeholder="Açıklama..." value={metricsForm.notes} onChange={(e) => setMetricsForm(p => ({ ...p, notes: e.target.value }))} />
+              </div>
+            </div>
+            <Button onClick={handleSaveMetric} className="w-full"><Save className="mr-2 h-4 w-4" />Kaydet / Güncelle</Button>
+
+            {monthlyMetrics.length > 0 && (
+              <div className="border rounded-lg overflow-hidden">
+                <table className="w-full text-sm">
+                  <thead className="bg-gray-50">
+                    <tr>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500">Ay</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500">Sevkiyat</th>
+                      <th className="px-4 py-3 text-left font-medium text-gray-500">Not</th>
+                      <th className="px-4 py-3 text-right font-medium text-gray-500">İşlem</th>
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y">
+                    {monthlyMetrics.map(m => (
+                      <tr key={m.id} className="hover:bg-gray-50">
+                        <td className="px-4 py-2 font-medium">{m.year_month}</td>
+                        <td className="px-4 py-2">{(m.shipped_qty || 0).toLocaleString('tr-TR')}</td>
+                        <td className="px-4 py-2 text-muted-foreground">{m.notes || '-'}</td>
+                        <td className="px-4 py-2 text-right">
+                          <Button variant="ghost" size="sm" onClick={() => handleDeleteMetric(m.id)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                  <tfoot className="bg-gradient-to-r from-green-50 to-emerald-50">
+                    <tr>
+                      <td className="px-4 py-3 font-semibold">Toplam</td>
+                      <td className="px-4 py-3 font-bold text-green-700">{monthlyMetrics.reduce((s, m) => s + (m.shipped_qty || 0), 0).toLocaleString('tr-TR')}</td>
+                      <td colSpan={2}></td>
+                    </tr>
+                  </tfoot>
+                </table>
+              </div>
+            )}
+          </div>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" onClick={() => setShowMetricsDialog(false)} className="rounded-lg border-gray-300 hover:bg-gray-100 hover:text-gray-900 transition-colors px-6">Kapat</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </motion.div>
+  );
+};
+
+export default ContinuousImprovement;

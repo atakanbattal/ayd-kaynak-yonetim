@@ -158,7 +158,7 @@ const MasterData = () => {
       const savedItem = data[0];
       toast({ title: "Kayıt Başarılı", description: `Veri başarıyla ${isEditing ? 'güncellendi' : 'eklendi'}.` });
       logAction(isEditing ? 'UPDATE' : 'CREATE', `MasterData ${selectedTab}: ${savedItem.name || savedItem.code || savedItem.id || savedItem.first_name}`, user);
-      
+
       fetchData();
       setShowAddDialog(false);
       setShowEditDialog(false);
@@ -220,7 +220,7 @@ const MasterData = () => {
     const newCosts = { ...currentCosts, [field]: value };
     const totalCostPerSecond = calculateTotalCost(newCosts);
     const updatedCostEntry = { ...newCosts, totalCostPerSecond };
-    
+
     const otherCosts = (item.costs || []).filter(c => c.validFrom !== currentCosts.validFrom);
     setItem({ ...item, costs: [...otherCosts, updatedCostEntry] });
   };
@@ -257,21 +257,21 @@ const MasterData = () => {
         );
       case 'robots':
         return (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Robot Adı</Label><Input value={item.name || ''} onChange={(e) => setItem({ ...item, name: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Marka</Label><Input value={item.brand || ''} onChange={(e) => setItem({ ...item, brand: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Model</Label><Input value={item.model || ''} onChange={(e) => setItem({ ...item, model: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Bağlı Olduğu Hat</Label><Select value={item.line_id || ''} onValueChange={(value) => setItem({ ...item, line_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{lines.filter(l => !l.deleted).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Robot Adı</Label><Input value={item.name || ''} onChange={(e) => setItem({ ...item, name: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Marka</Label><Input value={item.brand || ''} onChange={(e) => setItem({ ...item, brand: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Model</Label><Input value={item.model || ''} onChange={(e) => setItem({ ...item, model: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Bağlı Olduğu Hat</Label><Select value={item.line_id || ''} onValueChange={(value) => setItem({ ...item, line_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{lines.filter(l => !l.deleted).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
+          </div>
         );
       case 'fixtures':
         return (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Fikstür Kodu</Label><Input value={item.code || ''} onChange={(e) => setItem({ ...item, code: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Fikstür Adı</Label><Input value={item.name || ''} onChange={(e) => setItem({ ...item, name: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Bağlı Olduğu Hat</Label><Select value={item.line_id || ''} onValueChange={(value) => setItem({ ...item, line_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{lines.filter(l => !l.deleted).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Bağlı Olduğu Robot</Label><Select value={item.robot_id || ''} onValueChange={(value) => setItem({ ...item, robot_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{robots.filter(r => !r.deleted).map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Fikstür Kodu</Label><Input value={item.code || ''} onChange={(e) => setItem({ ...item, code: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Fikstür Adı</Label><Input value={item.name || ''} onChange={(e) => setItem({ ...item, name: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Bağlı Olduğu Hat</Label><Select value={item.line_id || ''} onValueChange={(value) => setItem({ ...item, line_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{lines.filter(l => !l.deleted).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Bağlı Olduğu Robot</Label><Select value={item.robot_id || ''} onValueChange={(value) => setItem({ ...item, robot_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{robots.filter(r => !r.deleted).map(r => <SelectItem key={r.id} value={r.id}>{r.name}</SelectItem>)}</SelectContent></Select></div>
+          </div>
         );
       case 'employees':
         return (
@@ -286,21 +286,21 @@ const MasterData = () => {
         );
       case 'revised-fixtures':
         return (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Revizyon Tarihi</Label><Input type="date" value={item.revision_date || ''} onChange={(e) => setItem({ ...item, revision_date: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Revize Edilecek Fikstür</Label><Select value={item.fixture_id || ''} onValueChange={(value) => setItem({ ...item, fixture_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{fixtures.filter(f => !f.deleted).map(f => <SelectItem key={f.id} value={f.id}>{f.name} ({f.code})</SelectItem>)}</SelectContent></Select></div>
-              <div className="space-y-2"><Label>Parça No</Label><Input value={item.part_no || ''} onChange={(e) => setItem({ ...item, part_no: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Sonuç</Label><Select value={item.result || ''} onValueChange={(value) => setItem({ ...item, result: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Tamamlandı">Tamamlandı</SelectItem><SelectItem value="Tamamlanmadı">Tamamlanmadı</SelectItem></SelectContent></Select></div>
-              <div className="col-span-2 space-y-2"><Label>Açıklama</Label><Input value={item.description || ''} onChange={(e) => setItem({ ...item, description: e.target.value })} /></div>
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Revizyon Tarihi</Label><Input type="date" value={item.revision_date || ''} onChange={(e) => setItem({ ...item, revision_date: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Revize Edilecek Fikstür</Label><Select value={item.fixture_id || ''} onValueChange={(value) => setItem({ ...item, fixture_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{fixtures.filter(f => !f.deleted).map(f => <SelectItem key={f.id} value={f.id}>{f.name} ({f.code})</SelectItem>)}</SelectContent></Select></div>
+            <div className="space-y-2"><Label>Parça No</Label><Input value={item.part_no || ''} onChange={(e) => setItem({ ...item, part_no: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Sonuç</Label><Select value={item.result || ''} onValueChange={(value) => setItem({ ...item, result: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Tamamlandı">Tamamlandı</SelectItem><SelectItem value="Tamamlanmadı">Tamamlanmadı</SelectItem></SelectContent></Select></div>
+            <div className="col-span-2 space-y-2"><Label>Açıklama</Label><Input value={item.description || ''} onChange={(e) => setItem({ ...item, description: e.target.value })} /></div>
+          </div>
         );
       case 'cost-items':
         return (
-            <div className="grid grid-cols-2 gap-4">
-              <div className="space-y-2"><Label>Maliyet Kalemi Adı</Label><Input value={item.name || ''} onChange={(e) => setItem({ ...item, name: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Değer</Label><Input type="number" value={item.value || ''} onChange={(e) => setItem({ ...item, value: e.target.value })} /></div>
-              <div className="space-y-2"><Label>Birim</Label><Select value={item.unit || ''} onValueChange={(value) => setItem({ ...item, unit: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="₺/saat">₺/saat</SelectItem><SelectItem value="₺/kg">₺/kg</SelectItem><SelectItem value="₺/m">₺/m</SelectItem><SelectItem value="₺/kWh">₺/kWh</SelectItem><SelectItem value="₺/saniye">₺/saniye</SelectItem></SelectContent></Select></div>
-            </div>
+          <div className="grid grid-cols-2 gap-4">
+            <div className="space-y-2"><Label>Maliyet Kalemi Adı</Label><Input value={item.name || ''} onChange={(e) => setItem({ ...item, name: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Değer</Label><Input type="number" value={item.value || ''} onChange={(e) => setItem({ ...item, value: e.target.value })} /></div>
+            <div className="space-y-2"><Label>Birim</Label><Select value={item.unit || ''} onValueChange={(value) => setItem({ ...item, unit: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="₺/saat">₺/saat</SelectItem><SelectItem value="₺/kg">₺/kg</SelectItem><SelectItem value="₺/m">₺/m</SelectItem><SelectItem value="₺/kWh">₺/kWh</SelectItem><SelectItem value="₺/saniye">₺/saniye</SelectItem></SelectContent></Select></div>
+          </div>
         );
       default:
         return <p>Bu kategori için form henüz yapılandırılmadı.</p>;
@@ -308,9 +308,9 @@ const MasterData = () => {
   };
 
   const renderTable = (type, data) => {
-    const filteredData = data.filter(item => 
+    const filteredData = data.filter(item =>
       (!item.deleted || (type === 'employees' && !item.is_active && showDeleted) || (item.deleted && showDeleted)) &&
-      Object.values(item).some(value => 
+      Object.values(item).some(value =>
         value && value.toString().toLowerCase().includes(searchTerm.toLowerCase())
       )
     );
@@ -348,22 +348,22 @@ const MasterData = () => {
             </>
           );
         case 'robots':
-            const lineName = lines.find(l => l.id === item.line_id)?.name || 'N/A';
-            return (
-                <>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.brand}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lineName}</td>
-                </>
-            );
+          const lineName = lines.find(l => l.id === item.line_id)?.name || 'N/A';
+          return (
+            <>
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.brand}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{lineName}</td>
+            </>
+          );
         case 'fixtures':
-            const robotName = robots.find(r => r.id === item.robot_id)?.name || 'N/A';
-            return (
-                <>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.code}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{robotName}</td>
-                </>
-            );
+          const robotName = robots.find(r => r.id === item.robot_id)?.name || 'N/A';
+          return (
+            <>
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.code}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{robotName}</td>
+            </>
+          );
         case 'employees':
           return (
             <>
@@ -374,24 +374,24 @@ const MasterData = () => {
             </>
           );
         case 'revised-fixtures':
-            const fixtureName = fixtures.find(f => f.id === item.fixture_id)?.name || 'N/A';
-            return (
-                <>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{new Date(item.revision_date).toLocaleDateString('tr-TR')}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fixtureName}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.part_no}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-xs truncate">{item.description}</td>
-                    <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${item.result === 'Tamamlandı' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{item.result}</span></td>
-                </>
-            );
+          const fixtureName = fixtures.find(f => f.id === item.fixture_id)?.name || 'N/A';
+          return (
+            <>
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{new Date(item.revision_date).toLocaleDateString('tr-TR')}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{fixtureName}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.part_no}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500 max-w-xs truncate">{item.description}</td>
+              <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${item.result === 'Tamamlandı' ? 'bg-green-100 text-green-800' : 'bg-yellow-100 text-yellow-800'}`}>{item.result}</span></td>
+            </>
+          );
         case 'cost-items':
-            return (
-                <>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.value}</td>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.unit}</td>
-                </>
-            );
+          return (
+            <>
+              <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{item.name}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.value}</td>
+              <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{item.unit}</td>
+            </>
+          );
         default:
           return <td colSpan={headers[type]?.length - 2} className="px-6 py-4 text-sm text-gray-500">Bu görünüm güncelleniyor...</td>;
       }
@@ -415,7 +415,7 @@ const MasterData = () => {
                 <tr key={item.id} className={cn("hover:bg-gray-50", item.deleted && "bg-red-50 opacity-60", type === 'employees' && !item.is_active && "bg-gray-100 opacity-70")}>
                   {renderRow(item)}
                   {type !== 'revised-fixtures' && (
-                    <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(type === 'employees' ? item.is_active : item.active) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{ (type === 'employees' ? item.is_active : item.active) ? 'Aktif' : 'Pasif'}</span></td>
+                    <td className="px-6 py-4 whitespace-nowrap"><span className={`inline-flex px-2 py-1 text-xs font-semibold rounded-full ${(type === 'employees' ? item.is_active : item.active) ? 'bg-green-100 text-green-800' : 'bg-red-100 text-red-800'}`}>{(type === 'employees' ? item.is_active : item.active) ? 'Aktif' : 'Pasif'}</span></td>
                   )}
                   <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">
                     <div className="flex space-x-2">
@@ -607,7 +607,7 @@ const MasterData = () => {
           <CardContent>
             <Tabs value={selectedTab} onValueChange={(tab) => { setSearchTerm(''); setSelectedTab(tab); }}>
               <TabsList className="grid w-full grid-cols-3 md:grid-cols-6">
-                {tabs.map((tab) => { const Icon = tab.icon; return (<TabsTrigger key={tab.id} value={tab.id} className="flex items-center space-x-2"><Icon className="h-4 w-4" /><span className="hidden sm:inline">{tab.name}</span></TabsTrigger>);})}
+                {tabs.map((tab) => { const Icon = tab.icon; return (<TabsTrigger key={tab.id} value={tab.id} className="flex items-center space-x-2"><Icon className="h-4 w-4" /><span className="hidden sm:inline">{tab.name}</span></TabsTrigger>); })}
               </TabsList>
               {tabs.map((tab) => (<TabsContent key={tab.id} value={tab.id} className="mt-6">{renderTable(tab.id, tab.data)}</TabsContent>))}
             </Tabs>
@@ -616,24 +616,24 @@ const MasterData = () => {
       </motion.div>
 
       <Dialog open={showAddDialog} onOpenChange={setShowAddDialog}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader><DialogTitle>Yeni {tabs.find(t => t.id === selectedTab)?.name} Ekle</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-2xl bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-blue-600 to-blue-500 p-6 text-white"><DialogTitle className="text-2xl font-bold flex items-center gap-2"><Plus className="h-6 w-6 text-white/80" />Yeni {tabs.find(t => t.id === selectedTab)?.name} Ekle</DialogTitle><DialogDescription className="text-blue-100 opacity-90">Yeni kayıt bilgilerini aşağıdan girebilirsiniz.</DialogDescription></DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{renderForm(newItem, setNewItem)}</div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowAddDialog(false)}>İptal</Button><Button onClick={() => handleSave(newItem, false)}><Save className="h-4 w-4 mr-2" />Kaydet</Button></DialogFooter>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3"><Button variant="outline" onClick={() => setShowAddDialog(false)} className="rounded-lg border-gray-300 hover:bg-gray-100 hover:text-gray-900 transition-colors px-6">İptal</Button><Button onClick={() => handleSave(newItem, false)} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md shadow-blue-200 transition-all px-6"><Save className="h-4 w-4 mr-2" />Kaydet</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="sm:max-w-2xl">
-          <DialogHeader><DialogTitle>{tabs.find(t => t.id === selectedTab)?.name} Düzenle</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-2xl bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-violet-600 to-violet-500 p-6 text-white"><DialogTitle className="text-2xl font-bold flex items-center gap-2"><Edit className="h-6 w-6 text-white/80" />{tabs.find(t => t.id === selectedTab)?.name} Düzenle</DialogTitle><DialogDescription className="text-violet-100 opacity-90">Kaydı güncelleyebilirsiniz.</DialogDescription></DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{editingItem && renderForm(editingItem, setEditingItem)}</div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowEditDialog(false)}>İptal</Button><Button onClick={() => handleSave(editingItem, true)}><Save className="h-4 w-4 mr-2" />Güncelle</Button></DialogFooter>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3"><Button variant="outline" onClick={() => setShowEditDialog(false)} className="rounded-lg border-gray-300 hover:bg-gray-100 hover:text-gray-900 transition-colors px-6">İptal</Button><Button onClick={() => handleSave(editingItem, true)} className="bg-violet-600 hover:bg-violet-700 text-white rounded-lg shadow-md shadow-violet-200 transition-all px-6"><Save className="h-4 w-4 mr-2" />Güncelle</Button></DialogFooter>
         </DialogContent>
       </Dialog>
       <Dialog open={showConfirmDelete} onOpenChange={setShowConfirmDelete}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle className="flex items-center"><AlertTriangle className="h-5 w-5 mr-2 text-red-500"/>Silme Onayı</DialogTitle></DialogHeader>
-          <DialogDescription>Bu kaydı silmek istediğinizden emin misiniz?</DialogDescription>
-          <DialogFooter className="mt-4"><Button variant="outline" onClick={() => setShowConfirmDelete(false)}>İptal</Button><Button variant="outline" onClick={() => handleConfirmDelete(false)}>Geçici Sil</Button><Button variant="destructive" onClick={() => handleConfirmDelete(true)}>Kalıcı Sil</Button></DialogFooter>
+        <DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl border-0 overflow-hidden">
+          <DialogHeader className="bg-red-50 p-6 border-b border-red-100"><div className="flex items-center gap-3"><div className="w-10 h-10 rounded-full bg-red-100 flex items-center justify-center flex-shrink-0"><AlertTriangle className="h-5 w-5 text-red-600" /></div><div><DialogTitle className="text-xl font-bold text-red-900">Silme Onayı</DialogTitle><DialogDescription className="text-red-700 mt-1">Bu işlem geri alınamaz.</DialogDescription></div></div></DialogHeader>
+          <div className="p-6"><p className="text-gray-600">Bu kaydı silmek istediğinizden emin misiniz?</p></div>
+          <DialogFooter className="p-6 bg-gray-50 flex items-center justify-end gap-3 border-t border-gray-100"><Button variant="outline" onClick={() => setShowConfirmDelete(false)} className="rounded-lg border-gray-300 hover:bg-gray-100 hover:text-gray-900 px-6 font-medium">İptal</Button><Button variant="outline" onClick={() => handleConfirmDelete(false)} className="rounded-lg px-6 font-medium">Geçici Sil</Button><Button variant="destructive" onClick={() => handleConfirmDelete(true)} className="bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-200 px-6 font-medium">Kalıcı Sil</Button></DialogFooter>
         </DialogContent>
       </Dialog>
     </div>

@@ -149,7 +149,7 @@ const TrainingPlan = () => {
     if (trainingsRes.error || employeesRes.error) {
       toast({ title: "Veri Yüklenemedi", description: (trainingsRes.error || employeesRes.error).message, variant: "destructive" });
     } else {
-      setTrainings(trainingsRes.data.map(t => ({...t, trainer_name: t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'Belirtilmemiş'})));
+      setTrainings(trainingsRes.data.map(t => ({ ...t, trainer_name: t.trainer ? `${t.trainer.first_name} ${t.trainer.last_name}` : 'Belirtilmemiş' })));
       setEmployees(employeesRes.data);
       setParticipants(participantsRes.data || []);
       setCertificates(certificatesRes.data || []);
@@ -238,12 +238,12 @@ const TrainingPlan = () => {
       const { data: allExamResults, error: examError } = await supabase
         .from('training_exam_results')
         .select('*');
-      
+
       const examResults = allExamResults || [];
 
       // allTrainings üzerinden filtreleme yap (state yerine taze veri kullan)
       const filteredData = allTrainings.filter(t => {
-        const searchMatch = !searchTerm || 
+        const searchMatch = !searchTerm ||
           (t.name && t.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()));
         const statusMatch = filterStatus === 'all' || t.status === filterStatus;
@@ -401,20 +401,20 @@ const TrainingPlan = () => {
     ];
 
     if (!allowedTypes.includes(file.type)) {
-      toast({ 
-        title: "Geçersiz Dosya Tipi", 
-        description: "Sadece PDF, Excel, Word ve resim dosyaları (JPEG, PNG, GIF) yüklenebilir.", 
-        variant: "destructive" 
+      toast({
+        title: "Geçersiz Dosya Tipi",
+        description: "Sadece PDF, Excel, Word ve resim dosyaları (JPEG, PNG, GIF) yüklenebilir.",
+        variant: "destructive"
       });
       return;
     }
 
     // Dosya boyutunu kontrol et (max 10MB)
     if (file.size > 10 * 1024 * 1024) {
-      toast({ 
-        title: "Dosya Çok Büyük", 
-        description: "Dosya boyutu 10MB'dan küçük olmalıdır.", 
-        variant: "destructive" 
+      toast({
+        title: "Dosya Çok Büyük",
+        description: "Dosya boyutu 10MB'dan küçük olmalıdır.",
+        variant: "destructive"
       });
       return;
     }
@@ -423,7 +423,7 @@ const TrainingPlan = () => {
     try {
       const fileExt = file.name.split('.').pop();
       const fileName = `${trainingId}/${Date.now()}.${fileExt}`;
-      
+
       const { error: uploadError } = await supabase.storage
         .from('training-documents')
         .upload(fileName, file);
@@ -431,10 +431,10 @@ const TrainingPlan = () => {
       if (uploadError) {
         // Bucket yoksa oluşturmayı dene (bu genellikle Supabase Dashboard'dan yapılır)
         if (uploadError.message.includes('Bucket') || uploadError.message.includes('not found')) {
-          toast({ 
-            title: "Bucket Bulunamadı", 
-            description: "Lütfen Supabase Dashboard'dan 'training-documents' adında public bir bucket oluşturun.", 
-            variant: "destructive" 
+          toast({
+            title: "Bucket Bulunamadı",
+            description: "Lütfen Supabase Dashboard'dan 'training-documents' adında public bir bucket oluşturun.",
+            variant: "destructive"
           });
           return;
         }
@@ -476,10 +476,10 @@ const TrainingPlan = () => {
       logAction('UPLOAD_TRAINING_DOCUMENT', `Eğitim: ${trainingId} - Dosya: ${file.name}`, user);
       fetchData();
     } catch (error) {
-      toast({ 
-        title: "Yükleme Başarısız", 
-        description: error.message, 
-        variant: "destructive" 
+      toast({
+        title: "Yükleme Başarısız",
+        description: error.message,
+        variant: "destructive"
       });
     } finally {
       setUploadingFile(false);
@@ -490,7 +490,7 @@ const TrainingPlan = () => {
   // Filtrelenmiş eğitimler
   const filteredTrainings = useMemo(() => {
     return trainings.filter(t => {
-      const searchMatch = !searchTerm || 
+      const searchMatch = !searchTerm ||
         (t.name && t.name.toLowerCase().includes(searchTerm.toLowerCase())) ||
         (t.description && t.description.toLowerCase().includes(searchTerm.toLowerCase()));
       const statusMatch = filterStatus === 'all' || t.status === filterStatus;
@@ -811,23 +811,28 @@ const TrainingPlan = () => {
       </motion.div>
 
       <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}>
-        <DialogContent className="sm:max-w-[600px]">
-          <DialogHeader>
-            <DialogTitle>{editingTraining ? 'Eğitimi Düzenle' : 'Yeni Eğitim Planla'}</DialogTitle>
+        <DialogContent className="sm:max-w-[600px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-purple-600 to-purple-500 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg"><Save className="h-5 w-5" /></div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">{editingTraining ? 'Eğitimi Düzenle' : 'Yeni Eğitim Planla'}</DialogTitle>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="py-4 grid grid-cols-2 gap-4 modal-body-scroll px-6">
-            <div className="col-span-2 space-y-2"><Label>Eğitim Adı *</Label><Input placeholder="Örn: MAG Kaynakçılığı Temelleri" value={formState.name} onChange={(e) => setFormState({ ...formState, name: e.target.value })} /></div>
-            <div className="col-span-2 space-y-2"><Label>Açıklama</Label><Input placeholder="Eğitimin amacı ve içeriği" value={formState.description} onChange={(e) => setFormState({ ...formState, description: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Planlanan Tarih *</Label><Input type="date" value={formState.planned_date} onChange={(e) => setFormState({ ...formState, planned_date: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Gerçekleşen Tarih</Label><Input type="date" value={formState.actual_date || ''} onChange={(e) => setFormState({ ...formState, actual_date: e.target.value || null })} /></div>
-            <div className="space-y-2"><Label>Eğitim Yeri</Label><Input placeholder="Örn: Konferans Salonu" value={formState.location} onChange={(e) => setFormState({ ...formState, location: e.target.value })} /></div>
-            <div className="space-y-2"><Label>Eğitmen</Label><Combobox options={employeeOptions} value={formState.trainer_id} onSelect={(value) => setFormState({...formState, trainer_id: value})} placeholder="Eğitmen Seç" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı."/></div>
-            <div className="space-y-2"><Label>Durum</Label><Select value={formState.status} onValueChange={status => setFormState({...formState, status})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Planlandı">Planlandı</SelectItem><SelectItem value="Devam Ediyor">Devam Ediyor</SelectItem><SelectItem value="Tamamlandı">Tamamlandı</SelectItem><SelectItem value="İptal Edildi">İptal Edildi</SelectItem></SelectContent></Select></div>
-            <div className="space-y-2"><Label>Geçme Notu (%)</Label><Input type="number" placeholder="80" value={formState.passing_grade} onChange={(e) => setFormState({ ...formState, passing_grade: e.target.value })} /></div>
+          <div className="p-6 grid grid-cols-2 gap-4 modal-body-scroll">
+            <div className="col-span-2 space-y-2"><Label className="font-medium text-gray-700">Eğitim Adı *</Label><Input className="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500" placeholder="Örn: MAG Kaynakçılığı Temelleri" value={formState.name} onChange={(e) => setFormState({ ...formState, name: e.target.value })} /></div>
+            <div className="col-span-2 space-y-2"><Label className="font-medium text-gray-700">Açıklama</Label><Input className="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500" placeholder="Eğitimin amacı ve içeriği" value={formState.description} onChange={(e) => setFormState({ ...formState, description: e.target.value })} /></div>
+            <div className="space-y-2"><Label className="font-medium text-gray-700">Planlanan Tarih *</Label><Input className="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500" type="date" value={formState.planned_date} onChange={(e) => setFormState({ ...formState, planned_date: e.target.value })} /></div>
+            <div className="space-y-2"><Label className="font-medium text-gray-700">Gerçekleşen Tarih</Label><Input className="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500" type="date" value={formState.actual_date || ''} onChange={(e) => setFormState({ ...formState, actual_date: e.target.value || null })} /></div>
+            <div className="space-y-2"><Label className="font-medium text-gray-700">Eğitim Yeri</Label><Input className="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500" placeholder="Örn: Konferans Salonu" value={formState.location} onChange={(e) => setFormState({ ...formState, location: e.target.value })} /></div>
+            <div className="space-y-2"><Label className="font-medium text-gray-700">Eğitmen</Label><Combobox options={employeeOptions} value={formState.trainer_id} onSelect={(value) => setFormState({ ...formState, trainer_id: value })} placeholder="Eğitmen Seç" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı." /></div>
+            <div className="space-y-2"><Label className="font-medium text-gray-700">Durum</Label><Select value={formState.status} onValueChange={status => setFormState({ ...formState, status })}><SelectTrigger className="rounded-lg border-gray-300"><SelectValue /></SelectTrigger><SelectContent><SelectItem value="Planlandı">Planlandı</SelectItem><SelectItem value="Devam Ediyor">Devam Ediyor</SelectItem><SelectItem value="Tamamlandı">Tamamlandı</SelectItem><SelectItem value="İptal Edildi">İptal Edildi</SelectItem></SelectContent></Select></div>
+            <div className="space-y-2"><Label className="font-medium text-gray-700">Geçme Notu (%)</Label><Input className="rounded-lg border-gray-300 focus:border-purple-500 focus:ring-purple-500" type="number" placeholder="80" value={formState.passing_grade} onChange={(e) => setFormState({ ...formState, passing_grade: e.target.value })} /></div>
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setShowFormDialog(false)}>İptal</Button>
-            <Button onClick={handleSave}><Save className="h-4 w-4 mr-2" />{editingTraining ? 'Güncelle' : 'Kaydet'}</Button>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-lg" onClick={() => setShowFormDialog(false)}>İptal</Button>
+            <Button className="rounded-lg bg-purple-600 hover:bg-purple-700" onClick={handleSave}><Save className="h-4 w-4 mr-2" />{editingTraining ? 'Güncelle' : 'Kaydet'}</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

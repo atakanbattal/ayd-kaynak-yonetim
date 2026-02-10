@@ -39,9 +39,9 @@ const statusMap = {
 
 const TaskCard = ({ task, onSelect, compact = false }) => {
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({ id: task.id });
-  const style = { 
-    transform: CSS.Transform.toString(transform), 
-    transition, 
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
     opacity: isDragging ? 0.8 : 1,
     zIndex: isDragging ? 9999 : 1,
     position: 'relative'
@@ -98,17 +98,17 @@ const TaskCard = ({ task, onSelect, compact = false }) => {
 };
 
 const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
-  const { setNodeRef, isOver } = useDroppable({ 
+  const { setNodeRef, isOver } = useDroppable({
     id,
     data: {
       type: 'column',
       status: id
     }
   });
-  
+
   return (
-    <div 
-      ref={setNodeRef} 
+    <div
+      ref={setNodeRef}
       className={`bg-gray-100 rounded-lg p-3 w-full md:w-1/3 transition-colors ${isOver ? 'bg-blue-50 ring-2 ring-blue-400' : ''}`}
       data-column-id={id}
       data-status={id}
@@ -130,7 +130,7 @@ const TaskColumn = ({ id, title, tasks, onSelectTask }) => {
 
 const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
   const columnId = `${projectId}-${id}`;
-  const { setNodeRef, isOver } = useDroppable({ 
+  const { setNodeRef, isOver } = useDroppable({
     id: columnId,
     data: {
       type: 'column',
@@ -138,10 +138,10 @@ const ProjectTaskColumn = ({ id, title, tasks, onSelectTask, projectId }) => {
       projectId: projectId
     }
   });
-  
+
   return (
-    <div 
-      ref={setNodeRef} 
+    <div
+      ref={setNodeRef}
       className={`bg-white rounded-lg p-2 transition-colors ${isOver ? 'bg-blue-50 ring-2 ring-blue-400' : ''}`}
       data-column-id={columnId}
       data-status={id}
@@ -310,7 +310,7 @@ const TaskManager = ({ user }) => {
       supabase.from('employees').select('id, first_name, last_name, registration_number').eq('is_active', true),
       supabase.from('projects').select('*').order('created_at', { ascending: true })
     ]);
-    
+
     if (tasksRes.error || employeesRes.error || projectsRes.error) {
       console.error("Error fetching data:", tasksRes.error || employeesRes.error || projectsRes.error);
     } else {
@@ -327,7 +327,7 @@ const TaskManager = ({ user }) => {
       setTasks(enrichedTasks);
       setEmployees(employeesRes.data);
       setProjects(projectsRes.data || []);
-      
+
       // İlk yüklemede tüm projeleri genişlet
       if (Object.keys(expandedProjects).length === 0 && projectsRes.data.length > 0) {
         const initialExpanded = {};
@@ -337,7 +337,7 @@ const TaskManager = ({ user }) => {
       }
     }
   };
-  
+
   const projectOptions = useMemo(() => [
     { value: '', label: 'Proje Yok' },
     ...projects.map(p => ({ value: p.id, label: p.name }))
@@ -356,12 +356,12 @@ const TaskManager = ({ user }) => {
       return searchMatch && assigneeMatch && tagMatch && projectMatch;
     });
   }, [tasks, searchTerm, filterAssignee, filterTag, filterProject]);
-  
+
   // Proje bazlı görevlerin gruplandırılması
   const tasksByProject = useMemo(() => {
     const grouped = { 'no-project': [] };
     projects.forEach(p => { grouped[p.id] = []; });
-    
+
     filteredTasks.forEach(task => {
       if (task.project_id && grouped[task.project_id]) {
         grouped[task.project_id].push(task);
@@ -369,27 +369,27 @@ const TaskManager = ({ user }) => {
         grouped['no-project'].push(task);
       }
     });
-    
+
     return grouped;
   }, [filteredTasks, projects]);
-  
+
   const toggleProjectExpand = (projectId) => {
     setExpandedProjects(prev => ({ ...prev, [projectId]: !prev[projectId] }));
   };
-  
+
   const handleSaveProject = async (projectData) => {
     if (!projectData.name) {
       toast({ title: "Hata", description: "Proje adı boş olamaz.", variant: "destructive" });
       return;
     }
-    
+
     let response;
     if (editingProject) {
       response = await supabase.from('projects').update(projectData).eq('id', editingProject.id).select();
     } else {
       response = await supabase.from('projects').insert(projectData).select();
     }
-    
+
     if (response.error) {
       toast({ title: "Kayıt Başarısız", description: response.error.message, variant: "destructive" });
     } else {
@@ -400,7 +400,7 @@ const TaskManager = ({ user }) => {
       setEditingProject(null);
     }
   };
-  
+
   const handleDeleteProject = async (projectId) => {
     // Önce projeye ait görevleri projeden çıkar
     await supabase.from('tasks').update({ project_id: null }).eq('project_id', projectId);
@@ -434,13 +434,13 @@ const TaskManager = ({ user }) => {
       setOverColumnId(null);
       return;
     }
-    
+
     const overId = over.id;
     const overData = over.data.current;
-    
+
     // Kolon ID'sini bul
     let columnId = null;
-    
+
     // Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
     if (overData?.type === 'column' && overData?.status) {
       columnId = overId;
@@ -491,7 +491,7 @@ const TaskManager = ({ user }) => {
         }
       }
     }
-    
+
     setOverColumnId(columnId);
   };
 
@@ -502,13 +502,13 @@ const TaskManager = ({ user }) => {
       setActiveTask(null);
       return;
     }
-    
+
     const activeId = active.id;
     const overId = over.id;
     const overData = over.data.current;
-    
+
     let overContainer = null;
-    
+
     // 1. Öncelikle data'dan status'ü kontrol et (en güvenilir yöntem)
     if (overData?.type === 'column' && overData?.status) {
       overContainer = overData.status;
@@ -525,7 +525,7 @@ const TaskManager = ({ user }) => {
           break;
         }
       }
-      
+
       // Eğer bulunamadıysa, overColumnId ile dene
       if (!columnElement && overColumnId) {
         for (const col of allColumns) {
@@ -536,7 +536,7 @@ const TaskManager = ({ user }) => {
           }
         }
       }
-      
+
       // Eğer hala bulunamadıysa, görev kartının parent kolonunu bul
       if (!columnElement) {
         const taskElement = document.querySelector(`[data-task-id="${activeId}"]`);
@@ -544,7 +544,7 @@ const TaskManager = ({ user }) => {
           columnElement = taskElement.closest('[data-column-id]');
         }
       }
-      
+
       // Eğer hala bulunamadıysa, overId'nin bir görev ID'si olup olmadığını kontrol et
       if (!columnElement) {
         const task = tasks.find(t => t.id === overId);
@@ -571,7 +571,7 @@ const TaskManager = ({ user }) => {
           }
         }
       }
-      
+
       // Kolon elementinden data-status'ü al
       if (columnElement) {
         const status = columnElement.getAttribute('data-status');
@@ -580,11 +580,11 @@ const TaskManager = ({ user }) => {
         }
       }
     }
-    
+
     // 3. Fallback: Direkt ID kontrolü
     if (!overContainer) {
       const idToCheck = overColumnId || overId;
-      
+
       // Direkt kolon ID'leri
       if (idToCheck === 'todo' || idToCheck === 'in-progress' || idToCheck === 'done') {
         overContainer = idToCheck;
@@ -612,55 +612,55 @@ const TaskManager = ({ user }) => {
         }
       }
     }
-    
+
     setOverColumnId(null);
     setActiveTask(null);
-    
+
     // Eğer kolon bulunamadıysa veya aynı kolona bırakıldıysa işlem yapma
     if (!overContainer) {
       console.log('Kolon bulunamadı:', { overId, overData, activeId, overColumnId });
       setActiveTask(null);
       return;
     }
-    
+
     const activeTask = tasks.find(t => t.id === activeId);
     if (!activeTask) {
       console.log('Aktif görev bulunamadı:', activeId);
       return;
     }
-    
+
     if (activeTask.status === overContainer) {
       return; // Aynı kolona bırakıldı, işlem yapma
     }
-    
+
     // Durumu güncelle
     const { error } = await supabase
       .from('tasks')
       .update({ status: overContainer })
       .eq('id', activeId);
-    
+
     if (error) {
-      toast({ 
-        title: "Hata", 
-        description: "Görev durumu güncellenirken bir hata oluştu.", 
-        variant: "destructive" 
+      toast({
+        title: "Hata",
+        description: "Görev durumu güncellenirken bir hata oluştu.",
+        variant: "destructive"
       });
       console.error('Görev güncelleme hatası:', error);
       return;
     }
-    
+
     // UI'ı güncelle
     setTasks((prevTasks) => {
-      return prevTasks.map(task => 
+      return prevTasks.map(task =>
         task.id === activeId ? { ...task, status: overContainer } : task
       );
     });
-    
+
     toast({
       title: "Başarılı",
       description: `Görev "${statusMap[overContainer]}" durumuna taşındı.`
     });
-    
+
     logAction('UPDATE_TASK_STATUS', `Görev durumu güncellendi: ${activeId} -> ${overContainer}`, authUser);
   };
 
@@ -669,9 +669,9 @@ const TaskManager = ({ user }) => {
       toast({ title: "Hata", description: "Görev başlığı boş olamaz.", variant: "destructive" });
       return;
     }
-    
+
     const saveData = { ...taskData };
-    if(saveData.assignee_id === '') saveData.assignee_id = null;
+    if (saveData.assignee_id === '') saveData.assignee_id = null;
 
     // UI için eklenen alanları temizle (veritabanında yok)
     const { assignee_name, project_name, project_color, ...cleanData } = saveData;
@@ -740,12 +740,12 @@ const TaskManager = ({ user }) => {
 
       // Filtreleme
       const filteredData = enrichedTasks.filter(task => {
-        const searchMatch = searchTerm === '' || 
-          task.title.toLowerCase().includes(searchTerm.toLowerCase()) || 
+        const searchMatch = searchTerm === '' ||
+          task.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
           (task.description && task.description.toLowerCase().includes(searchTerm.toLowerCase()));
-        const assigneeMatch = filterAssignee === '' || 
+        const assigneeMatch = filterAssignee === '' ||
           (task.assignee_name && task.assignee_name.toLowerCase().includes(filterAssignee.toLowerCase()));
-        const tagMatch = filterTag === '' || 
+        const tagMatch = filterTag === '' ||
           (task.tags && task.tags.toLowerCase().includes(filterTag.toLowerCase()));
         return searchMatch && assigneeMatch && tagMatch;
       });
@@ -789,7 +789,7 @@ const TaskManager = ({ user }) => {
         if (t.status === 'todo') employeePerformance[assignee].todo++;
         else if (t.status === 'in-progress') employeePerformance[assignee].inProgress++;
         else if (t.status === 'done') employeePerformance[assignee].done++;
-        
+
         if (t.due_date && new Date(t.due_date) < new Date() && t.status !== 'done') {
           employeePerformance[assignee].overdue++;
         }
@@ -864,7 +864,7 @@ const TaskManager = ({ user }) => {
             if (!t.due_date) return false;
             return new Date(t.due_date) < new Date() && t.status !== 'done';
           }).length;
-          
+
           projectSummaryRows.push([
             project.name,
             projectTasks.length.toString(),
@@ -876,7 +876,7 @@ const TaskManager = ({ user }) => {
           ]);
         }
       });
-      
+
       if (tasksByProject['no-project']?.length > 0) {
         const noProjectTasks = tasksByProject['no-project'];
         const noProjectTodo = noProjectTasks.filter(t => t.status === 'todo').length;
@@ -886,7 +886,7 @@ const TaskManager = ({ user }) => {
           if (!t.due_date) return false;
           return new Date(t.due_date) < new Date() && t.status !== 'done';
         }).length;
-        
+
         projectSummaryRows.push([
           'Proje Atanmamış',
           noProjectTasks.length.toString(),
@@ -1081,10 +1081,10 @@ const TaskManager = ({ user }) => {
       });
 
       const reportId = `RPR-TASK-PROJ-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
-      
+
       // Sections formatı kullan - her bölüm ayrı tablo olarak render edilir
       const sections = [];
-      
+
       // 1. Görev Listesi
       if (enrichedTasks.length > 0) {
         sections.push({
@@ -1099,7 +1099,7 @@ const TaskManager = ({ user }) => {
           ])
         });
       }
-      
+
       // 2. Durum Bazlı Özet
       sections.push({
         title: 'DURUM BAZLI ÖZET',
@@ -1110,7 +1110,7 @@ const TaskManager = ({ user }) => {
           ['Tamamlanan', tasksByStatus.done.length.toString(), enrichedTasks.length > 0 ? `%${((tasksByStatus.done.length / enrichedTasks.length) * 100).toFixed(1)}` : '%0']
         ]
       });
-      
+
       // 3. Öncelik Bazlı Özet
       if (Object.keys(tasksByPriority).length > 0) {
         sections.push({
@@ -1126,7 +1126,7 @@ const TaskManager = ({ user }) => {
           ])
         });
       }
-      
+
       // 4. Geciken Görevler
       if (overdueTasks.length > 0) {
         sections.push({
@@ -1140,7 +1140,7 @@ const TaskManager = ({ user }) => {
           ])
         });
       }
-      
+
       // 5. Atanan Bazlı Özet
       if (Object.keys(tasksByAssignee).length > 1) {
         sections.push({
@@ -1157,7 +1157,7 @@ const TaskManager = ({ user }) => {
           })
         });
       }
-      
+
       const reportData = {
         title: `Proje Bazlı Görev Raporu: ${projectName}`,
         reportId,
@@ -1199,32 +1199,32 @@ const TaskManager = ({ user }) => {
     const [formData, setFormData] = useState(task || { ...initialFormState, project_id: selectedProject });
     return (
       <div className="grid gap-4 py-4 px-6 modal-body-scroll">
-        <div className="space-y-2"><Label>Başlık</Label><Input value={formData.title} onChange={e => setFormData({...formData, title: e.target.value})} /></div>
-        <div className="space-y-2"><Label>Açıklama</Label><Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} /></div>
+        <div className="space-y-2"><Label>Başlık</Label><Input value={formData.title} onChange={e => setFormData({ ...formData, title: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Açıklama</Label><Textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} /></div>
         <div className="grid grid-cols-2 gap-4">
-          <div className="space-y-2"><Label>Proje</Label><Select value={formData.project_id || 'none'} onValueChange={project_id => setFormData({...formData, project_id: project_id === 'none' ? null : project_id})}><SelectTrigger><SelectValue placeholder="Proje seçin..." /></SelectTrigger><SelectContent><SelectItem value="none">Proje Yok</SelectItem>{projects.map(p => <SelectItem key={p.id} value={p.id}><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{backgroundColor: p.color}}></div>{p.name}</div></SelectItem>)}</SelectContent></Select></div>
-          <div className="space-y-2"><Label>Öncelik</Label><Select value={formData.priority} onValueChange={priority => setFormData({...formData, priority})}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Düşük</SelectItem><SelectItem value="medium">Orta</SelectItem><SelectItem value="high">Yüksek</SelectItem><SelectItem value="critical">Kritik</SelectItem></SelectContent></Select></div>
-          <div className="space-y-2"><Label>Atanan</Label><Combobox options={employeeOptions} value={formData.assignee_id} onSelect={(value) => setFormData({...formData, assignee_id: value})} placeholder="Personel Seç" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı."/></div>
-          <div className="space-y-2"><Label>Termin Tarihi</Label><DatePicker value={formData.due_date ? new Date(formData.due_date) : null} onChange={date => setFormData({...formData, due_date: date?.toISOString()})} placeholder="Tarih seçin" className="w-full" /></div>
-          <div className="space-y-2 col-span-2"><Label>Etiketler (virgülle ayırın)</Label><Input value={formData.tags} onChange={e => setFormData({...formData, tags: e.target.value})} /></div>
+          <div className="space-y-2"><Label>Proje</Label><Select value={formData.project_id || 'none'} onValueChange={project_id => setFormData({ ...formData, project_id: project_id === 'none' ? null : project_id })}><SelectTrigger><SelectValue placeholder="Proje seçin..." /></SelectTrigger><SelectContent><SelectItem value="none">Proje Yok</SelectItem>{projects.map(p => <SelectItem key={p.id} value={p.id}><div className="flex items-center gap-2"><div className="w-3 h-3 rounded-full" style={{ backgroundColor: p.color }}></div>{p.name}</div></SelectItem>)}</SelectContent></Select></div>
+          <div className="space-y-2"><Label>Öncelik</Label><Select value={formData.priority} onValueChange={priority => setFormData({ ...formData, priority })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent><SelectItem value="low">Düşük</SelectItem><SelectItem value="medium">Orta</SelectItem><SelectItem value="high">Yüksek</SelectItem><SelectItem value="critical">Kritik</SelectItem></SelectContent></Select></div>
+          <div className="space-y-2"><Label>Atanan</Label><Combobox options={employeeOptions} value={formData.assignee_id} onSelect={(value) => setFormData({ ...formData, assignee_id: value })} placeholder="Personel Seç" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı." /></div>
+          <div className="space-y-2"><Label>Termin Tarihi</Label><DatePicker value={formData.due_date ? new Date(formData.due_date) : null} onChange={date => setFormData({ ...formData, due_date: date?.toISOString() })} placeholder="Tarih seçin" className="w-full" /></div>
+          <div className="space-y-2 col-span-2"><Label>Etiketler (virgülle ayırın)</Label><Input value={formData.tags} onChange={e => setFormData({ ...formData, tags: e.target.value })} /></div>
         </div>
         <div className="flex justify-end pt-4"><Button onClick={() => onSave(formData)}>Kaydet</Button></div>
       </div>
     );
   };
-  
+
   const ProjectForm = ({ project, onSave }) => {
     const [formData, setFormData] = useState(project || initialProjectFormState);
     const colorOptions = ['#3B82F6', '#10B981', '#F59E0B', '#EF4444', '#8B5CF6', '#EC4899', '#06B6D4', '#84CC16', '#F97316', '#6366F1'];
     return (
       <div className="grid gap-4 py-4 px-6">
-        <div className="space-y-2"><Label>Proje Adı</Label><Input value={formData.name} onChange={e => setFormData({...formData, name: e.target.value})} placeholder="Proje adı..." /></div>
-        <div className="space-y-2"><Label>Açıklama</Label><Textarea value={formData.description} onChange={e => setFormData({...formData, description: e.target.value})} placeholder="Proje açıklaması..." /></div>
+        <div className="space-y-2"><Label>Proje Adı</Label><Input value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Proje adı..." /></div>
+        <div className="space-y-2"><Label>Açıklama</Label><Textarea value={formData.description} onChange={e => setFormData({ ...formData, description: e.target.value })} placeholder="Proje açıklaması..." /></div>
         <div className="space-y-2">
           <Label>Renk</Label>
           <div className="flex gap-2 flex-wrap">
             {colorOptions.map(color => (
-              <button key={color} onClick={() => setFormData({...formData, color})} className={`w-8 h-8 rounded-full border-2 ${formData.color === color ? 'border-gray-800 scale-110' : 'border-transparent'}`} style={{backgroundColor: color}}></button>
+              <button key={color} onClick={() => setFormData({ ...formData, color })} className={`w-8 h-8 rounded-full border-2 ${formData.color === color ? 'border-gray-800 scale-110' : 'border-transparent'}`} style={{ backgroundColor: color }}></button>
             ))}
           </div>
         </div>
@@ -1268,7 +1268,7 @@ const TaskManager = ({ user }) => {
                 <Input placeholder="Personel filtrele..." value={filterAssignee} onChange={e => setFilterAssignee(e.target.value)} className="w-full sm:w-[180px]" />
                 {(searchTerm || filterAssignee) && <Button variant="ghost" onClick={() => { setSearchTerm(''); setFilterAssignee(''); }}><XIcon className="h-4 w-4 mr-2" /> Temizle</Button>}
               </div>
-              
+
               <DndContext sensors={sensors} onDragStart={handleDragStart} onDragOver={handleDragOver} onDragEnd={handleDragEnd} collisionDetection={closestCorners}>
                 <DragOverlay>
                   {activeTask ? (
@@ -1284,7 +1284,7 @@ const TaskManager = ({ user }) => {
                   {/* Projeler ve Görevler */}
                   {projects.map(project => (
                     <div key={project.id} className="border rounded-lg overflow-hidden">
-                      <div 
+                      <div
                         className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50"
                         style={{ borderLeft: `4px solid ${project.color}` }}
                         onClick={() => toggleProjectExpand(project.id)}
@@ -1302,32 +1302,32 @@ const TaskManager = ({ user }) => {
                         </div>
                         <div className="flex items-center gap-2" onClick={e => e.stopPropagation()}>
                           <Button variant="ghost" size="sm" onClick={() => { setEditingProject(project); setIsProjectFormOpen(true); }}><Edit className="h-4 w-4" /></Button>
-                          <Button variant="ghost" size="sm" onClick={() => { if(confirm('Bu projeyi silmek istediğinize emin misiniz?')) handleDeleteProject(project.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                          <Button variant="ghost" size="sm" onClick={() => { if (confirm('Bu projeyi silmek istediğinize emin misiniz?')) handleDeleteProject(project.id); }}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                           <Button size="sm" onClick={() => { setEditingTask(null); setSelectedProject(project.id); setIsFormOpen(true); }}><Plus className="h-4 w-4" /></Button>
                         </div>
                       </div>
-                      
+
                       {expandedProjects[project.id] && tasksByProject[project.id]?.length > 0 && (
                         <div className="border-t bg-gray-50 p-2">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <ProjectTaskColumn 
-                              id="todo" 
-                              title="Beklemede" 
-                              tasks={tasksByProject[project.id].filter(t => t.status === 'todo')} 
+                            <ProjectTaskColumn
+                              id="todo"
+                              title="Beklemede"
+                              tasks={tasksByProject[project.id].filter(t => t.status === 'todo')}
                               onSelectTask={setViewingTask}
                               projectId={project.id}
                             />
-                            <ProjectTaskColumn 
-                              id="in-progress" 
-                              title="Devam Eden" 
-                              tasks={tasksByProject[project.id].filter(t => t.status === 'in-progress')} 
+                            <ProjectTaskColumn
+                              id="in-progress"
+                              title="Devam Eden"
+                              tasks={tasksByProject[project.id].filter(t => t.status === 'in-progress')}
                               onSelectTask={setViewingTask}
                               projectId={project.id}
                             />
-                            <ProjectTaskColumn 
-                              id="done" 
-                              title="Tamamlandı" 
-                              tasks={tasksByProject[project.id].filter(t => t.status === 'done')} 
+                            <ProjectTaskColumn
+                              id="done"
+                              title="Tamamlandı"
+                              tasks={tasksByProject[project.id].filter(t => t.status === 'done')}
                               onSelectTask={setViewingTask}
                               projectId={project.id}
                             />
@@ -1336,11 +1336,11 @@ const TaskManager = ({ user }) => {
                       )}
                     </div>
                   ))}
-                
+
                   {/* Projesiz Görevler */}
                   {tasksByProject['no-project']?.length > 0 && (
                     <div className="border rounded-lg overflow-hidden border-dashed">
-                      <div 
+                      <div
                         className="flex items-center justify-between p-3 cursor-pointer hover:bg-gray-50 bg-gray-100"
                         onClick={() => toggleProjectExpand('no-project')}
                       >
@@ -1355,28 +1355,28 @@ const TaskManager = ({ user }) => {
                           </span>
                         </div>
                       </div>
-                      
+
                       {expandedProjects['no-project'] && (
                         <div className="border-t bg-gray-50 p-2">
                           <div className="grid grid-cols-1 md:grid-cols-3 gap-2">
-                            <ProjectTaskColumn 
-                              id="todo" 
-                              title="Beklemede" 
-                              tasks={tasksByProject['no-project'].filter(t => t.status === 'todo')} 
+                            <ProjectTaskColumn
+                              id="todo"
+                              title="Beklemede"
+                              tasks={tasksByProject['no-project'].filter(t => t.status === 'todo')}
                               onSelectTask={setViewingTask}
                               projectId="no-project"
                             />
-                            <ProjectTaskColumn 
-                              id="in-progress" 
-                              title="Devam Eden" 
-                              tasks={tasksByProject['no-project'].filter(t => t.status === 'in-progress')} 
+                            <ProjectTaskColumn
+                              id="in-progress"
+                              title="Devam Eden"
+                              tasks={tasksByProject['no-project'].filter(t => t.status === 'in-progress')}
                               onSelectTask={setViewingTask}
                               projectId="no-project"
                             />
-                            <ProjectTaskColumn 
-                              id="done" 
-                              title="Tamamlandı" 
-                              tasks={tasksByProject['no-project'].filter(t => t.status === 'done')} 
+                            <ProjectTaskColumn
+                              id="done"
+                              title="Tamamlandı"
+                              tasks={tasksByProject['no-project'].filter(t => t.status === 'done')}
                               onSelectTask={setViewingTask}
                               projectId="no-project"
                             />
@@ -1385,7 +1385,7 @@ const TaskManager = ({ user }) => {
                       )}
                     </div>
                   )}
-                  
+
                   {projects.length === 0 && tasksByProject['no-project']?.length === 0 && (
                     <div className="text-center py-10 text-gray-500">
                       <Folder className="h-12 w-12 mx-auto mb-3 text-gray-300" />
@@ -1626,19 +1626,24 @@ const TaskManager = ({ user }) => {
           </Tabs>
         </CardContent>
       </Card>
-      <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if(!open) setSelectedProject(null); }}><DialogContent className="sm:max-w-3xl"><DialogHeader><DialogTitle>{editingTask ? 'Görevi Düzenle' : 'Yeni Görev Oluştur'}</DialogTitle></DialogHeader><TaskForm task={editingTask} onSave={handleSaveTask} /></DialogContent></Dialog>
-      <Dialog open={isProjectFormOpen} onOpenChange={setIsProjectFormOpen}><DialogContent className="sm:max-w-md"><DialogHeader><DialogTitle>{editingProject ? 'Projeyi Düzenle' : 'Yeni Proje Oluştur'}</DialogTitle><DialogDescription>Projeler, görevlerinizi düzenli ve organize tutmanıza yardımcı olur.</DialogDescription></DialogHeader><ProjectForm project={editingProject} onSave={handleSaveProject} /></DialogContent></Dialog>
+      <Dialog open={isFormOpen} onOpenChange={(open) => { setIsFormOpen(open); if (!open) setSelectedProject(null); }}><DialogContent className="sm:max-w-3xl bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0"><DialogHeader className="bg-gradient-to-r from-green-600 to-green-500 p-6 text-white"><div className="flex items-center gap-3"><div className="p-2 bg-white/20 rounded-lg"><Plus className="h-5 w-5" /></div><div><DialogTitle className="text-xl font-bold text-white">{editingTask ? 'Görevi Düzenle' : 'Yeni Görev Oluştur'}</DialogTitle><DialogDescription className="text-green-100 mt-1">Görev bilgilerini doldurun</DialogDescription></div></div></DialogHeader><div className="p-6"><TaskForm task={editingTask} onSave={handleSaveTask} /></div></DialogContent></Dialog>
+      <Dialog open={isProjectFormOpen} onOpenChange={setIsProjectFormOpen}><DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0"><DialogHeader className="bg-gradient-to-r from-blue-600 to-blue-500 p-6 text-white"><div className="flex items-center gap-3"><div className="p-2 bg-white/20 rounded-lg"><FolderPlus className="h-5 w-5" /></div><div><DialogTitle className="text-xl font-bold text-white">{editingProject ? 'Projeyi Düzenle' : 'Yeni Proje Oluştur'}</DialogTitle><DialogDescription className="text-blue-100 mt-1">Projeler, görevlerinizi düzenli ve organize tutmanıza yardımcı olur.</DialogDescription></div></div></DialogHeader><div className="p-6"><ProjectForm project={editingProject} onSave={handleSaveProject} /></div></DialogContent></Dialog>
       <Dialog open={showProjectReportDialog} onOpenChange={setShowProjectReportDialog}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader>
-            <DialogTitle>Proje Bazlı Rapor</DialogTitle>
-            <DialogDescription>Rapor oluşturmak istediğiniz projeyi seçin.</DialogDescription>
+        <DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-amber-500 to-amber-400 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg"><FileText className="h-5 w-5" /></div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">Proje Bazlı Rapor</DialogTitle>
+                <DialogDescription className="text-amber-100 mt-1">Rapor oluşturmak istediğiniz projeyi seçin.</DialogDescription>
+              </div>
+            </div>
           </DialogHeader>
-          <div className="py-4 space-y-4">
+          <div className="p-6 space-y-4">
             <div className="space-y-2">
-              <label className="text-sm font-medium">Proje Seçin</label>
+              <label className="text-sm font-medium text-gray-700">Proje Seçin</label>
               <Select value={selectedProjectForReport || ''} onValueChange={setSelectedProjectForReport}>
-                <SelectTrigger>
+                <SelectTrigger className="rounded-lg border-gray-300">
                   <SelectValue placeholder="Proje seçin..." />
                 </SelectTrigger>
                 <SelectContent>
@@ -1670,11 +1675,11 @@ const TaskManager = ({ user }) => {
               </div>
             )}
           </div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => { setShowProjectReportDialog(false); setSelectedProjectForReport(null); }}>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-lg" onClick={() => { setShowProjectReportDialog(false); setSelectedProjectForReport(null); }}>
               İptal
             </Button>
-            <Button onClick={handleGenerateProjectReport} disabled={!selectedProjectForReport}>
+            <Button className="rounded-lg bg-amber-500 hover:bg-amber-600" onClick={handleGenerateProjectReport} disabled={!selectedProjectForReport}>
               <FileText className="h-4 w-4 mr-2" />
               Rapor Oluştur
             </Button>
@@ -1682,16 +1687,27 @@ const TaskManager = ({ user }) => {
         </DialogContent>
       </Dialog>
       <Dialog open={!!viewingTask} onOpenChange={() => setViewingTask(null)}>
-        <DialogContent className="max-w-2xl">
+        <DialogContent className="max-w-2xl bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
           {viewingTask && <>
-            <DialogHeader><DialogTitle>{viewingTask.title}</DialogTitle><DialogDescription>Oluşturan: {viewingTask.assignee_name} · Öncelik: {priorityMap[viewingTask.priority]?.label}</DialogDescription></DialogHeader>
-            <div className="py-4 space-y-4 px-6 modal-body-scroll"><p>{viewingTask.description || "Açıklama yok."}</p>
+            <DialogHeader className="bg-gradient-to-r from-slate-700 to-slate-600 p-6 text-white">
+              <div className="flex items-center gap-3">
+                <div className="p-2 bg-white/20 rounded-lg"><CheckCircle className="h-5 w-5" /></div>
+                <div>
+                  <DialogTitle className="text-xl font-bold text-white">{viewingTask.title}</DialogTitle>
+                  <DialogDescription className="text-slate-200 mt-1">Oluşturan: {viewingTask.assignee_name} · Öncelik: {priorityMap[viewingTask.priority]?.label}</DialogDescription>
+                </div>
+              </div>
+            </DialogHeader>
+            <div className="p-6 space-y-4 modal-body-scroll"><p>{viewingTask.description || "Açıklama yok."}</p>
               <div className="text-sm text-gray-600 space-y-2">
                 {viewingTask.due_date && <div className="flex items-center"><CalendarIcon className="h-4 w-4 mr-2" /><span>Termin: {format(new Date(viewingTask.due_date), 'PPP, p', { locale: tr })}</span></div>}
                 {viewingTask.tags && <div className="flex items-center"><Tag className="h-4 w-4 mr-2" /><span>Etiketler: {viewingTask.tags}</span></div>}
               </div>
             </div>
-            <div className="flex justify-end space-x-2"><Button variant="outline" onClick={() => { setViewingTask(null); setEditingTask(viewingTask); setIsFormOpen(true); }}><Edit className="h-4 w-4 mr-2" />Düzenle</Button><Button variant="destructive" onClick={() => handleDeleteTask(viewingTask.id)}><Trash2 className="h-4 w-4 mr-2" />Sil</Button></div>
+            <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+              <Button variant="outline" className="rounded-lg" onClick={() => { setViewingTask(null); setEditingTask(viewingTask); setIsFormOpen(true); }}><Edit className="h-4 w-4 mr-2" />Düzenle</Button>
+              <Button variant="destructive" className="rounded-lg" onClick={() => handleDeleteTask(viewingTask.id)}><Trash2 className="h-4 w-4 mr-2" />Sil</Button>
+            </DialogFooter>
           </>}
         </DialogContent>
       </Dialog>

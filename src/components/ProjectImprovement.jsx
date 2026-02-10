@@ -58,7 +58,7 @@ const ProjectImprovement = () => {
       item.subject.toLowerCase().includes(searchTerm.toLowerCase()) ||
       item.description.toLowerCase().includes(searchTerm.toLowerCase())
     );
-    
+
     // Başarılı hatları ve maliyetleri süz (en başarılıdan en başarısıza doğru)
     if (sortOrder === 'success') {
       // Yıllık kazanca göre sırala (en yüksekten en düşüğe)
@@ -67,10 +67,10 @@ const ProjectImprovement = () => {
       // Maliyet bazlı sırala (en düşük maliyetten en yükseğe)
       results = results.sort((a, b) => (a.improvement_cost || 0) - (b.improvement_cost || 0));
     }
-    
+
     setFilteredImprovements(results);
   }, [searchTerm, improvements, sortOrder]);
-  
+
   // Başarılı projeler grafik verisi - sadece pozitif değerleri göster
   const successfulProjectsData = useMemo(() => {
     return filteredImprovements
@@ -78,7 +78,7 @@ const ProjectImprovement = () => {
         const annualGain = item.annual_impact || 0;
         const cost = item.improvement_cost || 0;
         const roi = cost > 0 ? ((annualGain - cost) / cost) * 100 : 0;
-        
+
         return {
           name: item.subject.length > 25 ? item.subject.substring(0, 25) + '...' : item.subject,
           fullName: item.subject,
@@ -140,15 +140,15 @@ const ProjectImprovement = () => {
     setDeleteConfirm(null);
     setViewingItem(null);
   };
-  
+
   const handleFileChange = async (event) => {
     if (!event.target.files || event.target.files.length === 0) return;
     setUploading(true);
-    
+
     const file = event.target.files[0];
     const fileName = `${Date.now()}_${file.name}`;
     const { data, error } = await supabase.storage.from('attachments').upload(`project_improvements/${fileName}`, file);
-    
+
     if (error) {
       toast({ title: "Dosya Yüklenemedi", description: error.message, variant: "destructive" });
     } else {
@@ -164,7 +164,7 @@ const ProjectImprovement = () => {
     setFormState(prev => ({ ...prev, attachments: prev.attachments.filter((_, index) => index !== indexToRemove) }));
     toast({ title: "Ek Kaldırıldı", description: fileToRemove.name, variant: "default" });
   };
-  
+
   const handleGenerateDetailedReport = async () => {
     try {
       toast({ title: "Detaylı proje iyileştirme raporu hazırlanıyor...", description: "Tüm proje verileri toplanıyor." });
@@ -177,7 +177,7 @@ const ProjectImprovement = () => {
       if (error) throw error;
 
       const filteredData = allProjects.filter(p => {
-        const searchMatch = !searchTerm || 
+        const searchMatch = !searchTerm ||
           (p.subject && p.subject.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (p.description && p.description.toLowerCase().includes(searchTerm.toLowerCase()));
         return searchMatch;
@@ -185,11 +185,11 @@ const ProjectImprovement = () => {
 
       const totalAnnualImpact = filteredData.reduce((sum, p) => sum + (p.annual_impact || 0), 0);
       const totalInvestment = filteredData.reduce((sum, p) => sum + (p.improvement_cost || 0), 0);
-      const avgROI = filteredData.length > 0 
+      const avgROI = filteredData.length > 0
         ? filteredData.reduce((sum, p) => {
-            const roi = p.improvement_cost > 0 ? ((p.annual_impact - p.improvement_cost) / p.improvement_cost) * 100 : 0;
-            return sum + roi;
-          }, 0) / filteredData.length
+          const roi = p.improvement_cost > 0 ? ((p.annual_impact - p.improvement_cost) / p.improvement_cost) * 100 : 0;
+          return sum + roi;
+        }, 0) / filteredData.length
         : 0;
 
       const reportId = `RPR-PROJECT-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
@@ -244,44 +244,44 @@ const ProjectImprovement = () => {
   const handlePrint = async (item) => {
     const reportId = `RPR-PBI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const reportData = {
-        title: 'Proje Bazlı İyileştirme Raporu',
-        reportId,
-        signatureFields: [
-            { title: 'Hazırlayan', name: 'Tuğçe MAVİ BATTAL', role: ' ' },
-            { title: 'Kontrol Eden', name: '', role: '..................' },
-            { title: 'Onaylayan', name: '', role: '..................' }
-        ]
+      title: 'Proje Bazlı İyileştirme Raporu',
+      reportId,
+      signatureFields: [
+        { title: 'Hazırlayan', name: 'Tuğçe MAVİ BATTAL', role: ' ' },
+        { title: 'Kontrol Eden', name: '', role: '..................' },
+        { title: 'Onaylayan', name: '', role: '..................' }
+      ]
     };
 
     if (item) {
-        reportData.singleItemData = {
-            'Proje Konusu': item.subject,
-            'Proje Açıklaması': item.description,
-            'İyileştirme Tarihi': format(new Date(item.improvement_date), 'dd.MM.yyyy'),
-            'Önceki Maliyet (Yıllık)': formatCurrency(item.previous_cost),
-            'Mevcut Maliyet (Yıllık)': formatCurrency(item.current_cost),
-            'İyileştirme Maliyeti': formatCurrency(item.improvement_cost),
-            'Yıllık Kazanç': formatCurrency(item.annual_impact),
-        };
-        reportData.attachments = item.attachments;
+      reportData.singleItemData = {
+        'Proje Konusu': item.subject,
+        'Proje Açıklaması': item.description,
+        'İyileştirme Tarihi': format(new Date(item.improvement_date), 'dd.MM.yyyy'),
+        'Önceki Maliyet (Yıllık)': formatCurrency(item.previous_cost),
+        'Mevcut Maliyet (Yıllık)': formatCurrency(item.current_cost),
+        'İyileştirme Maliyeti': formatCurrency(item.improvement_cost),
+        'Yıllık Kazanç': formatCurrency(item.annual_impact),
+      };
+      reportData.attachments = item.attachments;
 
     } else {
-        const totalAnnualImpact = filteredImprovements.reduce((sum, item) => sum + item.annual_impact, 0);
-        reportData.kpiCards = [{ title: 'Toplam Yıllık Kazanç', value: formatCurrency(totalAnnualImpact) }];
-        reportData.tableData = {
-            headers: ['Tarih', 'Konu', 'Önceki Maliyet', 'Mevcut Maliyet', 'Yıllık Kazanç'],
-            rows: filteredImprovements.map(s => [
-                format(new Date(s.improvement_date), 'dd.MM.yyyy'),
-                s.subject,
-                formatCurrency(s.previous_cost),
-                formatCurrency(s.current_cost),
-                formatCurrency(s.annual_impact)
-            ])
-        };
+      const totalAnnualImpact = filteredImprovements.reduce((sum, item) => sum + item.annual_impact, 0);
+      reportData.kpiCards = [{ title: 'Toplam Yıllık Kazanç', value: formatCurrency(totalAnnualImpact) }];
+      reportData.tableData = {
+        headers: ['Tarih', 'Konu', 'Önceki Maliyet', 'Mevcut Maliyet', 'Yıllık Kazanç'],
+        rows: filteredImprovements.map(s => [
+          format(new Date(s.improvement_date), 'dd.MM.yyyy'),
+          s.subject,
+          formatCurrency(s.previous_cost),
+          formatCurrency(s.current_cost),
+          formatCurrency(s.annual_impact)
+        ])
+      };
     }
-    
+
     await openPrintWindow(reportData, toast);
-};
+  };
 
 
   const openDialog = (item = null) => {
@@ -294,7 +294,7 @@ const ProjectImprovement = () => {
     }
     setShowDialog(true);
   };
-  
+
   const totalAnnualImpact = useMemo(() => filteredImprovements.reduce((sum, item) => sum + item.annual_impact, 0), [filteredImprovements]);
 
   const renderForm = () => (
@@ -314,59 +314,59 @@ const ProjectImprovement = () => {
       <div className="space-y-2 mt-4">
         <Label>Kanıt Dokümanları</Label>
         <div className="p-4 border-2 border-dashed rounded-lg text-center">
-            <Button asChild variant="outline" size="sm">
-                <label htmlFor="file-upload" className="cursor-pointer">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Dosya Yükle
-                </label>
-            </Button>
-            <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} disabled={uploading} accept=".pdf,.jpg,.jpeg,.png,.gif,.xls,.xlsx"/>
-            {uploading && <p className="text-sm text-gray-500 mt-2">Yükleniyor...</p>}
+          <Button asChild variant="outline" size="sm">
+            <label htmlFor="file-upload" className="cursor-pointer">
+              <Upload className="h-4 w-4 mr-2" />
+              Dosya Yükle
+            </label>
+          </Button>
+          <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} disabled={uploading} accept=".pdf,.jpg,.jpeg,.png,.gif,.xls,.xlsx" />
+          {uploading && <p className="text-sm text-gray-500 mt-2">Yükleniyor...</p>}
         </div>
         {(formState.attachments && formState.attachments.length > 0) && (
-            <div className="mt-2 space-y-2">
-                {formState.attachments.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
-                         <div className="flex items-center gap-2">
-                            <Paperclip className="h-4 w-4" />
-                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate" title={file.name}>
-                                {file.name}
-                            </a>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => removeAttachment(index)}><X className="h-4 w-4" /></Button>
-                    </div>
-                ))}
-            </div>
+          <div className="mt-2 space-y-2">
+            {formState.attachments.map((file, index) => (
+              <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4" />
+                  <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate" title={file.name}>
+                    {file.name}
+                  </a>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => removeAttachment(index)}><X className="h-4 w-4" /></Button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
     </>
   );
-  
+
   const renderDetailView = () => (
-     <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-            <div className="col-span-2"><p className="font-semibold text-gray-500">Proje Konusu:</p><p className="font-medium text-lg">{viewingItem.subject}</p></div>
-            <div className="col-span-2"><p className="font-semibold text-gray-500">Açıklama:</p><p>{viewingItem.description}</p></div>
-            <div><p className="font-semibold text-gray-500">Tarih:</p><p>{format(new Date(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
-        </div>
-        <div className="grid grid-cols-2 gap-4 pt-4">
-             <Card><CardHeader className="p-4"><CardTitle className="text-base">Önceki Maliyet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-2xl font-bold">{formatCurrency(viewingItem.previous_cost)}</p></CardContent></Card>
-             <Card><CardHeader className="p-4"><CardTitle className="text-base">Mevcut Maliyet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-2xl font-bold">{formatCurrency(viewingItem.current_cost)}</p></CardContent></Card>
-        </div>
-        <Card className="bg-green-50 border-green-200"><CardHeader className="p-4"><CardTitle className="text-base text-green-800">Yıllık Kazanç</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-3xl font-bold text-green-600">{formatCurrency(viewingItem.annual_impact)}</p></CardContent></Card>
-        {viewingItem.attachments && viewingItem.attachments.length > 0 && (
-          <div>
-            <h4 className="text-md font-semibold mb-2">Kanıt Dokümanları</h4>
-            <div className="space-y-2">
-              {viewingItem.attachments.map((file, index) => (
-                <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200">
-                  <Paperclip className="h-4 w-4" />
-                  <span className="text-sm font-medium text-blue-600 hover:underline">{file.name}</span>
-                </a>
-              ))}
-            </div>
+    <div className="space-y-4">
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div className="col-span-2"><p className="font-semibold text-gray-500">Proje Konusu:</p><p className="font-medium text-lg">{viewingItem.subject}</p></div>
+        <div className="col-span-2"><p className="font-semibold text-gray-500">Açıklama:</p><p>{viewingItem.description}</p></div>
+        <div><p className="font-semibold text-gray-500">Tarih:</p><p>{format(new Date(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
+      </div>
+      <div className="grid grid-cols-2 gap-4 pt-4">
+        <Card><CardHeader className="p-4"><CardTitle className="text-base">Önceki Maliyet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-2xl font-bold">{formatCurrency(viewingItem.previous_cost)}</p></CardContent></Card>
+        <Card><CardHeader className="p-4"><CardTitle className="text-base">Mevcut Maliyet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-2xl font-bold">{formatCurrency(viewingItem.current_cost)}</p></CardContent></Card>
+      </div>
+      <Card className="bg-green-50 border-green-200"><CardHeader className="p-4"><CardTitle className="text-base text-green-800">Yıllık Kazanç</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-3xl font-bold text-green-600">{formatCurrency(viewingItem.annual_impact)}</p></CardContent></Card>
+      {viewingItem.attachments && viewingItem.attachments.length > 0 && (
+        <div>
+          <h4 className="text-md font-semibold mb-2">Kanıt Dokümanları</h4>
+          <div className="space-y-2">
+            {viewingItem.attachments.map((file, index) => (
+              <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200">
+                <Paperclip className="h-4 w-4" />
+                <span className="text-sm font-medium text-blue-600 hover:underline">{file.name}</span>
+              </a>
+            ))}
           </div>
-        )}
+        </div>
+      )}
     </div>
   );
 
@@ -379,10 +379,10 @@ const ProjectImprovement = () => {
               <CardTitle className="flex items-center space-x-2"><Lightbulb className="h-5 w-5 text-yellow-500" /><span>Proje Bazlı İyileştirmeler</span></CardTitle>
               <CardDescription>Büyük ölçekli iyileştirme projelerini ve finansal etkilerini takip edin.</CardDescription>
             </div>
-             <div className="flex space-x-2">
-                <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2"/>Yeni Proje</Button>
-                <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
-                <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2"/>Yazdır</Button>
+            <div className="flex space-x-2">
+              <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2" />Yeni Proje</Button>
+              <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
+              <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button>
             </div>
           </div>
         </CardHeader>
@@ -408,7 +408,7 @@ const ProjectImprovement = () => {
               </div>
             </div>
           </div>
-          
+
           {/* Başarılı Projeler Grafiği */}
           {successfulProjectsData.length > 0 && (
             <div className="space-y-6 mb-6">
@@ -420,14 +420,14 @@ const ProjectImprovement = () => {
                 </CardHeader>
                 <CardContent>
                   <ResponsiveContainer width="100%" height={500}>
-                    <BarChart 
+                    <BarChart
                       data={successfulProjectsData}
                       layout="vertical"
                       margin={{ top: 5, right: 50, left: 120, bottom: 5 }}
                     >
                       <CartesianGrid strokeDasharray="3 3" stroke="#e5e7eb" />
-                      <XAxis 
-                        type="number" 
+                      <XAxis
+                        type="number"
                         stroke="#6b7280"
                         tick={{ fontSize: 12 }}
                         tickFormatter={(value) => {
@@ -436,14 +436,14 @@ const ProjectImprovement = () => {
                           return `${value} ₺`;
                         }}
                       />
-                      <YAxis 
-                        type="category" 
-                        dataKey="name" 
+                      <YAxis
+                        type="category"
+                        dataKey="name"
                         width={110}
                         stroke="#6b7280"
                         tick={{ fontSize: 13 }}
                       />
-                      <Tooltip 
+                      <Tooltip
                         formatter={(value, name) => {
                           if (name === 'Yıllık Kazanç') {
                             return [formatCurrency(value), 'Yıllık Kazanç'];
@@ -453,28 +453,28 @@ const ProjectImprovement = () => {
                           }
                           return value;
                         }}
-                        contentStyle={{ 
-                          backgroundColor: 'rgba(255, 255, 255, 0.95)', 
+                        contentStyle={{
+                          backgroundColor: 'rgba(255, 255, 255, 0.95)',
                           border: '1px solid #e5e7eb',
                           borderRadius: '8px',
                           padding: '12px',
                           fontSize: '14px'
                         }}
                       />
-                      <Legend 
+                      <Legend
                         wrapperStyle={{ paddingTop: '20px' }}
                         iconType="rect"
                         iconSize={12}
                       />
-                      <Bar 
-                        dataKey="annualGain" 
-                        fill="#10b981" 
+                      <Bar
+                        dataKey="annualGain"
+                        fill="#10b981"
                         name="Yıllık Kazanç"
                         radius={[0, 4, 4, 0]}
                       />
-                      <Bar 
-                        dataKey="cost" 
-                        fill="#f97316" 
+                      <Bar
+                        dataKey="cost"
+                        fill="#f97316"
                         name="Yatırım Maliyeti"
                         radius={[0, 4, 4, 0]}
                       />
@@ -513,29 +513,62 @@ const ProjectImprovement = () => {
       </Card>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader><DialogTitle>{editingItem ? 'Projeyi Düzenle' : 'Yeni Proje Ekle'}</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[700px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-cyan-600 to-cyan-500 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">{editingItem ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}</div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">{editingItem ? 'Projeyi Düzenle' : 'Yeni Proje Ekle'}</DialogTitle>
+                <DialogDescription className="text-cyan-100 mt-1">Proje iyileştirme bilgilerini girin</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{renderForm()}</div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>İptal</Button><Button onClick={handleSave}><Save className="h-4 w-4 mr-2" />{editingItem ? 'Güncelle' : 'Kaydet'}</Button></DialogFooter>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-lg" onClick={() => setShowDialog(false)}>İptal</Button>
+            <Button className="rounded-lg bg-cyan-600 hover:bg-cyan-700" onClick={handleSave}><Save className="h-4 w-4 mr-2" />{editingItem ? 'Güncelle' : 'Kaydet'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       <Dialog open={!!viewingItem} onOpenChange={setViewingItem}>
-         <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader><DialogTitle>Proje Detayı</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[700px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg"><FileText className="h-5 w-5" /></div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">Proje Detayı</DialogTitle>
+                <DialogDescription className="text-indigo-100 mt-1">Proje iyileştirme detaylarını görüntüleyin</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 modal-body-scroll">{viewingItem && renderDetailView()}</div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => handlePrint(viewingItem)}>Yazdır</Button>
-            <Button onClick={() => { openDialog(viewingItem); setViewingItem(null); }}>Düzenle</Button>
-            <Button variant="destructive" onClick={() => setDeleteConfirm(viewingItem)}>Sil</Button>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-lg" onClick={() => handlePrint(viewingItem)}>Yazdır</Button>
+            <Button className="rounded-lg" onClick={() => { openDialog(viewingItem); setViewingItem(null); }}>Düzenle</Button>
+            <Button variant="destructive" className="rounded-lg" onClick={() => setDeleteConfirm(viewingItem)}>Sil</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Silme Onayı</DialogTitle><DialogDescription>"{deleteConfirm?.subject}" projesini kalıcı olarak silmek istediğinizden emin misiniz?</DialogDescription></DialogHeader>
-          <DialogFooter className="mt-4"><Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button><Button variant="destructive" onClick={handleDelete}>Sil</Button></DialogFooter>
+        <DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl border-0 overflow-hidden">
+          <DialogHeader className="bg-red-50 p-6 border-b border-red-100">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-lg"><Trash2 className="h-5 w-5 text-red-600" /></div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-red-900">Silme Onayı</DialogTitle>
+                <DialogDescription className="text-red-700 mt-1">"{deleteConfirm?.subject}" projesini kalıcı olarak silmek istediğinizden emin misiniz?</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="p-6">
+            <p className="text-sm text-gray-600">Bu işlem geri alınamaz. Tüm ilgili veriler kalıcı olarak silinecektir.</p>
+          </div>
+          <DialogFooter className="p-6 bg-gray-50 flex items-center justify-end gap-3 border-t border-gray-100">
+            <Button variant="outline" className="rounded-lg" onClick={() => setDeleteConfirm(null)}>İptal</Button>
+            <Button variant="destructive" className="rounded-lg" onClick={handleDelete}>Sil</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </motion.div>

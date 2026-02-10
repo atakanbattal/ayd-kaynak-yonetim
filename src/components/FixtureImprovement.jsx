@@ -153,11 +153,11 @@ const FixtureImprovement = () => {
   const handleImageUpload = async (event, imageType) => {
     if (!event.target.files || event.target.files.length === 0) return;
     setUploading(true);
-    
+
     const file = event.target.files[0];
     const fileName = `${Date.now()}_${file.name}`;
     const { data, error } = await supabase.storage.from('attachments').upload(`fixture_improvements/${fileName}`, file);
-    
+
     if (error) {
       toast({ title: "Resim Yüklenemedi", description: error.message, variant: "destructive" });
     } else {
@@ -225,7 +225,7 @@ const FixtureImprovement = () => {
       if (error) throw error;
 
       const filteredData = allImprovements.filter(f => {
-        const searchMatch = !searchTerm || 
+        const searchMatch = !searchTerm ||
           (f.part_code && f.part_code.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (f.improvement_reason && f.improvement_reason.toLowerCase().includes(searchTerm.toLowerCase())) ||
           (f.result && f.result.toLowerCase().includes(searchTerm.toLowerCase()));
@@ -352,39 +352,39 @@ const FixtureImprovement = () => {
   const handlePrint = async (item) => {
     const reportId = `RPR-FI-${new Date().toISOString().slice(0, 10).replace(/-/g, '')}-${Math.floor(1000 + Math.random() * 9000)}`;
     const reportData = {
-        title: 'Fikstür İyileştirme Raporu',
-        reportId,
-        signatureFields: [
-            { title: 'Hazırlayan', name: 'Atakan Battal', role: ' ' },
-            { title: 'Kontrol Eden', name: '', role: '..................' },
-            { title: 'Onaylayan', name: '', role: '..................' }
-        ]
+      title: 'Fikstür İyileştirme Raporu',
+      reportId,
+      signatureFields: [
+        { title: 'Hazırlayan', name: 'Atakan Battal', role: ' ' },
+        { title: 'Kontrol Eden', name: '', role: '..................' },
+        { title: 'Onaylayan', name: '', role: '..................' }
+      ]
     };
 
     if (item) {
-        reportData.singleItemData = {
-            'Parça Kodu': item.part_code,
-            'İyileştirme Tarihi': format(new Date(item.improvement_date), 'dd.MM.yyyy'),
-            'Kayıt Tarihi': item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy HH:mm:ss') : '-',
-            'Sorumlu': item.responsible || 'Belirtilmemiş',
-            'İyileştirme Sebebi': item.improvement_reason,
-            'Sonuç': item.result || '-',
-        };
+      reportData.singleItemData = {
+        'Parça Kodu': item.part_code,
+        'İyileştirme Tarihi': format(new Date(item.improvement_date), 'dd.MM.yyyy'),
+        'Kayıt Tarihi': item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy HH:mm:ss') : '-',
+        'Sorumlu': item.responsible || 'Belirtilmemiş',
+        'İyileştirme Sebebi': item.improvement_reason,
+        'Sonuç': item.result || '-',
+      };
     } else {
-        reportData.kpiCards = [
-          { title: 'Toplam İyileştirme', value: filteredImprovements.length },
-        ];
-        reportData.tableData = {
-            headers: ['Tarih', 'Parça Kodu', 'İyileştirme Sebebi', 'Sonuç'],
-            rows: filteredImprovements.map(s => [
-                format(new Date(s.improvement_date), 'dd.MM.yyyy'),
-                s.part_code,
-                s.improvement_reason,
-                s.result || '-'
-            ])
-        };
+      reportData.kpiCards = [
+        { title: 'Toplam İyileştirme', value: filteredImprovements.length },
+      ];
+      reportData.tableData = {
+        headers: ['Tarih', 'Parça Kodu', 'İyileştirme Sebebi', 'Sonuç'],
+        rows: filteredImprovements.map(s => [
+          format(new Date(s.improvement_date), 'dd.MM.yyyy'),
+          s.part_code,
+          s.improvement_reason,
+          s.result || '-'
+        ])
+      };
     }
-    
+
     await openPrintWindow(reportData, toast);
   };
 
@@ -408,7 +408,7 @@ const FixtureImprovement = () => {
         <div className="md:col-span-2 space-y-2"><Label>İyileştirme Sebebi *</Label><Textarea placeholder="İyileştirmenin nedenini açıklayın" value={formState.improvement_reason} onChange={(e) => setFormState({ ...formState, improvement_reason: e.target.value })} rows={3} /></div>
         <div className="md:col-span-2 space-y-2"><Label>Sonuç</Label><Textarea placeholder="İyileştirmenin sonuçlarını açıklayın" value={formState.result} onChange={(e) => setFormState({ ...formState, result: e.target.value })} rows={3} /></div>
       </div>
-      
+
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
         <div className="space-y-2">
           <Label>Önceki Durum Resmi</Label>
@@ -460,30 +460,30 @@ const FixtureImprovement = () => {
 
   const renderDetailView = () => (
     <div className="space-y-4">
-        <div className="grid grid-cols-2 gap-4 text-sm">
-            <div><p className="font-semibold text-gray-500">Parça Kodu:</p><p className="font-semibold text-lg">{viewingItem.part_code}</p></div>
-            <div><p className="font-semibold text-gray-500">İyileştirme Tarihi:</p><p>{format(new Date(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
-            <div><p className="font-semibold text-gray-500">Kayıt Tarihi/Saat:</p><p>{viewingItem.created_at ? format(new Date(viewingItem.created_at), 'dd.MM.yyyy HH:mm:ss') : '-'}</p></div>
-            <div><p className="font-semibold text-gray-500">Sorumlu:</p><p>{viewingItem.responsible || 'Belirtilmemiş'}</p></div>
-            <div className="col-span-2"><p className="font-semibold text-gray-500 mb-1">İyileştirme Sebebi:</p><p className="text-gray-700">{viewingItem.improvement_reason}</p></div>
-            <div className="col-span-2"><p className="font-semibold text-gray-500 mb-1">Sonuç:</p><p className="text-gray-700">{viewingItem.result || 'Belirtilmemiş'}</p></div>
+      <div className="grid grid-cols-2 gap-4 text-sm">
+        <div><p className="font-semibold text-gray-500">Parça Kodu:</p><p className="font-semibold text-lg">{viewingItem.part_code}</p></div>
+        <div><p className="font-semibold text-gray-500">İyileştirme Tarihi:</p><p>{format(new Date(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
+        <div><p className="font-semibold text-gray-500">Kayıt Tarihi/Saat:</p><p>{viewingItem.created_at ? format(new Date(viewingItem.created_at), 'dd.MM.yyyy HH:mm:ss') : '-'}</p></div>
+        <div><p className="font-semibold text-gray-500">Sorumlu:</p><p>{viewingItem.responsible || 'Belirtilmemiş'}</p></div>
+        <div className="col-span-2"><p className="font-semibold text-gray-500 mb-1">İyileştirme Sebebi:</p><p className="text-gray-700">{viewingItem.improvement_reason}</p></div>
+        <div className="col-span-2"><p className="font-semibold text-gray-500 mb-1">Sonuç:</p><p className="text-gray-700">{viewingItem.result || 'Belirtilmemiş'}</p></div>
+      </div>
+      {(viewingItem.before_image || viewingItem.after_image) && (
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
+          {viewingItem.before_image && (
+            <div>
+              <p className="font-semibold text-gray-500 mb-2">Önceki Durum</p>
+              <img src={viewingItem.before_image} alt="Önceki durum" className="w-full h-60 object-cover rounded-lg border" />
+            </div>
+          )}
+          {viewingItem.after_image && (
+            <div>
+              <p className="font-semibold text-gray-500 mb-2">Sonraki Durum</p>
+              <img src={viewingItem.after_image} alt="Sonraki durum" className="w-full h-60 object-cover rounded-lg border" />
+            </div>
+          )}
         </div>
-        {(viewingItem.before_image || viewingItem.after_image) && (
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4 pt-4">
-            {viewingItem.before_image && (
-              <div>
-                <p className="font-semibold text-gray-500 mb-2">Önceki Durum</p>
-                <img src={viewingItem.before_image} alt="Önceki durum" className="w-full h-60 object-cover rounded-lg border" />
-              </div>
-            )}
-            {viewingItem.after_image && (
-              <div>
-                <p className="font-semibold text-gray-500 mb-2">Sonraki Durum</p>
-                <img src={viewingItem.after_image} alt="Sonraki durum" className="w-full h-60 object-cover rounded-lg border" />
-              </div>
-            )}
-          </div>
-        )}
+      )}
     </div>
   );
 
@@ -496,10 +496,10 @@ const FixtureImprovement = () => {
               <CardTitle className="flex items-center space-x-2"><Wrench className="h-5 w-5 text-orange-500" /><span>Fikstür İyileştirme</span></CardTitle>
               <CardDescription>Fikstür iyileştirmelerini takip edin ve dokümante edin.</CardDescription>
             </div>
-             <div className="flex space-x-2">
-                <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2"/>Yeni İyileştirme</Button>
-                <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
-                <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2"/>Yazdır</Button>
+            <div className="flex space-x-2">
+              <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2" />Yeni İyileştirme</Button>
+              <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
+              <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button>
             </div>
           </div>
         </CardHeader>
@@ -518,11 +518,11 @@ const FixtureImprovement = () => {
               <div className="flex justify-between items-center mb-4">
                 <div className="relative w-full max-w-sm"><Search className="absolute left-3 top-3 h-4 w-4 text-gray-400" /><Input placeholder="Parça kodu, sebep veya sonuçta ara..." value={searchTerm} onChange={(e) => setSearchTerm(e.target.value)} className="pl-10" /></div>
                 <div className="text-right">
-                    <p className="text-sm text-gray-500">Toplam İyileştirme</p>
-                    <p className="text-2xl font-bold text-blue-600">{filteredImprovements.length}</p>
+                  <p className="text-sm text-gray-500">Toplam İyileştirme</p>
+                  <p className="text-2xl font-bold text-blue-600">{filteredImprovements.length}</p>
                 </div>
               </div>
-              
+
               <div className="border rounded-lg overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead className="bg-gray-50"><tr>{['Kayıt Tarihi/Saat', 'İyileştirme Tarihi', 'Parça Kodu', 'İyileştirme Sebebi', 'Sonuç', 'Resimler', ''].map(h => <th key={h} className="px-4 py-3 text-left font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
@@ -754,29 +754,62 @@ const FixtureImprovement = () => {
       </Card>
 
       <Dialog open={showDialog} onOpenChange={setShowDialog}>
-        <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader><DialogTitle>{editingItem ? 'İyileştirmeyi Düzenle' : 'Yeni İyileştirme Ekle'}</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[700px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-teal-600 to-teal-500 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg">{editingItem ? <Edit className="h-5 w-5" /> : <Wrench className="h-5 w-5" />}</div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">{editingItem ? 'İyileştirmeyi Düzenle' : 'Yeni İyileştirme Ekle'}</DialogTitle>
+                <DialogDescription className="text-teal-100 mt-1">Aparat iyileştirme bilgilerini girin</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 modal-body-scroll max-h-[70vh]">{renderForm()}</div>
-          <DialogFooter><Button variant="outline" onClick={() => setShowDialog(false)}>İptal</Button><Button onClick={handleSave}><Save className="h-4 w-4 mr-2" />{editingItem ? 'Güncelle' : 'Kaydet'}</Button></DialogFooter>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-lg" onClick={() => setShowDialog(false)}>İptal</Button>
+            <Button className="rounded-lg bg-teal-600 hover:bg-teal-700" onClick={handleSave}><Save className="h-4 w-4 mr-2" />{editingItem ? 'Güncelle' : 'Kaydet'}</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
-      
+
       <Dialog open={!!viewingItem} onOpenChange={setViewingItem}>
-         <DialogContent className="sm:max-w-[700px]">
-          <DialogHeader><DialogTitle>İyileştirme Detayı</DialogTitle></DialogHeader>
+        <DialogContent className="sm:max-w-[700px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-sky-600 to-sky-500 p-6 text-white">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-white/20 rounded-lg"><Wrench className="h-5 w-5" /></div>
+              <div>
+                <DialogTitle className="text-xl font-bold text-white">İyileştirme Detayı</DialogTitle>
+                <DialogDescription className="text-sky-100 mt-1">Aparat iyileştirme detaylarını görüntüleyin</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
           <div className="flex-1 overflow-y-auto p-6 modal-body-scroll max-h-[70vh]">{viewingItem && renderDetailView()}</div>
-          <DialogFooter>
-            <Button variant="outline" onClick={() => handlePrint(viewingItem)}>Yazdır</Button>
-            <Button onClick={() => { openDialog(viewingItem); setViewingItem(null); }}>Düzenle</Button>
-            <Button variant="destructive" onClick={() => setDeleteConfirm(viewingItem)}>Sil</Button>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" className="rounded-lg" onClick={() => handlePrint(viewingItem)}>Yazdır</Button>
+            <Button className="rounded-lg" onClick={() => { openDialog(viewingItem); setViewingItem(null); }}>Düzenle</Button>
+            <Button variant="destructive" className="rounded-lg" onClick={() => setDeleteConfirm(viewingItem)}>Sil</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>
 
       <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}>
-        <DialogContent className="sm:max-w-md">
-          <DialogHeader><DialogTitle>Silme Onayı</DialogTitle><DialogDescription>"{deleteConfirm?.part_code}" parçasının iyileştirmesini kalıcı olarak silmek istediğinizden emin misiniz?</DialogDescription></DialogHeader>
-          <DialogFooter className="mt-4"><Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button><Button variant="destructive" onClick={handleDelete}>Sil</Button></DialogFooter>
+        <DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl border-0 overflow-hidden">
+          <DialogHeader className="bg-red-50 p-6 border-b border-red-100">
+            <div className="flex items-center gap-3">
+              <div className="p-2 bg-red-100 rounded-lg"><Trash2 className="h-5 w-5 text-red-600" /></div>
+              <div>
+                <DialogTitle className="text-lg font-bold text-red-900">Silme Onayı</DialogTitle>
+                <DialogDescription className="text-red-700 mt-1">"{deleteConfirm?.part_code}" parçasının iyileştirmesini kalıcı olarak silmek istediğinizden emin misiniz?</DialogDescription>
+              </div>
+            </div>
+          </DialogHeader>
+          <div className="p-6">
+            <p className="text-sm text-gray-600">Bu işlem geri alınamaz. Tüm ilgili veriler kalıcı olarak silinecektir.</p>
+          </div>
+          <DialogFooter className="p-6 bg-gray-50 flex items-center justify-end gap-3 border-t border-gray-100">
+            <Button variant="outline" className="rounded-lg" onClick={() => setDeleteConfirm(null)}>İptal</Button>
+            <Button variant="destructive" className="rounded-lg" onClick={handleDelete}>Sil</Button>
+          </DialogFooter>
         </DialogContent>
       </Dialog>
     </motion.div>

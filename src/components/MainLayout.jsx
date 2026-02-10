@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { NavLink, useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
-import { LayoutDashboard, Database, Wrench, DollarSign, GitCompare, TrendingUp, ListTodo, FileText, BookUser, Zap, ShieldCheck, LogOut, ChevronLeft, ChevronRight, User, Menu, Settings } from 'lucide-react';
+import { LayoutDashboard, Database, Wrench, DollarSign, GitCompare, TrendingUp, ListTodo, FileText, BookUser, Zap, ShieldCheck, LogOut, ChevronLeft, ChevronRight, User, Menu, Settings, Clock } from 'lucide-react';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { Button } from '@/components/ui/button';
 
@@ -10,14 +10,15 @@ const navItems = [
     { icon: Wrench, label: 'WPS', path: '/wps-creator', roles: ['admin', 'quality'], order: 2 },
     { icon: DollarSign, label: 'Parça Maliyet', path: '/part-cost', roles: ['admin', 'quality', 'operator'], order: 3 },
     { icon: BookUser, label: 'Manuel Veri', path: '/manual-tracking', roles: ['admin', 'quality', 'operator'], order: 4 },
-    { icon: GitCompare, label: 'Operasyon Azaltma', path: '/comparative', roles: ['admin', 'quality'], order: 5 },
-    { icon: TrendingUp, label: 'Sürekli İyileştirme', path: '/improvement', roles: ['admin', 'quality'], order: 6 },
-    { icon: Zap, label: 'Proje Bazlı İyileştirme', path: '/project-improvement', roles: ['admin', 'quality'], order: 7 },
-    { icon: Settings, label: 'Fikstür İyileştirme', path: '/fixture-improvement', roles: ['admin', 'quality'], order: 8 },
-    { icon: ListTodo, label: 'Aksiyon Takibi', path: '/tasks', roles: ['admin', 'quality', 'operator'], order: 9 },
-    { icon: FileText, label: 'Eğitim Planı', path: '/trainings', roles: ['admin', 'quality', 'operator'], order: 10 },
-    { icon: ShieldCheck, label: 'Denetim', path: '/audit', roles: ['admin'], order: 11 },
-    { icon: Database, label: 'Ana Veri', path: '/master-data', roles: ['admin'], order: 12 },
+    { icon: Clock, label: 'Günlük Süre Takibi', path: '/daily-time-tracking', roles: ['admin', 'quality', 'operator'], order: 5 },
+    { icon: GitCompare, label: 'Operasyon Azaltma', path: '/comparative', roles: ['admin', 'quality'], order: 6 },
+    { icon: TrendingUp, label: 'Sürekli İyileştirme', path: '/improvement', roles: ['admin', 'quality'], order: 7 },
+    { icon: Zap, label: 'Proje Bazlı İyileştirme', path: '/project-improvement', roles: ['admin', 'quality'], order: 8 },
+    { icon: Settings, label: 'Fikstür İyileştirme', path: '/fixture-improvement', roles: ['admin', 'quality'], order: 9 },
+    { icon: ListTodo, label: 'Aksiyon Takibi', path: '/tasks', roles: ['admin', 'quality', 'operator'], order: 10 },
+    { icon: FileText, label: 'Eğitim Planı', path: '/trainings', roles: ['admin', 'quality', 'operator'], order: 11 },
+    { icon: ShieldCheck, label: 'Denetim', path: '/audit', roles: ['admin'], order: 12 },
+    { icon: Database, label: 'Ana Veri', path: '/master-data', roles: ['admin'], order: 13 },
 ];
 
 const MainLayout = ({ children }) => {
@@ -77,10 +78,9 @@ const MainLayout = ({ children }) => {
                     <NavLink
                         key={item.path}
                         to={item.path}
-                        className={({ isActive }) => 
-                            `flex items-center px-5 py-3 mx-3 my-1 rounded-lg text-[15px] font-medium cursor-pointer transition-all duration-200 group ${
-                                isActive 
-                                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold shadow-lg shadow-indigo-500/30' 
+                        className={({ isActive }) =>
+                            `flex items-center px-5 py-3 mx-3 my-1 rounded-lg text-[15px] font-medium cursor-pointer transition-all duration-200 group ${isActive
+                                ? 'bg-gradient-to-r from-indigo-500 to-purple-600 text-white font-semibold shadow-lg shadow-indigo-500/30'
                                 : 'text-gray-400 hover:bg-gray-800 hover:text-white'
                             }`
                         }
@@ -101,8 +101,8 @@ const MainLayout = ({ children }) => {
                         </div>
                     )}
                 </div>
-                <button 
-                    onClick={handleLogout} 
+                <button
+                    onClick={handleLogout}
                     className="flex items-center px-5 py-3 mx-3 my-1 rounded-lg text-gray-500 hover:bg-gray-800 hover:text-white w-[calc(100%-24px)] text-left group"
                 >
                     <LogOut className="h-5 w-5 flex-shrink-0 mr-4 group-hover:text-red-500 transition-colors" />
@@ -121,9 +121,9 @@ const MainLayout = ({ children }) => {
                 className="hidden md:flex flex-col bg-gray-900 text-white relative shadow-2xl"
             >
                 {sidebarContent}
-                <Button 
-                    onClick={() => setIsSidebarOpen(!isSidebarOpen)} 
-                    className="absolute -right-4 top-8 z-10 h-8 w-8 rounded-full bg-gray-800 text-white hover:bg-indigo-500" 
+                <Button
+                    onClick={() => setIsSidebarOpen(!isSidebarOpen)}
+                    className="absolute -right-4 top-8 z-10 h-8 w-8 rounded-full bg-gray-800 text-white hover:bg-indigo-500"
                     size="icon"
                 >
                     {isSidebarOpen ? <ChevronLeft className="h-4 w-4" /> : <ChevronRight className="h-4 w-4" />}
@@ -164,7 +164,7 @@ const MainLayout = ({ children }) => {
                         <LogOut className="h-6 w-6 text-red-500" />
                     </Button>
                 </header>
-                
+
                 <main className="flex-1 overflow-x-auto overflow-y-auto bg-gray-100 p-4 md:p-6 lg:p-8">
                     <AnimatePresence mode="wait">
                         <motion.div

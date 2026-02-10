@@ -57,9 +57,9 @@ const ComparativeCost = () => {
   }, []);
 
   // Form değiştiğinde dirty flag'i set et (sadece dialog açıkken)
-  useEffect(() => { 
+  useEffect(() => {
     if (showFormDialog && (formState.line_id || formState.part_code || formState.annual_quantity || formState.before.robotTime || formState.after.robotTime)) {
-      setIsDirty(true); 
+      setIsDirty(true);
     }
   }, [formState, showFormDialog]);
 
@@ -87,7 +87,7 @@ const ComparativeCost = () => {
       toast({ title: "Eksik Bilgi", description: "Lütfen bir Hat seçin.", variant: "destructive" });
       return;
     }
-    
+
     const line = lines.find(l => l.id.toString() === formState.line_id);
     const activeCost = getActiveCost(line);
     if (!activeCost || !activeCost.totalCostPerSecond) {
@@ -166,15 +166,15 @@ const ComparativeCost = () => {
     setDeleteConfirm(null);
     setViewingScenario(null);
   };
-  
-    const handleFileChange = async (event) => {
+
+  const handleFileChange = async (event) => {
     if (!event.target.files || event.target.files.length === 0) return;
     setUploading(true);
-    
+
     const file = event.target.files[0];
     const fileName = `${Date.now()}_${file.name}`;
     const { data, error } = await supabase.storage.from('attachments').upload(`comparative_cost/${fileName}`, file);
-    
+
     if (error) {
       toast({ title: "Dosya Yüklenemedi", description: error.message, variant: "destructive" });
     } else {
@@ -250,9 +250,9 @@ const ComparativeCost = () => {
     try {
       toast({ title: "Detaylı operasyon azaltma raporu hazırlanıyor...", description: "Tüm veriler toplanıyor." });
 
-      const dateFrom = filters.quickSelect === 'allTime' 
-        ? null 
-        : filters.date?.from 
+      const dateFrom = filters.quickSelect === 'allTime'
+        ? null
+        : filters.date?.from
           ? format(startOfDay(filters.date.from), 'yyyy-MM-dd')
           : format(startOfMonth(new Date()), 'yyyy-MM-dd');
       const dateTo = filters.quickSelect === 'allTime'
@@ -340,7 +340,7 @@ const ComparativeCost = () => {
         title: 'Operasyon Azaltma - Detaylı Yönetici Raporu',
         reportId,
         filters: {
-          'Rapor Dönemi': filters.quickSelect === 'allTime' 
+          'Rapor Dönemi': filters.quickSelect === 'allTime'
             ? 'Tüm Zamanlar'
             : dateFrom && dateTo
               ? `${format(new Date(dateFrom), 'dd.MM.yyyy', { locale: tr })} - ${format(new Date(dateTo), 'dd.MM.yyyy', { locale: tr })}`
@@ -468,7 +468,7 @@ const ComparativeCost = () => {
       const lineMatch = filters.lines.length === 0 || (s.scope && filters.lines.includes(s.scope.line_id));
       const robotMatch = filters.robots.length === 0 || (s.scope && s.scope.robot_id && filters.robots.includes(s.scope.robot_id));
       const partMatch = !filters.partCode || (s.scope && s.scope.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
-      
+
       if (filters.quickSelect === 'allTime') return lineMatch && robotMatch && partMatch;
 
       const itemDate = new Date(s.scenario_date);
@@ -488,11 +488,11 @@ const ComparativeCost = () => {
   // Başarılı hatları analiz et (en başarılıdan başarısıza doğru)
   const successfulLinesData = useMemo(() => {
     const lineStats = {};
-    
+
     filteredScenarios.forEach(s => {
       const lineId = s.scope?.line_id;
       if (!lineId) return;
-      
+
       const lineName = getLineName(lineId);
       if (!lineStats[lineId]) {
         lineStats[lineId] = {
@@ -504,12 +504,12 @@ const ComparativeCost = () => {
           totalTimeSaving: 0
         };
       }
-      
+
       lineStats[lineId].totalGain += s.summary?.annualImprovement || 0;
       lineStats[lineId].totalTimeSaving += s.summary?.timeDiff || 0;
       lineStats[lineId].count += 1;
     });
-    
+
     // Ortalama kazanç hesapla ve sırala
     return Object.values(lineStats)
       .map(line => ({
@@ -518,7 +518,7 @@ const ComparativeCost = () => {
       }))
       .sort((a, b) => b.totalGain - a.totalGain); // En başarılıdan başarısıza
   }, [filteredScenarios, getLineName]);
-  
+
   // Detaylı analiz verileri
   const analysisData = useMemo(() => {
     // Robot bazlı analiz
@@ -540,7 +540,7 @@ const ComparativeCost = () => {
       byRobot[robotId].totalGain += s.summary?.annualImprovement || 0;
       byRobot[robotId].totalTimeSaving += s.summary?.timeDiff || 0;
     });
-    
+
     // Parça bazlı analiz
     const byPart = {};
     filteredScenarios.forEach(s => {
@@ -558,7 +558,7 @@ const ComparativeCost = () => {
       byPart[partCode].totalGain += s.summary?.annualImprovement || 0;
       byPart[partCode].totalTimeSaving += s.summary?.timeDiff || 0;
     });
-    
+
     // Aylık trend analizi
     const monthlyTrend = {};
     filteredScenarios.forEach(s => {
@@ -576,26 +576,26 @@ const ComparativeCost = () => {
       monthlyTrend[month].totalGain += s.summary?.annualImprovement || 0;
       monthlyTrend[month].totalTimeSaving += s.summary?.timeDiff || 0;
     });
-    
+
     const monthlyTrendArray = Object.values(monthlyTrend)
       .sort((a, b) => a.month.localeCompare(b.month))
       .map(m => ({
         ...m,
         monthLabel: format(parseISO(m.month + '-01'), 'MMM yyyy', { locale: tr })
       }));
-    
+
     // Top 10 robotlar
     const top10Robots = Object.values(byRobot)
       .map(r => ({ ...r, avgGain: r.count > 0 ? r.totalGain / r.count : 0 }))
       .sort((a, b) => b.totalGain - a.totalGain)
       .slice(0, 10);
-    
+
     // Top 10 parçalar
     const top10Parts = Object.values(byPart)
       .map(p => ({ ...p, avgGain: p.count > 0 ? p.totalGain / p.count : 0 }))
       .sort((a, b) => b.totalGain - a.totalGain)
       .slice(0, 10);
-    
+
     // Top 10 en etkili senaryolar
     const top10Scenarios = [...filteredScenarios]
       .map(s => ({
@@ -604,7 +604,7 @@ const ComparativeCost = () => {
       }))
       .sort((a, b) => b.gain - a.gain)
       .slice(0, 10);
-    
+
     return {
       byRobot,
       byPart,
@@ -617,7 +617,7 @@ const ComparativeCost = () => {
       totalTimeSaving: filteredScenarios.reduce((sum, s) => sum + (s.summary?.timeDiff || 0), 0)
     };
   }, [filteredScenarios, getRobotName]);
-  
+
   const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
   const handleDateFilterChange = (quickSelect) => {
@@ -639,24 +639,24 @@ const ComparativeCost = () => {
     <>
       {isDirty && !editingScenario && <div className="p-2 mb-2 bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 flex items-center"><AlertTriangle className="h-5 w-5 mr-3" /> <p className="text-sm font-medium">Taslak – Kaydedilmedi</p></div>}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div className="space-y-2"><Label>Hat *</Label><Select value={formState.line_id} onValueChange={(v) => setFormState({...formState, line_id: v})}><SelectTrigger><SelectValue placeholder="Hat seçin" /></SelectTrigger><SelectContent>{lines.map(line => <SelectItem key={line.id} value={line.id.toString()}>{line.name}</SelectItem>)}</SelectContent></Select></div>
-        <div className="space-y-2"><Label>Robot</Label><Select value={formState.robot_id} onValueChange={(v) => setFormState({...formState, robot_id: v})}><SelectTrigger><SelectValue placeholder="Robot seçin" /></SelectTrigger><SelectContent>{robots.filter(r => !formState.line_id || r.line_id.toString() === formState.line_id).map(robot => <SelectItem key={robot.id} value={robot.id.toString()}>{robot.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-2"><Label>Hat *</Label><Select value={formState.line_id} onValueChange={(v) => setFormState({ ...formState, line_id: v })}><SelectTrigger><SelectValue placeholder="Hat seçin" /></SelectTrigger><SelectContent>{lines.map(line => <SelectItem key={line.id} value={line.id.toString()}>{line.name}</SelectItem>)}</SelectContent></Select></div>
+        <div className="space-y-2"><Label>Robot</Label><Select value={formState.robot_id} onValueChange={(v) => setFormState({ ...formState, robot_id: v })}><SelectTrigger><SelectValue placeholder="Robot seçin" /></SelectTrigger><SelectContent>{robots.filter(r => !formState.line_id || r.line_id.toString() === formState.line_id).map(robot => <SelectItem key={robot.id} value={robot.id.toString()}>{robot.name}</SelectItem>)}</SelectContent></Select></div>
         <div className="space-y-2">
           <Label>Parça Kodu</Label>
-          <Input placeholder="Parça kodu" value={formState.part_code} onChange={(e) => setFormState({...formState, part_code: e.target.value})} />
+          <Input placeholder="Parça kodu" value={formState.part_code} onChange={(e) => setFormState({ ...formState, part_code: e.target.value })} />
           {partCodeDuplicate && (
             <div className="mt-1 p-2 bg-orange-50 border border-orange-200 rounded text-sm text-orange-700">
               ⚠️ Bu parça kodu için daha önce {partCodeDuplicate} adet operasyon azaltma kaydı yapılmış!
             </div>
           )}
         </div>
-        <div className="space-y-2"><Label>Yıllık Üretim Adedi</Label><Input type="number" placeholder="50000" value={formState.annual_quantity} onChange={(e) => setFormState({...formState, annual_quantity: e.target.value})} /></div>
+        <div className="space-y-2"><Label>Yıllık Üretim Adedi</Label><Input type="number" placeholder="50000" value={formState.annual_quantity} onChange={(e) => setFormState({ ...formState, annual_quantity: e.target.value })} /></div>
       </div>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mt-4">
-        <Card><CardHeader><CardTitle className="text-base">Önce</CardTitle></CardHeader><CardContent className="space-y-2"><div className="space-y-1"><Label>Robot Süresi (sn)</Label><Input type="number" value={formState.before.robotTime} onChange={(e) => setFormState({...formState, before: {...formState.before, robotTime: e.target.value}})} /></div><div className="space-y-1"><Label>Manuel Süre (sn)</Label><Input type="number" value={formState.before.manualTime} onChange={(e) => setFormState({...formState, before: {...formState.before, manualTime: e.target.value}})} /></div></CardContent></Card>
-        <Card><CardHeader><CardTitle className="text-base">Sonra</CardTitle></CardHeader><CardContent className="space-y-2"><div className="space-y-1"><Label>Robot Süresi (sn)</Label><Input type="number" value={formState.after.robotTime} onChange={(e) => setFormState({...formState, after: {...formState.after, robotTime: e.target.value}})} /></div><div className="space-y-1"><Label>Manuel Süre (sn)</Label><Input type="number" value={formState.after.manualTime} onChange={(e) => setFormState({...formState, after: {...formState.after, manualTime: e.target.value}})} /></div></CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-base">Önce</CardTitle></CardHeader><CardContent className="space-y-2"><div className="space-y-1"><Label>Robot Süresi (sn)</Label><Input type="number" value={formState.before.robotTime} onChange={(e) => setFormState({ ...formState, before: { ...formState.before, robotTime: e.target.value } })} /></div><div className="space-y-1"><Label>Manuel Süre (sn)</Label><Input type="number" value={formState.before.manualTime} onChange={(e) => setFormState({ ...formState, before: { ...formState.before, manualTime: e.target.value } })} /></div></CardContent></Card>
+        <Card><CardHeader><CardTitle className="text-base">Sonra</CardTitle></CardHeader><CardContent className="space-y-2"><div className="space-y-1"><Label>Robot Süresi (sn)</Label><Input type="number" value={formState.after.robotTime} onChange={(e) => setFormState({ ...formState, after: { ...formState.after, robotTime: e.target.value } })} /></div><div className="space-y-1"><Label>Manuel Süre (sn)</Label><Input type="number" value={formState.after.manualTime} onChange={(e) => setFormState({ ...formState, after: { ...formState.after, manualTime: e.target.value } })} /></div></CardContent></Card>
       </div>
-       <div className="space-y-2 mt-4">
+      <div className="space-y-2 mt-4">
         <Label>Kayıt Tarihi</Label>
         <DatePicker
           value={formState.scenario_date ? new Date(formState.scenario_date) : null}
@@ -668,30 +668,30 @@ const ComparativeCost = () => {
       <div className="space-y-2 mt-4">
         <Label>Kanıt Dokümanları</Label>
         <div className="p-4 border-2 border-dashed rounded-lg text-center">
-            <Button asChild variant="outline" size="sm">
-                <label htmlFor="file-upload" className="cursor-pointer">
-                    <Upload className="h-4 w-4 mr-2" />
-                    Dosya Yükle (PDF, Resim, Excel)
-                </label>
-            </Button>
-            <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} disabled={uploading} multiple={false} accept=".pdf,.jpg,.jpeg,.png,.gif,.xls,.xlsx" />
-            {uploading && <p className="text-sm text-gray-500 mt-2">Yükleniyor...</p>}
+          <Button asChild variant="outline" size="sm">
+            <label htmlFor="file-upload" className="cursor-pointer">
+              <Upload className="h-4 w-4 mr-2" />
+              Dosya Yükle (PDF, Resim, Excel)
+            </label>
+          </Button>
+          <Input id="file-upload" type="file" className="hidden" onChange={handleFileChange} disabled={uploading} multiple={false} accept=".pdf,.jpg,.jpeg,.png,.gif,.xls,.xlsx" />
+          {uploading && <p className="text-sm text-gray-500 mt-2">Yükleniyor...</p>}
         </div>
         {(formState.attachments && formState.attachments.length > 0) && (
-            <div className="mt-2 space-y-2">
-                {formState.attachments.map((file, index) => (
-                    <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
-                        <div className="flex items-center gap-2">
-                            <Paperclip className="h-4 w-4" />
-                            <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate" title={file.name}>
-                                {file.name}
-                            </a>
-                            <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
-                        </div>
-                        <Button variant="ghost" size="sm" onClick={() => removeAttachment(index)}><X className="h-4 w-4" /></Button>
-                    </div>
-                ))}
-            </div>
+          <div className="mt-2 space-y-2">
+            {formState.attachments.map((file, index) => (
+              <div key={index} className="flex items-center justify-between p-2 bg-gray-100 rounded-md">
+                <div className="flex items-center gap-2">
+                  <Paperclip className="h-4 w-4" />
+                  <a href={file.url} target="_blank" rel="noopener noreferrer" className="text-sm font-medium text-blue-600 hover:underline truncate" title={file.name}>
+                    {file.name}
+                  </a>
+                  <span className="text-xs text-gray-500">({(file.size / 1024).toFixed(1)} KB)</span>
+                </div>
+                <Button variant="ghost" size="sm" onClick={() => removeAttachment(index)}><X className="h-4 w-4" /></Button>
+              </div>
+            ))}
+          </div>
         )}
       </div>
       {analysisResult && <Card className="mt-4"><CardContent className="p-4 text-center"><Label>Hesaplanan Yıllık İyileştirme</Label><p className="text-2xl font-bold text-green-600">{formatCurrency(analysisResult.annualImprovement)}</p><p className="text-xs text-muted-foreground">Birim Maliyet: {formatCurrency(analysisResult.costPerSecond)}/sn</p></CardContent></Card>}
@@ -722,17 +722,17 @@ const ComparativeCost = () => {
         <p className="text-2xl font-bold text-blue-600">{formatCurrency(item.summary.annualImprovement)}</p>
       </div>
       {item.attachments && item.attachments.length > 0 && (
-          <div>
-            <h4 className="text-md font-semibold mb-2">Kanıt Dokümanları</h4>
-            <div className="space-y-2">
-              {item.attachments.map((file, index) => (
-                <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200">
-                  <Paperclip className="h-4 w-4" />
-                  <span className="text-sm font-medium text-blue-600 hover:underline">{file.name}</span>
-                </a>
-              ))}
-            </div>
+        <div>
+          <h4 className="text-md font-semibold mb-2">Kanıt Dokümanları</h4>
+          <div className="space-y-2">
+            {item.attachments.map((file, index) => (
+              <a key={index} href={file.url} target="_blank" rel="noopener noreferrer" className="flex items-center gap-2 p-2 bg-gray-100 rounded-md hover:bg-gray-200">
+                <Paperclip className="h-4 w-4" />
+                <span className="text-sm font-medium text-blue-600 hover:underline">{file.name}</span>
+              </a>
+            ))}
           </div>
+        </div>
       )}
     </div>
   );
@@ -747,21 +747,21 @@ const ComparativeCost = () => {
               <TabsTrigger value="data">Veri Takip</TabsTrigger>
               <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
             </TabsList>
-            
+
             <TabsContent value="data" className="space-y-4">
               <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-4 no-print">
                 <div className="space-y-2">
                   <Label>Filtreler</Label>
                   <div className="flex flex-wrap items-center gap-2">
                     <Tabs value={filters.quickSelect} onValueChange={handleDateFilterChange} className="w-auto"><TabsList><TabsTrigger value="today">Bugün</TabsTrigger><TabsTrigger value="thisWeek">Bu Hafta</TabsTrigger><TabsTrigger value="thisMonth">Bu Ay</TabsTrigger><TabsTrigger value="last3Months">Son 3 Ay</TabsTrigger><TabsTrigger value="ytd">Yıl Başı</TabsTrigger><TabsTrigger value="last12Months">Son 12 Ay</TabsTrigger><TabsTrigger value="allTime">Tüm Zamanlar</TabsTrigger></TabsList></Tabs>
-                    <DateRangePicker value={filters.date} onChange={(date) => setFilters({...filters, date, quickSelect: 'custom'})} placeholder="Özel Aralık" className="w-full md:w-[260px]" />
-                    <Select onValueChange={(v) => setFilters({...filters, lines: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent></Select>
-                    <Select onValueChange={(v) => setFilters({...filters, robots: v === 'all' ? [] : [v]})}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Robotlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Robotlar</SelectItem>{robots.map(r => <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>)}</SelectContent></Select>
-                    <Input placeholder="Parça Kodu Ara..." className="w-[160px]" value={filters.partCode} onChange={(e) => setFilters({...filters, partCode: e.target.value})} />
+                    <DateRangePicker value={filters.date} onChange={(date) => setFilters({ ...filters, date, quickSelect: 'custom' })} placeholder="Özel Aralık" className="w-full md:w-[260px]" />
+                    <Select onValueChange={(v) => setFilters({ ...filters, lines: v === 'all' ? [] : [v] })}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent></Select>
+                    <Select onValueChange={(v) => setFilters({ ...filters, robots: v === 'all' ? [] : [v] })}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Robotlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Robotlar</SelectItem>{robots.map(r => <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>)}</SelectContent></Select>
+                    <Input placeholder="Parça Kodu Ara..." className="w-[160px]" value={filters.partCode} onChange={(e) => setFilters({ ...filters, partCode: e.target.value })} />
                     <Button variant="ghost" onClick={clearFilters}>Filtreleri Temizle</Button>
                   </div>
                 </div>
-                {(filters.lines.length > 0 || filters.robots.length > 0 || filters.partCode) && <div className="flex items-center space-x-2 pt-2"><div className="flex flex-wrap gap-2">{filters.lines.map(l => <span key={l} className="chip"><Factory className="h-3 w-3 mr-1"/>{getLineName(l)}</span>)}{filters.robots.map(r => <span key={r} className="chip"><Bot className="h-3 w-3 mr-1"/>{getRobotName(r)}</span>)}{filters.partCode && <span className="chip">{filters.partCode}</span>}</div></div>}
+                {(filters.lines.length > 0 || filters.robots.length > 0 || filters.partCode) && <div className="flex items-center space-x-2 pt-2"><div className="flex flex-wrap gap-2">{filters.lines.map(l => <span key={l} className="chip"><Factory className="h-3 w-3 mr-1" />{getLineName(l)}</span>)}{filters.robots.map(r => <span key={r} className="chip"><Bot className="h-3 w-3 mr-1" />{getRobotName(r)}</span>)}{filters.partCode && <span className="chip">{filters.partCode}</span>}</div></div>}
               </div>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
                 <Card><CardHeader><CardTitle className="text-xl">{formatCurrency(dashboardData.totalAnnualImprovement)}</CardTitle><CardDescription>Yıllık İyileştirme (₺)</CardDescription></CardHeader></Card>
@@ -769,7 +769,7 @@ const ComparativeCost = () => {
                 <Card><CardHeader><CardTitle className="text-xl">{dashboardData.totalSavingSeconds.toFixed(2)} sn</CardTitle><CardDescription>Toplam Süre Kazancı</CardDescription></CardHeader></Card>
                 <Card><CardHeader><CardTitle className="text-xl">{filteredScenarios.length > 0 ? (filteredScenarios.reduce((sum, s) => sum + s.summary.beforeTotalTime, 0) / filteredScenarios.length).toFixed(2) : 0} sn</CardTitle><CardDescription>Ort. Önceki Süre</CardDescription></CardHeader></Card>
               </div>
-              
+
               {/* Başarılı Hatlar Grafiği */}
               {successfulLinesData.length > 0 && (
                 <Card className="mt-6">
@@ -784,7 +784,7 @@ const ComparativeCost = () => {
                         <XAxis dataKey="lineName" angle={-45} textAnchor="end" height={100} />
                         <YAxis yAxisId="left" orientation="left" stroke="#8884d8" />
                         <YAxis yAxisId="right" orientation="right" stroke="#82ca9d" />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value, name) => {
                             if (name === 'totalGain' || name === 'avgGain') {
                               return formatCurrency(value);
@@ -826,7 +826,7 @@ const ComparativeCost = () => {
                 </CardContent>
               </Card>
             </TabsContent>
-            
+
             <TabsContent value="analysis" className="space-y-6">
               {/* Özet KPI Kartları */}
               <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
@@ -869,7 +869,7 @@ const ComparativeCost = () => {
                   </CardContent>
                 </Card>
               </div>
-              
+
               {/* Robot Bazlı Analiz */}
               {analysisData.top10Robots.length > 0 && (
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -890,7 +890,7 @@ const ComparativeCost = () => {
                           <XAxis dataKey="robot" angle={-45} textAnchor="end" height={100} />
                           <YAxis yAxisId="left" />
                           <YAxis yAxisId="right" orientation="right" />
-                          <Tooltip 
+                          <Tooltip
                             formatter={(value, name) => {
                               if (name === 'kazanc' || name === 'ortalama') {
                                 return formatCurrency(value);
@@ -906,7 +906,7 @@ const ComparativeCost = () => {
                       </ResponsiveContainer>
                     </CardContent>
                   </Card>
-                  
+
                   <Card>
                     <CardHeader>
                       <CardTitle>Top 10 Robot Detayları</CardTitle>
@@ -937,7 +937,7 @@ const ComparativeCost = () => {
                   </Card>
                 </div>
               )}
-              
+
               {/* Parça Bazlı Analiz */}
               {analysisData.top10Parts.length > 0 && (
                 <Card>
@@ -957,7 +957,7 @@ const ComparativeCost = () => {
                         <XAxis dataKey="parca" angle={-45} textAnchor="end" height={100} />
                         <YAxis yAxisId="left" />
                         <YAxis yAxisId="right" orientation="right" />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value, name) => {
                             if (name === 'kazanc' || name === 'ortalama') {
                               return formatCurrency(value);
@@ -974,7 +974,7 @@ const ComparativeCost = () => {
                   </CardContent>
                 </Card>
               )}
-              
+
               {/* Aylık Trend */}
               {analysisData.monthlyTrend.length > 0 && (
                 <Card>
@@ -989,7 +989,7 @@ const ComparativeCost = () => {
                         <XAxis dataKey="monthLabel" />
                         <YAxis yAxisId="left" />
                         <YAxis yAxisId="right" orientation="right" />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value, name) => {
                             if (name === 'totalGain') {
                               return formatCurrency(value);
@@ -1006,7 +1006,7 @@ const ComparativeCost = () => {
                   </CardContent>
                 </Card>
               )}
-              
+
               {/* Top 10 En Etkili Senaryolar */}
               {analysisData.top10Scenarios.length > 0 && (
                 <Card>
@@ -1041,7 +1041,7 @@ const ComparativeCost = () => {
                   </CardContent>
                 </Card>
               )}
-              
+
               {/* Hat Bazlı Detaylı Analiz */}
               {successfulLinesData.length > 0 && (
                 <Card>
@@ -1056,7 +1056,7 @@ const ComparativeCost = () => {
                         <XAxis dataKey="lineName" angle={-45} textAnchor="end" height={120} />
                         <YAxis yAxisId="left" />
                         <YAxis yAxisId="right" orientation="right" />
-                        <Tooltip 
+                        <Tooltip
                           formatter={(value, name) => {
                             if (name === 'totalGain' || name === 'avgGain') {
                               return formatCurrency(value);
@@ -1079,9 +1079,9 @@ const ComparativeCost = () => {
         </CardContent>
       </Card>
 
-      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}><DialogContent className="sm:max-w-[700px]"><DialogHeader><DialogTitle>{editingScenario ? 'İyileştirme Düzenle' : 'Yeni İyileştirme Kaydı'}</DialogTitle></DialogHeader><div className="flex-1 overflow-y-auto px-6 py-4 modal-body-scroll">{renderForm()}</div><DialogFooter><Button variant="outline" onClick={() => setShowFormDialog(false)}>İptal</Button><Button onClick={handleAnalysis}><GitCompare className="h-4 w-4 mr-2" />Analiz Et</Button><Button onClick={handleSaveScenario}><Save className="h-4 w-4 mr-2" />{editingScenario ? 'Güncelle' : 'Kaydet'}</Button></DialogFooter></DialogContent></Dialog>
-      <Dialog open={!!viewingScenario} onOpenChange={() => setViewingScenario(null)}><DialogContent className="sm:max-w-[700px]"><DialogHeader><DialogTitle>İyileştirme Detayı</DialogTitle></DialogHeader><div className="flex-1 overflow-y-auto px-6 py-4 modal-body-scroll">{viewingScenario && renderDetailView(viewingScenario)}</div><DialogFooter><Button variant="outline" onClick={() => handlePrint(viewingScenario)}><FileText className="h-4 w-4 mr-2" /> Yazdır</Button><Button onClick={() => { setEditingScenario(viewingScenario); setFormState(viewingScenario.scope); setShowFormDialog(true); setViewingScenario(null); }}><Edit className="h-4 w-4 mr-2" /> Düzenle</Button><Button variant="destructive" onClick={() => { setDeleteConfirm(viewingScenario); setViewingScenario(null); }}><Trash2 className="h-4 w-4 mr-2" /> Sil</Button></DialogFooter></DialogContent></Dialog>
-      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}><DialogContent><DialogHeader><DialogTitle>Kaydı Sil</DialogTitle><DialogDescription>"{deleteConfirm?.name}" kaydını silmek istediğinizden emin misiniz?</DialogDescription></DialogHeader><DialogFooter className="mt-4"><Button variant="outline" onClick={() => setDeleteConfirm(null)}>İptal</Button><Button variant="secondary" onClick={() => handleDelete(deleteConfirm.id, false)}>Çöp Kutusuna Taşı</Button><Button variant="destructive" onClick={() => handleDelete(deleteConfirm.id, true)}>Kalıcı Olarak Sil</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={showFormDialog} onOpenChange={setShowFormDialog}><DialogContent className="sm:max-w-[700px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0"><DialogHeader className="bg-gradient-to-r from-green-600 to-green-500 p-6 text-white"><div className="flex items-center gap-3"><div className="p-2 bg-white/20 rounded-lg">{editingScenario ? <Edit className="h-5 w-5" /> : <Plus className="h-5 w-5" />}</div><div><DialogTitle className="text-xl font-bold text-white">{editingScenario ? 'İyileştirme Düzenle' : 'Yeni İyileştirme Kaydı'}</DialogTitle><DialogDescription className="text-green-100 mt-1">İyileştirme senaryosu bilgilerini girin</DialogDescription></div></div></DialogHeader><div className="flex-1 overflow-y-auto px-6 py-4 modal-body-scroll">{renderForm()}</div><DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3"><Button variant="outline" className="rounded-lg" onClick={() => setShowFormDialog(false)}>İptal</Button><Button className="rounded-lg" onClick={handleAnalysis}><GitCompare className="h-4 w-4 mr-2" />Analiz Et</Button><Button className="rounded-lg bg-green-600 hover:bg-green-700" onClick={handleSaveScenario}><Save className="h-4 w-4 mr-2" />{editingScenario ? 'Güncelle' : 'Kaydet'}</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={!!viewingScenario} onOpenChange={() => setViewingScenario(null)}><DialogContent className="sm:max-w-[700px] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0"><DialogHeader className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-6 text-white"><div className="flex items-center gap-3"><div className="p-2 bg-white/20 rounded-lg"><FileText className="h-5 w-5" /></div><div><DialogTitle className="text-xl font-bold text-white">İyileştirme Detayı</DialogTitle><DialogDescription className="text-indigo-100 mt-1">Senaryo detaylarını görüntüleyin</DialogDescription></div></div></DialogHeader><div className="flex-1 overflow-y-auto px-6 py-4 modal-body-scroll">{viewingScenario && renderDetailView(viewingScenario)}</div><DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3"><Button variant="outline" className="rounded-lg" onClick={() => handlePrint(viewingScenario)}><FileText className="h-4 w-4 mr-2" /> Yazdır</Button><Button className="rounded-lg" onClick={() => { setEditingScenario(viewingScenario); setFormState(viewingScenario.scope); setShowFormDialog(true); setViewingScenario(null); }}><Edit className="h-4 w-4 mr-2" /> Düzenle</Button><Button variant="destructive" className="rounded-lg" onClick={() => { setDeleteConfirm(viewingScenario); setViewingScenario(null); }}><Trash2 className="h-4 w-4 mr-2" /> Sil</Button></DialogFooter></DialogContent></Dialog>
+      <Dialog open={!!deleteConfirm} onOpenChange={() => setDeleteConfirm(null)}><DialogContent className="sm:max-w-md bg-white rounded-xl shadow-2xl border-0 overflow-hidden"><DialogHeader className="bg-red-50 p-6 border-b border-red-100"><div className="flex items-center gap-3"><div className="p-2 bg-red-100 rounded-lg"><Trash2 className="h-5 w-5 text-red-600" /></div><div><DialogTitle className="text-lg font-bold text-red-900">Kaydı Sil</DialogTitle><DialogDescription className="text-red-700 mt-1">"{deleteConfirm?.name}" kaydını silmek istediğinizden emin misiniz?</DialogDescription></div></div></DialogHeader><div className="p-6"><p className="text-sm text-gray-600">Bu işlem geri alınamaz.</p></div><DialogFooter className="p-6 bg-gray-50 flex items-center justify-end gap-3 border-t border-gray-100"><Button variant="outline" className="rounded-lg" onClick={() => setDeleteConfirm(null)}>İptal</Button><Button variant="secondary" className="rounded-lg" onClick={() => handleDelete(deleteConfirm.id, false)}>Çöp Kutusuna Taşı</Button><Button variant="destructive" className="rounded-lg" onClick={() => handleDelete(deleteConfirm.id, true)}>Kalıcı Olarak Sil</Button></DialogFooter></DialogContent></Dialog>
     </div>
   );
 };
