@@ -53,7 +53,8 @@ export const openPrintWindow = async (reportData, toast) => {
     }
 
     if (data && data.id) {
-      const printWindow = window.open(`/print?snapshot_id=${data.id}`, '_blank');
+      const landscapeParam = reportData.landscape ? '&landscape=1' : '';
+      const printWindow = window.open(`/print?snapshot_id=${data.id}${landscapeParam}`, '_blank');
       if (!printWindow) {
         toast({
           title: "Açılır Pencere Engellendi",

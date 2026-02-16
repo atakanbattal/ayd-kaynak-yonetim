@@ -4,7 +4,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Input } from '@/components/ui/input';
 import { Button } from '@/components/ui/button';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DateRangePicker, CLOSE_DATE_PICKERS_EVENT } from '@/components/ui/date-range-picker';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useToast } from '@/components/ui/use-toast';
@@ -305,7 +305,7 @@ const AuditLog = () => {
           </div>
         </CardHeader>
         <CardContent>
-          <Tabs value={activeTab} onValueChange={setActiveTab}>
+          <Tabs value={activeTab} onValueChange={(v) => { setActiveTab(v); window.dispatchEvent(new CustomEvent(CLOSE_DATE_PICKERS_EVENT)); }}>
             <TabsList className="mb-4">
               <TabsTrigger value="data" className="flex items-center gap-2">
                 <FileText className="h-4 w-4" /> Kayıtlar

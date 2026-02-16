@@ -577,15 +577,17 @@ const ContinuousImprovement = () => {
         { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredImprovements.length || 1)) },
       ];
       reportData.tableData = {
-        headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Önceki Süre', 'Yeni Süre', 'Yıllık Etki'],
-        rows: filteredImprovements.map(s => [
-          format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
-          s.description,
-          s.part_code || 'N/A',
-          getLineName(s.line_id),
-          s.prev_time,
-          s.new_time,
-          formatCurrency(calculateImpact(s))
+        headers: ['Tarih', 'Parça Kodu', 'Hat', 'Önceki Süre', 'Yeni Süre', 'Yıllık Etki'],
+        rows: filteredImprovements.flatMap(s => [
+          [
+            format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
+            s.part_code || 'N/A',
+            getLineName(s.line_id),
+            s.prev_time,
+            s.new_time,
+            formatCurrency(calculateImpact(s))
+          ],
+          ['__DESC__', s.description || '-']
         ])
       };
     }
@@ -738,6 +740,7 @@ const ContinuousImprovement = () => {
       const reportId = `RPR-SI-DET-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`;
       const reportData = {
         title: 'Sürekli İyileştirme - Detaylı Yönetici Raporu',
+        landscape: true,
         reportId,
         filters: {
           'Rapor Dönemi': `${format(filters.dateRange?.from || new Date('2020-01-01'), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`,
@@ -750,31 +753,45 @@ const ContinuousImprovement = () => {
           { title: 'Toplam İyileştirme', value: filteredData.length.toString() },
           { title: 'Tamamlanan', value: completedCount.toString() },
           { title: 'Devam Eden', value: inProgressCount.toString() },
-          { title: 'Planlanan', value: plannedCount.toString() },
-          { title: 'Tamamlanma Oranı', value: filteredData.length > 0 ? `${Math.round((completedCount / filteredData.length) * 100)}%` : '0%' },
+          { title: 'Tamamlanma Oranı', value: filteredData.length > 0 ? `%${Math.round((completedCount / filteredData.length) * 100)}` : '%0' },
           { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredData.length || 1)) },
-          { title: 'Aktif Hat Sayısı', value: Object.keys(byLine).length.toString() },
-          { title: 'İyileştirme Tipleri', value: Object.keys(byType).length.toString() },
-          { title: 'Farklı Parça Sayısı', value: Object.keys(byPart).length.toString() },
-          { title: 'Farklı Robot Sayısı', value: Object.keys(byRobot).length.toString() },
-          { title: 'Sorumlu Personel Sayısı', value: Object.keys(byResponsible).length.toString() }
+          { title: 'Aktif Hat', value: Object.keys(byLine).length.toString() },
+          { title: 'Farklı Parça', value: Object.keys(byPart).length.toString() },
+          { title: 'Robot Sayısı', value: Object.keys(byRobot).length.toString() },
+          { title: 'Personel', value: Object.keys(byResponsible).length.toString() },
+          { title: 'Tip Sayısı', value: Object.keys(byType).length.toString() },
+          { title: 'Planlanan', value: plannedCount.toString() }
         ],
         tableData: {
-          headers: ['Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Robot', 'Sorumlu', 'Tip', 'Önceki Süre', 'Yeni Süre', 'Kazanç', 'Yıllık Etki', 'Durum'],
-          rows: filteredData.map(s => [
-            format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
-            s.description ? (s.description.length > 40 ? s.description.substring(0, 40) + '...' : s.description) : '-',
-            s.part_code || 'N/A',
-            s.line?.name || 'N/A',
-            s.robot?.name || 'N/A',
-            s.responsible ? `${s.responsible.first_name} ${s.responsible.last_name}` : 'N/A',
-            getTypeNameTR(s.type),
-            `${s.prev_time || 0} sn`,
-            `${s.new_time || 0} sn`,
-            `${((s.prev_time || 0) - (s.new_time || 0)).toFixed(2)} sn`,
-            formatCurrency(calculateImpact(s)),
-            getStatusStyle(s.status).label
-          ])
+          headers: ['Tarih', 'Parça Kodu', 'Hat', 'Robot', 'Sorumlu', 'Tip', 'Ö.Süre', 'Y.Süre', 'Kazanç', 'Yıllık Etki', 'Durum'],
+          options: {
+            compact: true,
+            wrapColumns: [1],
+            columnWidths: ['8%', '11%', '10%', '8%', '12%', '10%', '6%', '6%', '6%', '14%', '9%'],
+            rightAlignColumns: [6, 7, 8, 9],
+            noTruncateColumns: [9]
+          },
+          rows: filteredData.flatMap(s => {
+            const prevTime = s.prev_time || 0;
+            const newTime = s.new_time || 0;
+            const gain = prevTime - newTime;
+            return [
+              [
+                format(parseISO(s.improvement_date), 'dd.MM.yy'),
+                s.part_code || '-',
+                s.line?.name || '-',
+                s.robot?.name || '-',
+                s.responsible ? `${s.responsible.first_name} ${s.responsible.last_name.charAt(0)}.` : '-',
+                getTypeNameTR(s.type),
+                `${prevTime}`,
+                `${newTime}`,
+                gain > 0 ? `${gain.toFixed(0)}sn` : '-',
+                formatCurrency(calculateImpact(s)),
+                getStatusStyle(s.status).label
+              ],
+              ['__DESC__', s.description || '']
+            ];
+          })
         },
         signatureFields: [
           { title: 'Hazırlayan', name: user?.user_metadata?.name || 'Sistem Kullanıcısı', role: ' ' },
@@ -783,89 +800,11 @@ const ContinuousImprovement = () => {
         ]
       };
 
-      // Top 10 En Etkili İyileştirmeler
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-        ['TOP 10 EN ETKİLİ İYİLEŞTİRMELER', '', '', '', '', '', '', '', '', '', '', '', ''],
-        ['Sıra', 'Tarih', 'Açıklama', 'Parça Kodu', 'Hat', 'Yıllık Etki', 'Süre Kazancı', 'Durum', '', '', '', ''],
-        ...top10Improvements.map((imp, index) => [
-          (index + 1).toString(),
-          format(parseISO(imp.improvement_date), 'dd.MM.yyyy'),
-          imp.description ? (imp.description.length > 30 ? imp.description.substring(0, 30) + '...' : imp.description) : '-',
-          imp.part_code || 'N/A',
-          imp.line?.name || 'N/A',
-          formatCurrency(calculateImpact(imp)),
-          `${((imp.prev_time || 0) - (imp.new_time || 0)).toFixed(2)} sn`,
-          getStatusStyle(imp.status).label,
-          '', '', '', ''
-        ])
-      );
-
-      // Top 10 En Etkili Hatlar
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-        ['TOP 10 EN ETKİLİ HATLAR', '', '', '', '', '', '', '', '', '', '', '', ''],
-        ['Sıra', 'Hat Adı', 'Toplam Etki', 'İyileştirme Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', 'Ortalama Süre Kazancı', '', '', '', '', ''],
-        ...top10Lines.map((line, index) => [
-          (index + 1).toString(),
-          line.name,
-          formatCurrency(line.impact),
-          line.count.toString(),
-          line.completed.toString(),
-          `${Math.round((line.completed / line.count) * 100)}%`,
-          `${line.avgTimeSaving.toFixed(2)} sn`,
-          '', '', '', '', ''
-        ])
-      );
-
-      // Top 10 En Etkili Personeller
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-        ['TOP 10 EN ETKİLİ SORUMLU PERSONEL', '', '', '', '', '', '', '', '', '', '', '', ''],
-        ['Sıra', 'Personel', 'Toplam Etki', 'İyileştirme Sayısı', 'Tamamlanan', 'Tamamlanma Oranı', '', '', '', '', '', ''],
-        ...top10Responsible.map((resp, index) => [
-          (index + 1).toString(),
-          resp.name,
-          formatCurrency(resp.impact),
-          resp.count.toString(),
-          resp.completed.toString(),
-          `${Math.round((resp.completed / resp.count) * 100)}%`,
-          '', '', '', '', '', ''
-        ])
-      );
-
-      // Tip bazlı detaylı analiz
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-        ['İYİLEŞTİRME TİPİ BAZLI ANALİZ', '', '', '', '', '', '', '', '', '', '', ''],
-        ['Tip', 'Sayı', 'Toplam Etki', 'Ortalama Etki', '', '', '', '', '', '', '', ''],
-        ...Object.entries(byType).map(([type, data]) => [
-          getTypeNameTR(type),
-          data.count.toString(),
-          formatCurrency(data.impact),
-          formatCurrency(data.avgImpact),
-          '', '', '', '', '', '', '', ''
-        ])
-      );
-
       // Parça bazlı analiz
       const topParts = Object.entries(byPart)
         .map(([code, data]) => ({ code, ...data }))
         .sort((a, b) => b.impact - a.impact)
         .slice(0, 15);
-
-      reportData.tableData.rows.push(
-        ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-        ['PARÇA BAZLI ANALİZ (TOP 15)', '', '', '', '', '', '', '', '', '', '', ''],
-        ['Parça Kodu', 'İyileştirme Sayısı', 'Toplam Etki', 'Ortalama Süre Kazancı', '', '', '', '', '', '', '', ''],
-        ...topParts.map(part => [
-          part.code,
-          part.count.toString(),
-          formatCurrency(part.impact),
-          `${part.avgTimeSaving.toFixed(2)} sn`,
-          '', '', '', '', '', '', '', ''
-        ])
-      );
 
       // Robot bazlı analiz
       const topRobots = Object.entries(byRobot)
@@ -873,19 +812,90 @@ const ContinuousImprovement = () => {
         .sort((a, b) => b.impact - a.impact)
         .slice(0, 10);
 
-      if (topRobots.length > 0) {
-        reportData.tableData.rows.push(
-          ['===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '===', '==='],
-          ['ROBOT BAZLI ANALİZ (TOP 10)', '', '', '', '', '', '', '', '', '', '', ''],
-          ['Robot Adı', 'İyileştirme Sayısı', 'Toplam Etki', '', '', '', '', '', '', '', '', ''],
-          ...topRobots.map(robot => [
+      // Alt bölümler bağımsız tablolar olarak sections'a ekleniyor
+      reportData.sections = [
+        {
+          title: 'TOP 10 En Etkili İyileştirmeler',
+          headers: ['#', 'Tarih', 'Parça Kodu', 'Hat', 'Yıllık Etki', 'Kazanç', 'Durum'],
+          options: { rightAlignColumns: [4, 5] },
+          rows: top10Improvements.flatMap((imp, index) => {
+            const gain = (imp.prev_time || 0) - (imp.new_time || 0);
+            return [
+              [
+                (index + 1).toString(),
+                format(parseISO(imp.improvement_date), 'dd.MM.yy'),
+                imp.part_code || '-',
+                imp.line?.name || '-',
+                formatCurrency(calculateImpact(imp)),
+                gain > 0 ? `${gain.toFixed(0)}sn` : '-',
+                getStatusStyle(imp.status).label
+              ],
+              ['__DESC__', imp.description || '']
+            ];
+          })
+        },
+        {
+          title: 'TOP 10 En Etkili Hatlar',
+          headers: ['#', 'Hat', 'Toplam Etki', 'Adet', 'Tamamlanan', 'Oran', 'Ort.Kazanç'],
+          options: { rightAlignColumns: [2, 3, 4, 6] },
+          rows: top10Lines.map((line, index) => [
+            (index + 1).toString(),
+            line.name,
+            formatCurrency(line.impact),
+            line.count.toString(),
+            line.completed.toString(),
+            `%${Math.round((line.completed / line.count) * 100)}`,
+            `${line.avgTimeSaving.toFixed(0)}sn`
+          ])
+        },
+        {
+          title: 'TOP 10 En Etkili Personel',
+          headers: ['#', 'Personel', 'Toplam Etki', 'Adet', 'Tamamlanan', 'Oran'],
+          options: { rightAlignColumns: [2, 3, 4] },
+          rows: top10Responsible.map((resp, index) => [
+            (index + 1).toString(),
+            resp.name,
+            formatCurrency(resp.impact),
+            resp.count.toString(),
+            resp.completed.toString(),
+            `%${Math.round((resp.completed / resp.count) * 100)}`
+          ])
+        },
+        {
+          title: 'Tip Bazlı Analiz',
+          headers: ['Tip', 'Adet', 'Toplam Etki', 'Ort. Etki'],
+          options: { rightAlignColumns: [1, 2, 3] },
+          rows: Object.entries(byType)
+            .sort(([,a], [,b]) => b.impact - a.impact)
+            .map(([type, data]) => [
+              getTypeNameTR(type),
+              data.count.toString(),
+              formatCurrency(data.impact),
+              formatCurrency(data.avgImpact)
+            ])
+        },
+        {
+          title: 'Parça Bazlı Analiz (TOP 15)',
+          headers: ['Parça Kodu', 'Adet', 'Toplam Etki', 'Ort.Kazanç'],
+          options: { rightAlignColumns: [1, 2, 3] },
+          rows: topParts.map(part => [
+            part.code,
+            part.count.toString(),
+            formatCurrency(part.impact),
+            `${part.avgTimeSaving.toFixed(0)}sn`
+          ])
+        },
+        ...(topRobots.length > 0 ? [{
+          title: 'Robot Bazlı Analiz (TOP 10)',
+          headers: ['Robot', 'Adet', 'Toplam Etki'],
+          options: { rightAlignColumns: [1, 2] },
+          rows: topRobots.map(robot => [
             robot.name,
             robot.count.toString(),
-            formatCurrency(robot.impact),
-            '', '', '', '', '', '', '', '', ''
+            formatCurrency(robot.impact)
           ])
-        );
-      }
+        }] : [])
+      ];
 
       await openPrintWindow(reportData, toast);
     } catch (error) {
@@ -951,7 +961,7 @@ const ContinuousImprovement = () => {
         <div className="space-y-2"><Label>Sorumlu</Label><Combobox options={employeeOptions} value={formState.responsible_id} onSelect={v => setFormState({ ...formState, responsible_id: v })} placeholder="Sorumlu seçin" searchPlaceholder="Personel ara..." emptyPlaceholder="Personel bulunamadı." /></div>
         <div className="space-y-2"><Label>Önceki Süre (sn)</Label><Input type="number" value={formState.prev_time} onChange={(e) => setFormState({ ...formState, prev_time: e.target.value })} /></div>
         <div className="space-y-2"><Label>Yeni Süre (sn)</Label><Input type="number" value={formState.new_time} onChange={(e) => setFormState({ ...formState, new_time: e.target.value })} /></div>
-        <div className="space-y-2"><Label>Yıllık Adet</Label><Input type="number" value={formState.annual_quantity} onChange={(e) => setFormState({ ...formState, annual_quantity: e.target.value })} /></div>
+        <div className="space-y-2"><Label>Adet</Label><Input type="number" value={formState.annual_quantity} onChange={(e) => setFormState({ ...formState, annual_quantity: e.target.value })} placeholder="Üretim adedi" /></div>
         <div className="space-y-2"><Label>Durum</Label><Select value={formState.status} onValueChange={v => setFormState({ ...formState, status: v })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{Object.keys(statusMap).map(s => <SelectItem key={s} value={s}>{s}</SelectItem>)}</SelectContent></Select></div>
       </div>
       <div className="mt-4 p-4 bg-green-50 border border-green-200 rounded-lg text-center">
@@ -1126,7 +1136,7 @@ const ContinuousImprovement = () => {
       <div className="grid grid-cols-3 gap-4 pt-4">
         <Card><CardHeader className="p-4"><CardTitle className="text-sm">Önceki Süre</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.prev_time} sn</p></CardContent></Card>
         <Card><CardHeader className="p-4"><CardTitle className="text-sm">Yeni Süre</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.new_time} sn</p></CardContent></Card>
-        <Card><CardHeader className="p-4"><CardTitle className="text-sm">Yıllık Adet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.annual_quantity}</p></CardContent></Card>
+        <Card><CardHeader className="p-4"><CardTitle className="text-sm">Adet</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-xl font-bold">{viewingItem.annual_quantity}</p></CardContent></Card>
       </div>
       <Card className="bg-green-50 border-green-200"><CardHeader className="p-4"><CardTitle className="text-base text-green-800">Yıllık Etki</CardTitle></CardHeader><CardContent className="p-4 pt-0"><p className="text-3xl font-bold text-green-600">{formatCurrency(calculateImpact(viewingItem))}</p></CardContent></Card>
       {viewingItem.attachments && viewingItem.attachments.length > 0 && (

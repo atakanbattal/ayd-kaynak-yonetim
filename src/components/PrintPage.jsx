@@ -518,48 +518,87 @@ const GeneralReportLayout = ({ reportData }) => {
 
   // Tablo Render Helper
   const renderTable = (headers, rows, options = {}) => {
-    const { headerBg = COLORS.primary, zebraStripe = true } = options;
+    const { headerBg = COLORS.primary, zebraStripe = true, columnWidths, wrapColumns = [], rightAlignColumns = [], noTruncateColumns = [], compact = false } = options;
     if (!headers || !rows || rows.length === 0) return null;
 
-  return (
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '9pt', tableLayout: 'auto' }}>
+    // Gerçek veri satır indeksini takip et (zebra stripe için __DESC__ satırlarını sayma)
+    let dataRowIndex = 0;
+
+    return (
+      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: compact ? '7pt' : '8pt', tableLayout: columnWidths ? 'fixed' : 'auto' }}>
+        <colgroup>
+          {headers.map((_, i) => (
+            <col key={i} style={{ width: columnWidths && columnWidths[i] ? columnWidths[i] : undefined }} />
+          ))}
+        </colgroup>
         <thead>
           <tr>
             {headers.map((header, i) => (
               <th key={i} style={{
-                padding: '8px 10px',
-                textAlign: 'left',
-                fontWeight: '600',
+                padding: compact ? '5px 6px' : '7px 10px',
+                textAlign: rightAlignColumns.includes(i) ? 'right' : 'left',
+                fontWeight: '700',
                 color: '#fff',
                 background: headerBg,
-                fontSize: '8pt',
+                fontSize: compact ? '6.5pt' : '7.5pt',
                 textTransform: 'uppercase',
-                letterSpacing: '0.02em',
-                whiteSpace: 'nowrap'
+                letterSpacing: '0.03em',
+                whiteSpace: 'nowrap',
+                borderBottom: '2px solid rgba(0,0,0,0.1)'
               }}>{header}</th>
             ))}
           </tr>
         </thead>
         <tbody>
           {rows.map((row, rowIdx) => {
+            // Description sub-row detection
+            const isDescRow = row.length > 0 && typeof row[0] === 'string' && row[0] === '__DESC__';
+            if (isDescRow) {
+              const descText = row[1] || '-';
+              if (!descText || descText === '-') return null;
+              return (
+                <tr key={rowIdx} style={{ background: '#f0f4f8' }}>
+                  <td colSpan={headers.length} style={{
+                    padding: compact ? '3px 8px 5px 20px' : '4px 10px 6px 24px',
+                    borderBottom: '2px solid #cbd5e1',
+                    color: '#475569',
+                    fontSize: compact ? '6.5pt' : '7.5pt',
+                    fontStyle: 'italic',
+                    whiteSpace: 'normal',
+                    wordBreak: 'break-word',
+                    lineHeight: 1.4
+                  }}>
+                    <span style={{ 
+                      fontWeight: '700', 
+                      color: COLORS.primary, 
+                      marginRight: '6px',
+                      fontSize: compact ? '6pt' : '7pt',
+                      textTransform: 'uppercase',
+                      letterSpacing: '0.02em',
+                      background: '#dbeafe',
+                      padding: '1px 5px',
+                      borderRadius: '2px'
+                    }}>Aç.</span>{descText}
+                  </td>
+                </tr>
+              );
+            }
+
             // Section header detection
             const isSectionHeader = row.length > 0 && typeof row[0] === 'string' &&
               (row[0].includes('TOP') || row[0].includes('BOTTOM') || row[0].includes('BAZLI') ||
-               row[0].includes('ANALİZ') || row[0].includes('ÖZET') || row[0].includes('PERSONEL') ||
-               row[0].includes('HAT') || row[0].includes('PARÇA') || row[0].includes('ROBOT'));
+               row[0].includes('ANALİZ') || row[0].includes('ÖZET'));
 
             if (isSectionHeader) {
-              const isTop = row[0].includes('TOP') || row[0].includes('EN YÜKSEK');
-              const isBottom = row[0].includes('BOTTOM') || row[0].includes('EN DÜŞÜK');
               return (
                 <tr key={rowIdx}>
                   <td colSpan={headers.length} style={{
-                    padding: '10px 12px',
+                    padding: '8px 10px',
                     fontWeight: '700',
-                    fontSize: '9pt',
-                    color: isTop ? COLORS.secondary : isBottom ? '#b91c1c' : COLORS.primary,
-                    background: isTop ? '#dbeafe' : isBottom ? '#fee2e2' : '#f1f5f9',
-                    borderTop: '2px solid ' + (isTop ? '#3b82f6' : isBottom ? '#ef4444' : '#cbd5e1'),
+                    fontSize: '8pt',
+                    color: COLORS.primary,
+                    background: '#e0e7ff',
+                    borderTop: `2px solid ${COLORS.primary}`,
                     textTransform: 'uppercase',
                     letterSpacing: '0.03em'
                   }}>{row[0]}</td>
@@ -567,17 +606,39 @@ const GeneralReportLayout = ({ reportData }) => {
               );
             }
 
+            const currentDataRowIdx = dataRowIndex++;
+            const isEvenRow = currentDataRowIdx % 2 === 0;
+
             return (
-              <tr key={rowIdx} style={{ background: zebraStripe && rowIdx % 2 === 1 ? '#f8fafc' : '#fff' }}>
-                {row.map((cell, cellIdx) => (
-                  <td key={cellIdx} style={{
-                    padding: '7px 10px',
-                    borderBottom: '1px solid #e5e7eb',
-                    color: '#1f2937',
-                    fontSize: '9pt',
-                    fontWeight: cellIdx === 0 ? '500' : '400'
-                  }}>{cell}</td>
-                ))}
+              <tr key={rowIdx} style={{ 
+                background: zebraStripe ? (isEvenRow ? '#fff' : '#f8fafc') : '#fff',
+                borderBottom: '1px solid #e2e8f0'
+              }}>
+                {row.map((cell, cellIdx) => {
+                  const isWrap = wrapColumns.includes(cellIdx);
+                  const isNoTruncate = noTruncateColumns.includes(cellIdx);
+                  const isRightAlign = rightAlignColumns.includes(cellIdx);
+                  const allowWrap = isWrap || isNoTruncate;
+                  const isFirstCol = cellIdx === 0;
+                  const isLastCol = cellIdx === row.length - 1;
+                  return (
+                    <td key={cellIdx} style={{
+                      padding: compact ? '4px 5px' : '5px 8px',
+                      borderBottom: '1px solid #e5e7eb',
+                      color: isFirstCol ? COLORS.primary : '#1f2937',
+                      fontSize: compact ? '6.5pt' : '7.5pt',
+                      fontWeight: isFirstCol ? '600' : '400',
+                      ...(allowWrap
+                        ? { wordBreak: 'break-word', overflowWrap: 'break-word', whiteSpace: 'normal', lineHeight: 1.3 }
+                        : columnWidths
+                          ? { whiteSpace: 'normal', overflow: 'hidden', textOverflow: 'ellipsis', lineHeight: 1.3 }
+                          : { whiteSpace: 'nowrap' }
+                      ),
+                      ...(isRightAlign ? { textAlign: 'right', fontFamily: 'monospace', letterSpacing: '-0.02em' } : {}),
+                      ...(isLastCol && !isRightAlign ? { fontWeight: '600' } : {})
+                    }}>{cell}</td>
+                  );
+                })}
               </tr>
             );
           })}
@@ -594,8 +655,8 @@ const GeneralReportLayout = ({ reportData }) => {
       background: '#fff',
       color: '#1f2937',
       fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif',
-      width: '210mm',
-      minHeight: '297mm',
+      width: reportData?.landscape ? '297mm' : '210mm',
+      minHeight: reportData?.landscape ? '210mm' : '297mm',
       padding: '12mm 15mm',
       boxSizing: 'border-box'
     }}>
@@ -631,40 +692,41 @@ const GeneralReportLayout = ({ reportData }) => {
 
       {/* ===== KPI KARTLARI ===== */}
       {reportData.kpiCards && reportData.kpiCards.length > 0 && (
-        <section style={{ marginBottom: '20px' }}>
+        <section style={{ marginBottom: '18px' }}>
           <h2 style={{
             fontSize: '10pt',
             fontWeight: '700',
             color: COLORS.primary,
             margin: '0 0 10px 0',
-            paddingBottom: '6px',
-            borderBottom: '2px solid #1e3a5f',
+            paddingBottom: '8px',
+            borderBottom: `3px solid ${COLORS.primary}`,
             textTransform: 'uppercase',
             letterSpacing: '0.05em'
           }}>Özet Göstergeler</h2>
           <div style={{
             display: 'grid',
-            gridTemplateColumns: `repeat(${Math.min(reportData.kpiCards.length, 5)}, 1fr)`,
-            gap: '10px'
+            gridTemplateColumns: `repeat(${Math.min(reportData.kpiCards.length, reportData.landscape ? 6 : 5)}, 1fr)`,
+            gap: '8px'
           }}>
             {reportData.kpiCards.map((card, index) => (
               <div key={index} style={{
                 background: kpiColors[index % kpiColors.length],
-                padding: '10px 12px',
-                borderRadius: '6px'
+                padding: '8px 10px',
+                borderRadius: '6px',
+                boxShadow: '0 1px 3px rgba(0,0,0,0.12)'
               }}>
                 <p style={{
-                  fontSize: '7pt',
+                  fontSize: '6.5pt',
                   fontWeight: '600',
-                  color: 'rgba(255,255,255,0.8)',
-                  margin: '0 0 4px 0',
+                  color: 'rgba(255,255,255,0.85)',
+                  margin: '0 0 3px 0',
                   textTransform: 'uppercase',
-                  letterSpacing: '0.02em',
+                  letterSpacing: '0.03em',
                   lineHeight: '1.2'
                 }}>{card.title}</p>
                 <p style={{
-                  fontSize: '14pt',
-                  fontWeight: '700',
+                  fontSize: '12pt',
+                  fontWeight: '800',
                   color: '#fff',
                   margin: '0',
                   lineHeight: '1.1'
@@ -719,8 +781,8 @@ const GeneralReportLayout = ({ reportData }) => {
       {/* ===== BÖLÜMLER (SECTIONS) ===== */}
       {reportData.sections && reportData.sections.length > 0 && (
         <section style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 12px 0', paddingBottom: '6px', borderBottom: `2px solid ${COLORS.primary}`, textTransform: 'uppercase' }}>Detaylı Analiz</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 14px 0', paddingBottom: '8px', borderBottom: `3px solid ${COLORS.primary}`, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Detaylı Analiz</h2>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
             {reportData.sections.map((section, sectionIndex) => {
               const isTopSection = section.title && (section.title.includes('TOP') || section.title.includes('EN YÜKSEK'));
               const isBottomSection = section.title && section.title.includes('BOTTOM');
@@ -740,14 +802,15 @@ const GeneralReportLayout = ({ reportData }) => {
 
               const headers = section.headers || (section.tableData && section.tableData.headers);
               const rows = section.rows || (section.tableData && section.tableData.rows);
+              const sectionOptions = section.options || {};
 
               return (
-                <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', breakInside: 'avoid' }}>
-                  <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 12px', background: '#f8fafc' }}>
-                    <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase' }}>{section.title}</h3>
+                <div key={sectionIndex} style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'hidden', breakInside: 'avoid', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                  <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 14px', background: isTopSection ? '#eff6ff' : '#f8fafc', borderBottom: `1px solid #e2e8f0` }}>
+                    <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{section.title}</h3>
                     </div>
                   {headers && rows && rows.length > 0 ? (
-                    <div style={{ padding: '0' }}>{renderTable(headers, rows, { headerBg })}</div>
+                    <div style={{ padding: '0' }}>{renderTable(headers, rows, { headerBg, ...sectionOptions })}</div>
                   ) : section.type === 'list' && section.items ? (
                     <div style={{ padding: '10px 12px' }}>
                       {section.items.map((item, itemIdx) => (
@@ -774,9 +837,9 @@ const GeneralReportLayout = ({ reportData }) => {
       {/* ===== TABLO VERİLERİ ===== */}
       {reportData.tableData && reportData.tableData.headers && reportData.tableData.rows && (
         <section style={{ marginBottom: '20px' }}>
-          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 12px 0', paddingBottom: '6px', borderBottom: `2px solid ${COLORS.primary}`, textTransform: 'uppercase' }}>Detaylı Veriler</h2>
-          <div style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden' }}>
-            {renderTable(reportData.tableData.headers, reportData.tableData.rows)}
+          <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 14px 0', paddingBottom: '8px', borderBottom: `3px solid ${COLORS.primary}`, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Detaylı Veriler</h2>
+          <div style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'hidden', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+            {renderTable(reportData.tableData.headers, reportData.tableData.rows, reportData.tableData.options)}
           </div>
         </section>
       )}
@@ -793,10 +856,35 @@ const GeneralReportLayout = ({ reportData }) => {
 const PrintPage = () => {
   const [searchParams] = useSearchParams();
   const navigate = useNavigate();
+  const landscapeFromUrl = new URLSearchParams(window.location.search).get('landscape') === '1';
   const [reportContent, setReportContent] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [pageClass, setPageClass] = useState('page-portrait');
+  const [pageClass, setPageClass] = useState(landscapeFromUrl ? 'page-landscape' : 'page-portrait');
+
+  // URL'den landscape=1 varsa @page stilini hemen uygula (veri gelmeden önce)
+  useEffect(() => {
+    if (landscapeFromUrl) {
+      const styleId = 'print-landscape-page-style';
+      let styleEl = document.getElementById(styleId);
+      if (styleEl) styleEl.remove();
+      styleEl = document.createElement('style');
+      styleEl.id = styleId;
+      styleEl.textContent = `
+        @page { size: A4 landscape !important; margin: 8mm 10mm; }
+        @media print {
+          @page { size: A4 landscape !important; margin: 8mm 10mm; }
+        }
+      `;
+      document.head.appendChild(styleEl);
+    }
+    return () => {
+      if (landscapeFromUrl) {
+        const el = document.getElementById('print-landscape-page-style');
+        if (el) el.remove();
+      }
+    };
+  }, [landscapeFromUrl]);
 
   useEffect(() => {
     const snapshotId = searchParams.get('snapshot_id');
@@ -823,36 +911,25 @@ const PrintPage = () => {
         const data = await fetchSnapshot(snapshotId);
         setReportContent(data);
 
-        if (data.certificateData) {
+        if (data.certificateData || data.landscape) {
           setPageClass('page-landscape');
-          // Sertifika için landscape CSS'i zorla ekle
-          const landscapeStyle = document.createElement('style');
-          landscapeStyle.id = 'certificate-landscape-style';
-          landscapeStyle.textContent = `
-                @page {
-                  size: A4 landscape;
-                  margin: 0;
-                }
-                @media print {
-                  @page {
-                    size: A4 landscape;
-                    margin: 0;
-                  }
-                }
-              `;
-          // Eğer daha önce eklenmişse kaldır
-          const existingStyle = document.getElementById('certificate-landscape-style');
-          if (existingStyle) {
-            existingStyle.remove();
-          }
-          document.head.appendChild(landscapeStyle);
+          // Landscape @page kuralını document.head'e ekle (statik CSS'ten sonra gelsin)
+          const styleId = 'print-landscape-page-style';
+          let styleEl = document.getElementById(styleId);
+          if (styleEl) styleEl.remove();
+          styleEl = document.createElement('style');
+          styleEl.id = styleId;
+          styleEl.textContent = `
+            @page { size: A4 landscape !important; margin: ${data.certificateData ? '0' : '8mm 10mm'}; }
+            @media print {
+              @page { size: A4 landscape !important; margin: ${data.certificateData ? '0' : '8mm 10mm'}; }
+            }
+          `;
+          document.head.appendChild(styleEl);
         } else {
           setPageClass('page-portrait');
-          // Portrait için eski landscape style'ı kaldır
-          const existingStyle = document.getElementById('certificate-landscape-style');
-          if (existingStyle) {
-            existingStyle.remove();
-          }
+          const styleEl = document.getElementById('print-landscape-page-style');
+          if (styleEl) styleEl.remove();
         }
 
         document.title = `Rapor - ${data.wpsData?.wps_code || data.title || 'Detay'}`;
@@ -865,6 +942,10 @@ const PrintPage = () => {
     };
 
     loadData();
+    return () => {
+      const el = document.getElementById('print-landscape-page-style');
+      if (el) el.remove();
+    };
   }, [searchParams, navigate]);
 
   if (loading) {
@@ -914,136 +995,64 @@ const PrintPage = () => {
       <div className={`print-area ${pageClass}`}>
         {renderLayout()}
       </div>
-      <style jsx global>{`
-        /* ===== EKRAN GÖRÜNÜMÜ ===== */
-              body {
-                -webkit-print-color-adjust: exact !important;
-                print-color-adjust: exact !important;
+      <style dangerouslySetInnerHTML={{ __html: `
+        body {
+          -webkit-print-color-adjust: exact !important;
+          print-color-adjust: exact !important;
           background-color: #e5e7eb;
           margin: 0;
           padding: 0;
-              }
-              
-              @media screen {
-                .print-area {
-                  display: flex;
-                  justify-content: center;
-                  align-items: flex-start;
+        }
+        @media screen {
+          .print-area {
+            display: flex;
+            justify-content: center;
+            align-items: flex-start;
             padding: 24px 0;
             min-height: 100vh;
-                }
-                .print-container {
+          }
+          .print-container {
             box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
             background: white;
-                }
-                .page-portrait .print-container {
-                  width: 210mm;
-                }
-                .page-landscape .print-container {
-                  width: 297mm;
-                }
-                .certificate-layout {
-                  aspect-ratio: 297 / 210;
-                }
-              }
-              
-        /* ===== BASKI GÖRÜNÜMÜ ===== */
-              @media print {
+          }
+          .page-portrait .print-container { width: 210mm; }
+          .page-landscape .print-container { width: 297mm; }
+          .certificate-layout { aspect-ratio: 297 / 210; }
+        }
+        @page {
+          size: ${pageClass === 'page-landscape' ? 'A4 landscape' : 'A4 portrait'} !important;
+          margin: ${reportContent?.certificateData ? '0' : '8mm 10mm'};
+        }
+        @media print {
           @page {
-            size: A4 portrait;
-            margin: 8mm 10mm;
-                  }
-                  
-                  html, body {
-                    margin: 0 !important;
-                    padding: 0 !important;
-                    background: white !important;
-            font-size: 10pt;
-                  }
-                  
-                  .no-print {
-                      display: none !important;
-                  }
-              
-                  .print-area {
-            display: block;
-            width: 100%;
-            margin: 0;
-            padding: 0;
-                  }
-                  
-                  .print-container {
-            width: 100% !important;
-            max-width: 100% !important;
-            min-height: auto !important;
-                      box-shadow: none !important;
-                      border: none !important;
-            padding: 0 !important;
+            size: ${pageClass === 'page-landscape' ? 'A4 landscape' : 'A4 portrait'} !important;
+            margin: ${reportContent?.certificateData ? '0' : '8mm 10mm'};
+          }
+          html, body {
             margin: 0 !important;
+            padding: 0 !important;
             background: white !important;
+            font-size: 10pt;
           }
-
-          /* Tablo Yönetimi */
-          table {
-            width: 100% !important;
-            border-collapse: collapse !important;
-            page-break-inside: auto !important;
+          .no-print { display: none !important; }
+          .print-area { display: block; width: 100%; margin: 0; padding: 0; }
+          .print-container {
+            width: 100% !important; max-width: 100% !important; min-height: auto !important;
+            box-shadow: none !important; border: none !important;
+            padding: 0 !important; margin: 0 !important; background: white !important;
           }
-
-          thead {
-            display: table-header-group !important;
-          }
-
-          tbody {
-            display: table-row-group !important;
-          }
-
-          tr {
-                      page-break-inside: avoid !important;
-                      break-inside: avoid !important;
-                  }
-                  
-          th, td {
-                      page-break-inside: avoid !important;
-                  }
-                  
-          /* Bölüm ve Kart Yönetimi */
-          section {
-                      page-break-inside: avoid !important;
-                      break-inside: avoid !important;
-                  }
-                  
-          header {
-            page-break-after: avoid !important;
-                  }
-                  
-          .signature-section, footer {
-                      page-break-inside: avoid !important;
-                      break-inside: avoid !important;
-                  }
-                  
-          /* Grafik Yönetimi */
-          .recharts-responsive-container {
-                      page-break-inside: avoid !important;
-                      break-inside: avoid !important;
-                  }
-
-          /* Sertifika Layout */
-          .certificate-layout {
-            width: 100% !important;
-            height: 100% !important;
-            page-break-inside: avoid !important;
-          }
+          table { width: 100% !important; border-collapse: collapse !important; page-break-inside: auto !important; }
+          thead { display: table-header-group !important; }
+          tbody { display: table-row-group !important; }
+          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
+          th, td { page-break-inside: avoid !important; }
+          section { page-break-inside: avoid !important; break-inside: avoid !important; }
+          header { page-break-after: avoid !important; }
+          .signature-section, footer { page-break-inside: avoid !important; break-inside: avoid !important; }
+          .recharts-responsive-container { page-break-inside: avoid !important; break-inside: avoid !important; }
+          .certificate-layout { width: 100% !important; height: 100% !important; page-break-inside: avoid !important; }
         }
-
-        /* Landscape için özel */
-        @media print and (orientation: landscape) {
-                @page {
-                  size: A4 landscape;
-            margin: 8mm 10mm;
-          }
-        }
-      `}</style>
+      ` }} />
     </>
   );
 };

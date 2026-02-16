@@ -7,11 +7,11 @@ import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { useToast } from '@/components/ui/use-toast';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangePicker, DatePicker } from '@/components/ui/date-range-picker';
+import { DateRangePicker, DatePicker, CLOSE_DATE_PICKERS_EVENT } from '@/components/ui/date-range-picker';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription, DialogFooter } from '@/components/ui/dialog';
 import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs";
 import { formatCurrency, cn, logAction, openPrintWindow } from '@/lib/utils';
-import { format, startOfMonth, endOfMonth, subMonths, startOfYear, subYears, startOfDay, endOfDay, startOfWeek, endOfWeek, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, subMonths, subDays, startOfYear, subYears, startOfDay, endOfDay, startOfWeek, endOfWeek, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
@@ -624,6 +624,7 @@ const ComparativeCost = () => {
     const now = new Date();
     let from, to = endOfDay(now);
     if (quickSelect === 'today') from = startOfDay(now);
+    else if (quickSelect === 'yesterday') { const d = subDays(now, 1); from = startOfDay(d); to = endOfDay(d); }
     else if (quickSelect === 'thisWeek') from = startOfWeek(now, { locale: tr });
     else if (quickSelect === 'thisMonth') from = startOfMonth(now);
     else if (quickSelect === 'last3Months') from = startOfDay(subMonths(now, 3));
@@ -742,7 +743,7 @@ const ComparativeCost = () => {
       <Card>
         <CardHeader><div className="flex justify-between items-center"><div><CardTitle className="flex items-center space-x-2"><TrendingUp className="h-5 w-5" /><span>Operasyon Azaltma Dashboard</span></CardTitle><CardDescription>Operasyonel iyileştirmeleri ve maliyet etkilerini takip edin.</CardDescription></div><div className="flex space-x-2"><Button onClick={() => { setEditingScenario(null); setFormState(initialFormState); setAnalysisResult(null); setShowFormDialog(true); setIsDirty(false); }}><Plus className="h-4 w-4 mr-2" />Yeni Kayıt</Button><Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button><Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button></div></div></CardHeader>
         <CardContent>
-          <Tabs defaultValue="data" className="w-full">
+          <Tabs defaultValue="data" className="w-full" onValueChange={() => window.dispatchEvent(new CustomEvent(CLOSE_DATE_PICKERS_EVENT))}>
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="data">Veri Takip</TabsTrigger>
               <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>
@@ -752,8 +753,19 @@ const ComparativeCost = () => {
               <div className="mb-4 p-4 bg-gray-50 rounded-lg space-y-4 no-print">
                 <div className="space-y-2">
                   <Label>Filtreler</Label>
-                  <div className="flex flex-wrap items-center gap-2">
-                    <Tabs value={filters.quickSelect} onValueChange={handleDateFilterChange} className="w-auto"><TabsList><TabsTrigger value="today">Bugün</TabsTrigger><TabsTrigger value="thisWeek">Bu Hafta</TabsTrigger><TabsTrigger value="thisMonth">Bu Ay</TabsTrigger><TabsTrigger value="last3Months">Son 3 Ay</TabsTrigger><TabsTrigger value="ytd">Yıl Başı</TabsTrigger><TabsTrigger value="last12Months">Son 12 Ay</TabsTrigger><TabsTrigger value="allTime">Tüm Zamanlar</TabsTrigger></TabsList></Tabs>
+                  <div className="flex flex-wrap items-center gap-2 overflow-x-auto">
+                    <Tabs value={filters.quickSelect} onValueChange={handleDateFilterChange} className="w-full">
+                      <TabsList className="flex flex-wrap h-auto gap-1 p-1 bg-muted/50">
+                        <TabsTrigger value="today" className="text-xs sm:text-sm">Bugün</TabsTrigger>
+                        <TabsTrigger value="yesterday" className="text-xs sm:text-sm">Dün</TabsTrigger>
+                        <TabsTrigger value="thisWeek" className="text-xs sm:text-sm">Bu Hafta</TabsTrigger>
+                        <TabsTrigger value="thisMonth" className="text-xs sm:text-sm">Bu Ay</TabsTrigger>
+                        <TabsTrigger value="last3Months" className="text-xs sm:text-sm">Son 3 Ay</TabsTrigger>
+                        <TabsTrigger value="ytd" className="text-xs sm:text-sm">Yıl Başı</TabsTrigger>
+                        <TabsTrigger value="last12Months" className="text-xs sm:text-sm">Son 12 Ay</TabsTrigger>
+                        <TabsTrigger value="allTime" className="text-xs sm:text-sm">Tüm Zamanlar</TabsTrigger>
+                      </TabsList>
+                    </Tabs>
                     <DateRangePicker value={filters.date} onChange={(date) => setFilters({ ...filters, date, quickSelect: 'custom' })} placeholder="Özel Aralık" className="w-full md:w-[260px]" />
                     <Select onValueChange={(v) => setFilters({ ...filters, lines: v === 'all' ? [] : [v] })}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id.toString()}>{l.name}</SelectItem>)}</SelectContent></Select>
                     <Select onValueChange={(v) => setFilters({ ...filters, robots: v === 'all' ? [] : [v] })}><SelectTrigger className="w-[160px]"><SelectValue placeholder="Tüm Robotlar" /></SelectTrigger><SelectContent><SelectItem value="all">Tüm Robotlar</SelectItem>{robots.map(r => <SelectItem key={r.id} value={r.id.toString()}>{r.name}</SelectItem>)}</SelectContent></Select>

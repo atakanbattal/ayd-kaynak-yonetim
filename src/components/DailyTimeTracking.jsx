@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Plus, Trash2, Save, Calendar as CalendarIcon, FileText, Edit, Search, Download } from 'lucide-react';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Clock, Plus, Trash2, Save, Calendar as CalendarIcon, FileText, Edit, Search, Download, LayoutGrid, List } from 'lucide-react';
+import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -11,7 +11,7 @@ import { DateRangePicker } from '@/components/ui/date-range-picker';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
-import { logAction } from '@/lib/utils';
+import { logAction, openPrintWindow } from '@/lib/utils';
 import { format, startOfMonth, endOfMonth } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
@@ -26,6 +26,8 @@ const DailyTimeTracking = () => {
     const [showDialog, setShowDialog] = useState(false);
     const [editingRecord, setEditingRecord] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
+    const [viewMode, setViewMode] = useState('template'); // 'template' | 'list' - varsayılan taslak
+    const [templateDate, setTemplateDate] = useState(new Date().toISOString().split('T')[0]);
 
     const [formState, setFormState] = useState({
         record_date: new Date().toISOString().split('T')[0],
@@ -80,14 +82,30 @@ const DailyTimeTracking = () => {
         fetchData();
     }, [fetchData]);
 
-    // Filtreleme
+    // Robot numarasını çıkar (RK001 -> 1, RK002 -> 2) - RK1'den başlayarak sıralı
+    const getRobotSortNum = (robotNo) => {
+        if (!robotNo) return 9999;
+        const m = String(robotNo).match(/RK0*(\d+)/i) || String(robotNo).match(/(\d+)/);
+        return m ? parseInt(m[1], 10) : 9999;
+    };
+
+    // Filtreleme ve sıralama: Tarih (azalan) → Robot No (RK1, RK2...) → İstasyon
     const filteredRecords = useMemo(() => {
-        return records.filter(r => {
+        const filtered = records.filter(r => {
             if (filters.line_id !== 'all' && r.line_id !== filters.line_id) return false;
             if (filters.robot_no && !r.robot_no.toLowerCase().includes(filters.robot_no.toLowerCase())) return false;
             if (filters.part_code && !r.part_code.toLowerCase().includes(filters.part_code.toLowerCase())) return false;
             if (filters.station !== 'all' && r.station !== Number(filters.station)) return false;
             return true;
+        });
+        return [...filtered].sort((a, b) => {
+            const dateA = new Date(a.record_date).getTime();
+            const dateB = new Date(b.record_date).getTime();
+            if (dateB !== dateA) return dateB - dateA;
+            const robotNumA = getRobotSortNum(a.robot_no);
+            const robotNumB = getRobotSortNum(b.robot_no);
+            if (robotNumA !== robotNumB) return robotNumA - robotNumB;
+            return (a.station || 0) - (b.station || 0);
         });
     }, [records, filters]);
 
@@ -97,6 +115,129 @@ const DailyTimeTracking = () => {
         const ifsDurationTotal = filteredRecords.reduce((sum, r) => sum + (r.ifs_duration || 0), 0);
         return { partDurationTotal, ifsDurationTotal };
     }, [filteredRecords]);
+
+    // Taslak satırları: Her robot için 2 istasyon (robot.line_id ile hat bilgisi)
+    const lineMap = useMemo(() => new Map(lines.map(l => [l.id, l.name])), [lines]);
+    const templateRows = useMemo(() => {
+        const rows = [];
+        const getRobotSortNum = (name) => {
+            if (!name) return 9999;
+            const m = String(name).match(/RK0*(\d+)/i) || String(name).match(/(\d+)/);
+            return m ? parseInt(m[1], 10) : 9999;
+        };
+        const sortedRobots = [...robots.filter(r => r.line_id)].sort((a, b) => {
+            const lineA = (lineMap.get(a.line_id) || '').localeCompare(lineMap.get(b.line_id) || '');
+            if (lineA !== 0) return lineA;
+            return getRobotSortNum(a.name) - getRobotSortNum(b.name);
+        });
+        sortedRobots.forEach(r => {
+            const lineName = lineMap.get(r.line_id) || 'N/A';
+            for (let station = 1; station <= 2; station++) {
+                rows.push({
+                    key: `${r.id}-${station}`,
+                    robot_id: r.id,
+                    robot_no: r.name,
+                    line_id: r.line_id,
+                    line_name: lineName,
+                    station,
+                    part_code: '',
+                    part_duration: '',
+                    ifs_duration: '',
+                    description: '',
+                    existingId: null,
+                });
+            }
+        });
+        return rows;
+    }, [robots, lineMap]);
+
+    // Taslak için mevcut kayıtları yükle ve birleştir
+    const [templateData, setTemplateData] = useState([]);
+    const [templateLoading, setTemplateLoading] = useState(false);
+    const loadTemplateForDate = useCallback(async (dateStr) => {
+        if (!dateStr) return;
+        setTemplateLoading(true);
+        try {
+            const { data } = await supabase
+                .from('daily_time_tracking')
+                .select('*')
+                .eq('record_date', dateStr);
+            const existingMap = new Map();
+            (data || []).forEach(rec => {
+                // robot_id ile eşleştirme - aynı isimde birden fazla robot varsa doğru satıra düşmesi için
+                const key = rec.robot_id ? `${rec.robot_id}-${rec.station}` : `${rec.robot_no}-${rec.station}`;
+                existingMap.set(key, rec);
+            });
+            const merged = templateRows.map(row => {
+                const key = row.robot_id ? `${row.robot_id}-${row.station}` : `${row.robot_no}-${row.station}`;
+                const existing = existingMap.get(key);
+                if (existing) {
+                    return {
+                        ...row,
+                        part_code: existing.part_code || '',
+                        part_duration: existing.part_duration != null ? String(existing.part_duration) : '',
+                        ifs_duration: existing.ifs_duration != null ? String(existing.ifs_duration) : '',
+                        description: existing.description || '',
+                        existingId: existing.id,
+                    };
+                }
+                return row;
+            });
+            setTemplateData(merged);
+        } catch (e) {
+            toast({ title: 'Hata', description: e.message, variant: 'destructive' });
+            setTemplateData(templateRows);
+        } finally {
+            setTemplateLoading(false);
+        }
+    }, [templateRows, toast]);
+
+    useEffect(() => {
+        if (viewMode === 'template' && templateRows.length > 0) {
+            loadTemplateForDate(templateDate);
+        }
+    }, [viewMode, templateDate, templateRows.length, loadTemplateForDate]);
+
+    const updateTemplateRow = (key, field, value) => {
+        setTemplateData(prev => prev.map(r => r.key === key ? { ...r, [field]: value } : r));
+    };
+
+    const handleSaveTemplate = async () => {
+        const toSave = templateData.filter(r => (r.part_code || '').trim() !== '' || (r.part_duration || '').trim() !== '');
+        if (toSave.length === 0) {
+            toast({ title: 'Uyarı', description: 'En az bir satırda parça kodu veya parça süresi girin.', variant: 'default' });
+            return;
+        }
+        try {
+            for (const row of toSave) {
+                const partDur = row.part_duration ? parseFloat(row.part_duration) : null;
+                const ifsDur = row.ifs_duration ? parseFloat(row.ifs_duration) : null;
+                const payload = {
+                    record_date: templateDate,
+                    robot_no: row.robot_no,
+                    robot_id: row.robot_id || null,
+                    station: row.station,
+                    line_id: row.line_id,
+                    part_code: (row.part_code || '').trim(),
+                    part_duration: partDur,
+                    ifs_duration: ifsDur,
+                    description: (row.description || '').trim() || null,
+                    updated_at: new Date().toISOString(),
+                };
+                if (row.existingId) {
+                    await supabase.from('daily_time_tracking').update(payload).eq('id', row.existingId);
+                } else {
+                    await supabase.from('daily_time_tracking').insert(payload);
+                }
+            }
+            toast({ title: 'Başarılı', description: `${toSave.length} kayıt kaydedildi.` });
+            logAction('SAVE_TEMPLATE_DAILY_TIME', `${templateDate}: ${toSave.length} satır`, user);
+            loadTemplateForDate(templateDate);
+            fetchData();
+        } catch (error) {
+            toast({ title: 'Kayıt Başarısız', description: error.message, variant: 'destructive' });
+        }
+    };
 
     const resetForm = () => {
         setFormState({
@@ -166,9 +307,11 @@ const DailyTimeTracking = () => {
             return;
         }
 
+        const matchedRobot = robots.find(r => r.name === formState.robot_no.trim());
         const dataToSave = {
             record_date: formState.record_date,
             robot_no: formState.robot_no.trim(),
+            robot_id: matchedRobot?.id || null,
             station: Number(formState.station),
             line_id: formState.line_id,
             part_code: formState.part_code.trim(),
@@ -212,6 +355,72 @@ const DailyTimeTracking = () => {
         setDeleteConfirm(null);
     };
 
+    // Rapor Oluştur (Yazdırma penceresi)
+    const handleGenerateReport = async () => {
+        try {
+            let reportRecords;
+            if (viewMode === 'template') {
+                let dateRecords = records.filter(r => r.record_date === templateDate);
+                if (dateRecords.length === 0) {
+                    const { data } = await supabase.from('daily_time_tracking').select('*').eq('record_date', templateDate);
+                    const lm = new Map(lines.map(l => [l.id, l.name]));
+                    dateRecords = (data || []).map(r => ({ ...r, line_name: lm.get(r.line_id) || 'N/A' }));
+                }
+                reportRecords = [...dateRecords].sort((a, b) => {
+                    const rnA = getRobotSortNum(a.robot_no);
+                    const rnB = getRobotSortNum(b.robot_no);
+                    if (rnA !== rnB) return rnA - rnB;
+                    return (a.station || 0) - (b.station || 0);
+                });
+            } else {
+                reportRecords = filteredRecords;
+            }
+            const partTotal = reportRecords.reduce((s, r) => s + (r.part_duration || 0), 0);
+            const ifsTotal = reportRecords.reduce((s, r) => s + (r.ifs_duration || 0), 0);
+            const periodLabel = viewMode === 'template'
+                ? format(new Date(templateDate + 'T12:00:00'), 'dd.MM.yyyy', { locale: tr })
+                : `${format(filters.dateRange?.from || new Date(), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`;
+            const reportData = {
+                title: 'Günlük Süre Takibi - Detaylı Rapor',
+                reportId: `RPR-DAILY-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`,
+                filters: {
+                    'Rapor Dönemi': periodLabel,
+                    'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
+                    'Toplam Kayıt': reportRecords.length + ' adet',
+                    'Toplam Parça Süresi': partTotal.toFixed(2) + ' sn',
+                    'Toplam IFS Süre': ifsTotal.toFixed(2) + ' sn',
+                },
+                kpiCards: [
+                    { title: 'Toplam Kayıt', value: reportRecords.length.toString() },
+                    { title: 'Parça Süresi (sn)', value: partTotal.toFixed(2) },
+                    { title: 'IFS Süre (sn)', value: ifsTotal.toFixed(2) },
+                ],
+                tableData: {
+                    headers: ['Tarih', 'Robot No', 'İst.', 'Hat', 'Parça', 'Süre (sn)', 'IFS (sn)', 'Açıklama'],
+                    rows: reportRecords.map(r => [
+                        format(new Date(r.record_date), 'dd.MM.yyyy'),
+                        r.robot_no,
+                        'İst. ' + r.station,
+                        r.line_name,
+                        r.part_code || '-',
+                        r.part_duration != null ? String(r.part_duration) : '-',
+                        r.ifs_duration != null ? String(r.ifs_duration) : '-',
+                        r.description || '-',
+                    ]),
+                    options: {
+                        columnWidths: ['10%', '10%', '8%', '11%', '12%', '12%', '12%', '25%'],
+                        wrapColumns: [7],
+                        rightAlignColumns: [5, 6],
+                    },
+                },
+            };
+            await openPrintWindow(reportData, toast);
+            toast({ title: 'Rapor Hazır', description: 'Rapor yeni sekmede açıldı.' });
+        } catch (error) {
+            toast({ title: 'Rapor Oluşturulamadı', description: error.message, variant: 'destructive' });
+        }
+    };
+
     // CSV Export
     const handleExport = () => {
         if (filteredRecords.length === 0) {
@@ -220,7 +429,7 @@ const DailyTimeTracking = () => {
         }
 
         const lineMap = new Map(lines.map(l => [l.id, l.name]));
-        const headers = ['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (dk)', 'IFS Süre (dk)', 'Açıklama'];
+        const headers = ['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (sn)', 'IFS Süre (sn)', 'Açıklama'];
         const rows = filteredRecords.map(r => [
             format(new Date(r.record_date), 'dd.MM.yyyy'),
             r.robot_no,
@@ -273,7 +482,7 @@ const DailyTimeTracking = () => {
     return (
         <div className="space-y-6">
             {/* Header */}
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between flex-wrap gap-4">
                 <div className="flex items-center gap-3">
                     <Clock className="h-8 w-8 text-indigo-600" />
                     <div>
@@ -281,17 +490,149 @@ const DailyTimeTracking = () => {
                         <p className="text-sm text-gray-500">Robot bazlı parça süre kayıt ve takip sistemi</p>
                     </div>
                 </div>
-                <div className="flex gap-2">
+                <div className="flex gap-2 flex-wrap">
+                    <div className="flex rounded-lg border border-gray-200 p-1 bg-gray-50">
+                        <Button
+                            variant={viewMode === 'template' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setViewMode('template')}
+                            className={viewMode === 'template' ? 'bg-indigo-600' : ''}
+                        >
+                            <LayoutGrid className="h-4 w-4 mr-1" /> Taslak Giriş
+                        </Button>
+                        <Button
+                            variant={viewMode === 'list' ? 'default' : 'ghost'}
+                            size="sm"
+                            onClick={() => setViewMode('list')}
+                            className={viewMode === 'list' ? 'bg-indigo-600' : ''}
+                        >
+                            <List className="h-4 w-4 mr-1" /> Liste
+                        </Button>
+                    </div>
                     <Button variant="outline" onClick={handleExport}>
                         <Download className="h-4 w-4 mr-2" />CSV İndir
                     </Button>
-                    <Button onClick={() => openDialog()}>
-                        <Plus className="h-4 w-4 mr-2" />Yeni Kayıt
+                    <Button variant="outline" onClick={handleGenerateReport}>
+                        <FileText className="h-4 w-4 mr-2" />Rapor Al
                     </Button>
+                    {viewMode === 'list' && (
+                        <Button onClick={() => openDialog()}>
+                            <Plus className="h-4 w-4 mr-2" />Yeni Kayıt
+                        </Button>
+                    )}
                 </div>
             </div>
 
-            {/* Filtreler */}
+            {/* Taslak Giriş Modu */}
+            {viewMode === 'template' && (
+                <Card>
+                    <CardHeader>
+                        <div className="flex flex-wrap items-center justify-between gap-4">
+                            <div>
+                                <CardTitle>Taslak Giriş</CardTitle>
+                                <CardDescription>
+                                    Tarih seçin, robot ve hat bilgileri hazır. Sadece parça kodu ve parça süresini girin.
+                                </CardDescription>
+                            </div>
+                            <div className="flex items-center gap-2">
+                                <Label className="text-sm font-medium">Tarih:</Label>
+                                <Input
+                                    type="date"
+                                    value={templateDate}
+                                    onChange={e => setTemplateDate(e.target.value)}
+                                    className="w-[160px] h-10"
+                                />
+                                <Button onClick={handleSaveTemplate} disabled={templateLoading} className="bg-indigo-600 hover:bg-indigo-700">
+                                    <Save className="h-4 w-4 mr-2" /> Tümünü Kaydet
+                                </Button>
+                            </div>
+                        </div>
+                    </CardHeader>
+                    <CardContent className="p-0">
+                        <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+                            <table className="w-full text-sm">
+                                <thead className="bg-gray-50 sticky top-0 z-10">
+                                    <tr>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[100px]">ROBOT</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[120px]">HAT ADI</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[70px]">İst.</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase min-w-[140px]">PARÇA KODU</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[100px]">PARÇA SÜRESİ (sn)</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[90px]">IFS (sn)</th>
+                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase">Açıklama</th>
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-gray-100">
+                                    {templateLoading ? (
+                                        <tr><td colSpan="7" className="px-4 py-8 text-center text-gray-500">Yükleniyor...</td></tr>
+                                    ) : (
+                                        templateData.map((row, idx) => {
+                                            const lineColors = { ATMACA: 'bg-amber-50', KARTAL: 'bg-sky-50', PARS: 'bg-amber-50/70', KURT: 'bg-emerald-50' };
+                                            const bg = lineColors[row.line_name] || 'bg-white';
+                                            return (
+                                                <tr key={row.key} className={`${bg} hover:bg-gray-50/80`}>
+                                                    <td className="px-4 py-2 font-medium text-gray-900">{row.robot_no}</td>
+                                                    <td className="px-4 py-2 font-medium text-gray-700">{row.line_name}</td>
+                                                    <td className="px-4 py-2">
+                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${row.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                            {row.station}
+                                                        </span>
+                                                    </td>
+                                                    <td className="px-4 py-2">
+                                                        <Input
+                                                            placeholder="Parça kodu"
+                                                            value={row.part_code}
+                                                            onChange={e => updateTemplateRow(row.key, 'part_code', e.target.value)}
+                                                            className="h-9 text-sm border-gray-200"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-2">
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            placeholder="0"
+                                                            value={row.part_duration}
+                                                            onChange={e => updateTemplateRow(row.key, 'part_duration', e.target.value)}
+                                                            className="h-9 text-sm border-gray-200 w-20"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-2">
+                                                        <Input
+                                                            type="number"
+                                                            step="0.01"
+                                                            min="0"
+                                                            placeholder="0"
+                                                            value={row.ifs_duration}
+                                                            onChange={e => updateTemplateRow(row.key, 'ifs_duration', e.target.value)}
+                                                            className="h-9 text-sm border-gray-200 w-20"
+                                                        />
+                                                    </td>
+                                                    <td className="px-4 py-2">
+                                                        <Input
+                                                            placeholder="Opsiyonel"
+                                                            value={row.description}
+                                                            onChange={e => updateTemplateRow(row.key, 'description', e.target.value)}
+                                                            className="h-9 text-sm border-gray-200"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                        {templateData.length === 0 && !templateLoading && (
+                            <p className="text-center py-8 text-gray-500">Robot tanımı bulunamadı. Ana Veri modülünden robot ekleyin.</p>
+                        )}
+                    </CardContent>
+                </Card>
+            )}
+
+            {/* Liste modu: Filtreler, Toplamlar, Tablo */}
+            {viewMode === 'list' && (
+            <>
             <Card>
                 <CardContent className="pt-6">
                     <div className="flex flex-wrap items-center gap-3">
@@ -352,7 +693,7 @@ const DailyTimeTracking = () => {
                         <CardTitle className="text-sm font-medium">Toplam Parça Süresi</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{totals.partDurationTotal.toFixed(2)} dk</div>
+                        <div className="text-2xl font-bold">{totals.partDurationTotal.toFixed(2)} sn</div>
                     </CardContent>
                 </Card>
                 <Card>
@@ -360,7 +701,7 @@ const DailyTimeTracking = () => {
                         <CardTitle className="text-sm font-medium">Toplam IFS Süre</CardTitle>
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{totals.ifsDurationTotal.toFixed(2)} dk</div>
+                        <div className="text-2xl font-bold">{totals.ifsDurationTotal.toFixed(2)} sn</div>
                     </CardContent>
                 </Card>
             </div>
@@ -372,7 +713,7 @@ const DailyTimeTracking = () => {
                         <table className="w-full">
                             <thead className="bg-gray-50">
                                 <tr>
-                                    {['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (dk)', 'IFS Süre (dk)', 'Açıklama', ''].map(h => (
+                                    {['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (sn)', 'IFS Süre (sn)', 'Açıklama', ''].map(h => (
                                         <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
                                     ))}
                                 </tr>
@@ -422,6 +763,8 @@ const DailyTimeTracking = () => {
                     </div>
                 </CardContent>
             </Card>
+            </>
+            )}
 
             {/* Kayıt Ekleme/Düzenleme Dialog */}
             <Dialog open={showDialog} onOpenChange={setShowDialog}>
@@ -511,7 +854,7 @@ const DailyTimeTracking = () => {
                         <div className="grid grid-cols-2 gap-5">
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                                    <Clock className="w-3.5 h-3.5 text-indigo-500" /> Parça Süresi (dk)
+                                    <Clock className="w-3.5 h-3.5 text-indigo-500" /> Parça Süresi (sn)
                                 </Label>
                                 <Input
                                     type="number"
@@ -525,7 +868,7 @@ const DailyTimeTracking = () => {
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-sm font-semibold text-gray-700 flex items-center gap-1">
-                                    <Clock className="w-3.5 h-3.5 text-purple-500" /> IFS Süre (dk)
+                                    <Clock className="w-3.5 h-3.5 text-purple-500" /> IFS Süre (sn)
                                 </Label>
                                 <Input
                                     type="number"

@@ -8,12 +8,12 @@ import { Label } from '@/components/ui/label';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter, DialogDescription } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DateRangePicker, CLOSE_DATE_PICKERS_EVENT } from '@/components/ui/date-range-picker';
 import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { formatCurrency, logAction, openPrintWindow } from '@/lib/utils';
-import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfYear, endOfYear, subMonths, subDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { Combobox } from '@/components/ui/combobox';
 import { BarChart, Bar, LineChart, Line, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, PieChart, Pie, Cell } from 'recharts';
@@ -373,6 +373,7 @@ const ManualDataTracking = () => {
 
     const [filters, setFilters] = useState({
         dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) },
+        partCode: '',
     });
 
     const [analysisFilters, setAnalysisFilters] = useState({
@@ -2035,8 +2036,19 @@ const ManualDataTracking = () => {
 
     const aggregatedRecords = useMemo(() => {
         const dailyData = {};
+        const partFilter = (filters.partCode || '').trim().toUpperCase();
 
-        manualRecords.forEach(rec => {
+        const filteredManuals = partFilter
+            ? manualRecords.filter(r => (r.part_code || '').toUpperCase().includes(partFilter))
+            : manualRecords;
+        const filteredRepairs = partFilter
+            ? repairRecords.filter(r =>
+                (r.part_code || '').toUpperCase().includes(partFilter) ||
+                (r.description || '').toUpperCase().includes(partFilter)
+            )
+            : repairRecords;
+
+        filteredManuals.forEach(rec => {
             const date = rec.record_date;
             // Süre bilgisini kullan (eğer yoksa 0)
             const durationSeconds = rec.duration_seconds || 0;
@@ -2049,7 +2061,7 @@ const ManualDataTracking = () => {
             dailyData[date].manual_cost += cost;
         });
 
-        repairRecords.forEach(rec => {
+        filteredRepairs.forEach(rec => {
             const date = rec.record_date;
             // Süre bilgisini kullan (eğer yoksa 0)
             const durationSeconds = rec.duration_seconds || 0;
@@ -2107,13 +2119,16 @@ const ManualDataTracking = () => {
                 };
             })
             .sort((a, b) => new Date(b.date) - new Date(a.date));
-    }, [manualRecords, repairRecords, calculateCost, monthlyTotals, dailyTotals]);
+    }, [manualRecords, repairRecords, calculateCost, monthlyTotals, dailyTotals, filters.partCode]);
 
     const handleViewDetails = (date) => {
+        const partFilter = (filters.partCode || '').trim().toUpperCase();
+        const manualFilter = (r) => r.record_date === date && (!partFilter || (r.part_code || '').toUpperCase().includes(partFilter));
+        const repairFilter = (r) => r.record_date === date && (!partFilter || (r.part_code || '').toUpperCase().includes(partFilter) || (r.description || '').toUpperCase().includes(partFilter));
         const details = {
             date,
-            manuals: manualRecords.filter(rec => rec.record_date === date),
-            repairs: repairRecords.filter(rec => rec.record_date === date),
+            manuals: manualRecords.filter(manualFilter),
+            repairs: repairRecords.filter(repairFilter),
         };
         setViewingDetails(details);
     };
@@ -2429,7 +2444,7 @@ const ManualDataTracking = () => {
                 </CardHeader>
             </Card>
 
-            <Tabs defaultValue="data" className="w-full">
+            <Tabs defaultValue="data" className="w-full" onValueChange={() => window.dispatchEvent(new CustomEvent(CLOSE_DATE_PICKERS_EVENT))}>
                 <TabsList className="grid w-full grid-cols-2">
                     <TabsTrigger value="data">Ana Veri Takip</TabsTrigger>
                     <TabsTrigger value="analysis">Detaylı Analiz</TabsTrigger>
@@ -2495,13 +2510,34 @@ const ManualDataTracking = () => {
                                 </div>
 
                                 {/* Tarih Aralığı Seçici */}
-                                <div className="flex gap-2 p-2 bg-gray-50 rounded-lg">
+                                <div className="flex flex-wrap gap-2 p-2 bg-gray-50 rounded-lg items-center">
                                     <DateRangePicker
                                         value={filters.dateRange}
                                         onChange={(range) => setFilters({ ...filters, dateRange: range || { from: startOfMonth(new Date()), to: endOfMonth(new Date()) } })}
                                         placeholder="Özel Tarih Aralığı Seç"
-                                        className="w-full"
+                                        className="min-w-[200px] flex-1"
                                     />
+                                </div>
+
+                                {/* Parça Kodu ile Filtreleme */}
+                                <div className="p-2 bg-indigo-50/80 rounded-lg border border-indigo-100">
+                                    <Label className="text-sm font-medium text-indigo-800 mb-2 flex items-center gap-2">
+                                        <Search className="h-4 w-4" />
+                                        Parça Kodu ile Ara / Filtrele
+                                    </Label>
+                                    <div className="flex flex-wrap gap-2 items-center">
+                                        <Input
+                                            placeholder="Parça kodu yazın (örn: BH123)..."
+                                            value={filters.partCode || ''}
+                                            onChange={(e) => setFilters({ ...filters, partCode: e.target.value })}
+                                            className="h-10 border-indigo-200 bg-white max-w-xs focus:ring-indigo-500 focus:border-indigo-500"
+                                        />
+                                        {filters.partCode && (
+                                            <Button variant="outline" size="sm" onClick={() => setFilters({ ...filters, partCode: '' })} className="text-indigo-600 border-indigo-200 hover:bg-indigo-50">
+                                                Filtreyi Temizle
+                                            </Button>
+                                        )}
+                                    </div>
                                 </div>
                             </div>
 
@@ -3297,6 +3333,10 @@ const ManualDataTracking = () => {
                                     const today = new Date();
                                     setAnalysisFilters({ ...analysisFilters, dateRange: { from: today, to: today } });
                                 }}>Bugün</Button>
+                                <Button size="sm" variant={analysisFilters.dateRange?.from && format(analysisFilters.dateRange.from, 'yyyy-MM-dd') === format(subDays(new Date(), 1), 'yyyy-MM-dd') ? "default" : "outline"} onClick={() => {
+                                    const yesterday = subDays(new Date(), 1);
+                                    setAnalysisFilters({ ...analysisFilters, dateRange: { from: yesterday, to: yesterday } });
+                                }}>Dün</Button>
                                 <Button size="sm" variant="outline" onClick={() => {
                                     const today = new Date();
                                     setAnalysisFilters({ ...analysisFilters, dateRange: { from: startOfMonth(today), to: endOfMonth(today) } });

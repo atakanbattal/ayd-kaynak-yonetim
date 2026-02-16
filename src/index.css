@@ -98,15 +98,8 @@
   @apply inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800;
 }
 
-@page {
-  size: A4;
-  margin: 1cm;
-}
-
 @media print {
   html, body {
-    width: 210mm;
-    height: 297mm;
     margin: 0;
     padding: 0;
     font-size: 10pt;
@@ -124,7 +117,6 @@
   .print-container {
     width: 100%;
     height: 100%;
-    padding: 1cm;
     box-sizing: border-box;
   }
   .print-footer {

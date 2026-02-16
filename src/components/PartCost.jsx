@@ -12,7 +12,7 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { logAction, formatCurrency, openPrintWindow } from '@/lib/utils';
-import { DateRangePicker } from '@/components/ui/date-range-picker';
+import { DateRangePicker, CLOSE_DATE_PICKERS_EVENT } from '@/components/ui/date-range-picker';
 import { format, startOfMonth, endOfMonth, parseISO, startOfYear, endOfYear } from 'date-fns';
 import { tr } from 'date-fns/locale';
 import { BarChart, Bar, LineChart, Line, PieChart, Pie, Cell, XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer, AreaChart, Area } from 'recharts';
@@ -750,7 +750,7 @@ const PartCost = () => {
             </div>
           </CardHeader>
           <CardContent>
-            <Tabs defaultValue="data" className="w-full">
+            <Tabs defaultValue="data" className="w-full" onValueChange={() => window.dispatchEvent(new CustomEvent(CLOSE_DATE_PICKERS_EVENT))}>
               <TabsList className="grid w-full grid-cols-2">
                 <TabsTrigger value="data">Veri Takip</TabsTrigger>
                 <TabsTrigger value="analysis"><BarChart3 className="h-4 w-4 mr-2" />Detaylı Analiz</TabsTrigger>

@@ -1,4 +1,5 @@
 import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useLocation } from "react-router-dom";
 import { Calendar } from "@/components/ui/calendar";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
@@ -7,9 +8,13 @@ import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfYear, 
 import { tr } from "date-fns/locale";
 import { createPortal } from "react-dom";
 
+// Sekme/route değişince tüm tarih modallarını kapatmak için global event
+export const CLOSE_DATE_PICKERS_EVENT = "close-all-date-pickers";
+
 // Hazır tarih aralıkları
 const presets = [
     { label: "Bugün", getValue: () => ({ from: new Date(), to: new Date() }) },
+    { label: "Dün", getValue: () => { const d = subDays(new Date(), 1); return { from: d, to: d }; } },
     { label: "Son 7 Gün", getValue: () => ({ from: subDays(new Date(), 6), to: new Date() }) },
     { label: "Son 30 Gün", getValue: () => ({ from: subDays(new Date(), 29), to: new Date() }) },
     { label: "Bu Hafta", getValue: () => ({ from: startOfWeek(new Date(), { weekStartsOn: 1 }), to: endOfWeek(new Date(), { weekStartsOn: 1 }) }) },
@@ -38,43 +43,59 @@ export function DateRangePicker({
     const [dropdownPosition, setDropdownPosition] = useState({ top: 0, left: 0 });
     const containerRef = useRef(null);
     const dropdownRef = useRef(null);
+    const location = useLocation();
 
     // Value değiştiğinde tempRange'i güncelle
     useEffect(() => {
         setTempRange(value);
     }, [value]);
 
-    // Pozisyonu hesapla
+    // Route değişince modalı kapat
+    useEffect(() => {
+        setIsOpen(false);
+    }, [location.pathname]);
+
+    // Sekme değişince veya global kapatma eventi
+    useEffect(() => {
+        const handler = () => setIsOpen(false);
+        window.addEventListener(CLOSE_DATE_PICKERS_EVENT, handler);
+        return () => window.removeEventListener(CLOSE_DATE_PICKERS_EVENT, handler);
+    }, []);
+
+    // Escape tuşu ile kapat
+    useEffect(() => {
+        const handler = (e) => { if (e.key === "Escape") setIsOpen(false); };
+        if (isOpen) {
+            document.addEventListener("keydown", handler);
+        }
+        return () => document.removeEventListener("keydown", handler);
+    }, [isOpen]);
+
+    // Pozisyonu hesapla - viewport ortasında, kenar çubuğu ve sağ kenarı taşmadan
     const calculatePosition = useCallback(() => {
-        if (!containerRef.current) return;
-        
-        const rect = containerRef.current.getBoundingClientRect();
         const dropdownWidth = showPresets && !singleDate ? 580 : 320;
-        const dropdownHeight = 400;
-        
-        let top = rect.bottom + 4;
-        let left = rect.left;
-        
-        // Ekranın altına taşarsa yukarı aç
-        if (top + dropdownHeight > window.innerHeight - 20) {
-            top = rect.top - dropdownHeight - 4;
+        const dropdownHeight = 480;
+        const padding = 20;
+        const sidebarWidth = 300; // Kenar çubuğu alanı
+
+        // Geçerli alan: sidebar sağından, viewport sağına kadar
+        const contentLeft = sidebarWidth;
+        const contentRight = window.innerWidth - padding;
+        const contentWidth = contentRight - contentLeft;
+
+        // Modal viewport ortasında (içerik alanında)
+        let left = contentLeft + (contentWidth - dropdownWidth) / 2;
+        let top = Math.max(padding, (window.innerHeight - dropdownHeight) / 2);
+
+        // Modal sığmıyorsa kenarlara yasla
+        if (dropdownWidth > contentWidth) {
+            left = contentLeft;
+        } else if (left < contentLeft) {
+            left = contentLeft;
+        } else if (left + dropdownWidth > contentRight) {
+            left = contentRight - dropdownWidth;
         }
-        
-        // Ekranın sağına taşarsa sola kaydır
-        if (left + dropdownWidth > window.innerWidth - 20) {
-            left = window.innerWidth - dropdownWidth - 20;
-        }
-        
-        // Ekranın soluna taşarsa sağa kaydır
-        if (left < 20) {
-            left = 20;
-        }
-        
-        // Yukarıda da yer yoksa en iyi pozisyonu bul
-        if (top < 20) {
-            top = 20;
-        }
-        
+
         setDropdownPosition({ top, left });
     }, [showPresets, singleDate]);
 
@@ -166,12 +187,20 @@ export function DateRangePicker({
 
     // Dropdown içeriği (Portal ile render edilir)
     const dropdownContent = isOpen && createPortal(
+        <>
+        {/* Arka plan overlay - dışarı tıklayınca kapat */}
+        <div
+            className="fixed inset-0 z-[99998] bg-black/30"
+            aria-hidden="true"
+            onClick={() => { setIsOpen(false); setTempRange(value); }}
+        />
         <div
             ref={dropdownRef}
             className="fixed z-[99999] bg-white dark:bg-gray-900 border rounded-lg shadow-2xl"
             style={{
                 top: dropdownPosition.top,
                 left: dropdownPosition.left,
+                minWidth: showPresets && !singleDate ? 580 : 320,
                 maxHeight: 'calc(100vh - 40px)',
                 overflow: 'auto',
             }}
@@ -207,7 +236,7 @@ export function DateRangePicker({
                     />
 
                     {/* Footer - Durum ve butonlar */}
-                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-3 border-t mt-3 gap-2">
+                    <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between pt-3 border-t mt-3 gap-2 shrink-0 flex-wrap sm:flex-nowrap">
                         <p className="text-sm text-muted-foreground">
                             {tempRange?.from && tempRange?.to
                                 ? `${format(tempRange.from, "dd.MM.yyyy")} - ${format(tempRange.to, "dd.MM.yyyy")}`
@@ -216,12 +245,12 @@ export function DateRangePicker({
                                     : "Başlangıç tarihi seçin"
                             }
                         </p>
-                        <div className="flex gap-2 w-full sm:w-auto">
+                        <div className="flex gap-2 w-full sm:w-auto shrink-0">
                             <Button
                                 variant="ghost"
                                 size="sm"
                                 onClick={handleClear}
-                                className="flex-1 sm:flex-none"
+                                className="flex-1 sm:flex-none whitespace-nowrap min-w-[60px]"
                             >
                                 Temizle
                             </Button>
@@ -229,7 +258,7 @@ export function DateRangePicker({
                                 variant="outline"
                                 size="sm"
                                 onClick={handleCancel}
-                                className="flex-1 sm:flex-none"
+                                className="flex-1 sm:flex-none whitespace-nowrap min-w-[60px]"
                             >
                                 İptal
                             </Button>
@@ -237,7 +266,7 @@ export function DateRangePicker({
                                 size="sm"
                                 onClick={handleApply}
                                 disabled={singleDate ? !tempRange?.from : (!tempRange?.from || !tempRange?.to)}
-                                className="flex-1 sm:flex-none"
+                                className="flex-1 sm:flex-none whitespace-nowrap min-w-[60px]"
                             >
                                 Uygula
                             </Button>
@@ -245,7 +274,8 @@ export function DateRangePicker({
                     </div>
                 </div>
             </div>
-        </div>,
+        </div>
+        </>,
         document.body
     );
 

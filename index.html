@@ -6,6 +6,17 @@
 		<meta name="generator" content="Hostinger Horizons" />
 		<meta name="viewport" content="width=device-width, initial-scale=1.0" />
 		<title>Hostinger Horizons</title>
+		<script>
+			(function() {
+				var m = /[?&]landscape=1/.test(location.search);
+				if (m) {
+					var s = document.createElement('style');
+					s.id = 'print-landscape-page-style';
+					s.textContent = '@page{size:A4 landscape!important;margin:8mm 10mm}@media print{@page{size:A4 landscape!important;margin:8mm 10mm}}';
+					document.head.appendChild(s);
+				}
+			})();
+		</script>
 	</head>
 	<body>
 		<div id="root"></div>
