@@ -1,6 +1,6 @@
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useCallback, useDeferredValue } from 'react';
 import { motion } from 'framer-motion';
-import { Clock, Plus, Trash2, Save, Calendar as CalendarIcon, FileText, Edit, Search, Download, LayoutGrid, List } from 'lucide-react';
+import { Clock, Plus, Trash2, Save, Calendar as CalendarIcon, FileText, Edit, Search, Download, LayoutGrid, List, AlertTriangle, Factory, Activity, Gauge, TrendingUp } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -12,8 +12,874 @@ import { useToast } from '@/components/ui/use-toast';
 import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { logAction, openPrintWindow } from '@/lib/utils';
-import { format, startOfMonth, endOfMonth } from 'date-fns';
+import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LineChart, Line, Brush } from 'recharts';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay, parseISO } from 'date-fns';
 import { tr } from 'date-fns/locale';
+
+const CHART_COLORS = {
+    actual: '#4f46e5',
+    ifs: '#9333ea',
+    positive: '#059669',
+    warning: '#dc2626',
+    neutral: '#64748b',
+    accent: '#0ea5e9',
+};
+
+const normalizeText = (value) => String(value || '').trim().toUpperCase();
+
+const parseDuration = (value) => {
+    if (value === null || value === undefined || value === '') return null;
+    const numericValue = Number(value);
+    return Number.isFinite(numericValue) ? numericValue : null;
+};
+
+const formatNumber = (value, fractionDigits = 2) => {
+    if (!Number.isFinite(value)) return '-';
+    return value.toLocaleString('tr-TR', {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
+    });
+};
+
+const formatPercent = (value, fractionDigits = 1) => {
+    if (!Number.isFinite(value)) return '-';
+    return `%${value.toLocaleString('tr-TR', {
+        minimumFractionDigits: fractionDigits,
+        maximumFractionDigits: fractionDigits,
+    })}`;
+};
+
+const formatSeconds = (value, fractionDigits = 2) => Number.isFinite(value) ? `${formatNumber(value, fractionDigits)} sn` : '-';
+
+const getRecordDateValue = (dateValue) => {
+    if (!dateValue) return null;
+    try {
+        return parseISO(dateValue);
+    } catch {
+        const fallback = new Date(dateValue);
+        return Number.isNaN(fallback.getTime()) ? null : fallback;
+    }
+};
+
+const isDateInRange = (dateValue, range) => {
+    const recordDate = getRecordDateValue(dateValue);
+    if (!recordDate) return false;
+
+    const recordTime = startOfDay(recordDate).getTime();
+    const startTime = range?.from ? startOfDay(range.from).getTime() : null;
+    const endTime = range?.to ? endOfDay(range.to).getTime() : null;
+
+    if (startTime !== null && recordTime < startTime) return false;
+    if (endTime !== null && recordTime > endTime) return false;
+    return true;
+};
+
+const average = (values) => {
+    if (!values.length) return null;
+    return values.reduce((sum, value) => sum + value, 0) / values.length;
+};
+
+const calculateStdDev = (values, meanValue) => {
+    if (!values.length || !Number.isFinite(meanValue)) return 0;
+    const variance = values.reduce((sum, value) => sum + ((value - meanValue) ** 2), 0) / values.length;
+    return Math.sqrt(variance);
+};
+
+const getVariance = (partDuration, ifsDuration) => {
+    if (!Number.isFinite(partDuration) || !Number.isFinite(ifsDuration)) return null;
+    return partDuration - ifsDuration;
+};
+
+const getPerformanceStatus = (partDuration, ifsDuration) => {
+    const variance = getVariance(partDuration, ifsDuration);
+    if (!Number.isFinite(variance)) return 'IFS Yok';
+    if (variance < 0) return 'IFS Altı';
+    if (variance > 0) return 'IFS Üstü';
+    return 'IFS Eşit';
+};
+
+const getRobotSortNum = (robotNo) => {
+    if (!robotNo) return 9999;
+    const match = String(robotNo).match(/RK0*(\d+)/i) || String(robotNo).match(/(\d+)/);
+    return match ? parseInt(match[1], 10) : 9999;
+};
+
+const filterAndSortDailyTimeRecords = (records, {
+    dateRange,
+    line_id = 'all',
+    station = 'all',
+    robotSearch = '',
+    partSearch = '',
+}) => {
+    const normalizedRobotSearch = normalizeText(robotSearch);
+    const normalizedPartSearch = normalizeText(partSearch);
+
+    return records
+        .filter((record) => {
+            if (!isDateInRange(record.record_date, dateRange)) return false;
+            if (line_id !== 'all' && record.line_id !== line_id) return false;
+            if (station !== 'all' && record.station !== Number(station)) return false;
+            if (normalizedRobotSearch && !normalizeText(record.robot_no).includes(normalizedRobotSearch)) return false;
+            if (normalizedPartSearch && !normalizeText(record.part_code).includes(normalizedPartSearch)) return false;
+            return true;
+        })
+        .sort((a, b) => {
+            const dateA = getRecordDateValue(a.record_date)?.getTime() || 0;
+            const dateB = getRecordDateValue(b.record_date)?.getTime() || 0;
+            if (dateB !== dateA) return dateB - dateA;
+            const robotNumA = getRobotSortNum(a.robot_no);
+            const robotNumB = getRobotSortNum(b.robot_no);
+            if (robotNumA !== robotNumB) return robotNumA - robotNumB;
+            return (a.station || 0) - (b.station || 0);
+        });
+};
+
+const chartTooltipFormatter = (value, name) => {
+    if (!Number.isFinite(Number(value))) return [value, name];
+    if (String(name).includes('Oran')) return [formatPercent(Number(value)), name];
+    return [formatNumber(Number(value)), name];
+};
+
+const buildTrendData = (records, mode) => {
+    const grouped = new Map();
+
+    records.forEach((record) => {
+        const date = getRecordDateValue(record.record_date);
+        if (!date) return;
+
+        let key;
+        let label;
+        let sortValue;
+
+        if (mode === 'week') {
+            const weekStart = startOfWeek(date, { weekStartsOn: 1 });
+            const weekEnd = endOfWeek(date, { weekStartsOn: 1 });
+            key = format(weekStart, 'yyyy-MM-dd');
+            label = `${format(weekStart, 'dd MMM', { locale: tr })} - ${format(weekEnd, 'dd MMM', { locale: tr })}`;
+            sortValue = weekStart.getTime();
+        } else if (mode === 'month') {
+            const monthStart = new Date(date.getFullYear(), date.getMonth(), 1);
+            key = format(monthStart, 'yyyy-MM');
+            label = format(monthStart, 'MMM yyyy', { locale: tr });
+            sortValue = monthStart.getTime();
+        } else {
+            key = format(date, 'yyyy-MM-dd');
+            label = format(date, 'dd MMM', { locale: tr });
+            sortValue = startOfDay(date).getTime();
+        }
+
+        if (!grouped.has(key)) {
+            grouped.set(key, {
+                key,
+                label,
+                sortValue,
+                count: 0,
+                partDurations: [],
+                ifsDurations: [],
+                variances: [],
+                overIfsCount: 0,
+            });
+        }
+
+        const entry = grouped.get(key);
+        const partDuration = parseDuration(record.part_duration);
+        const ifsDuration = parseDuration(record.ifs_duration);
+        const variance = getVariance(partDuration, ifsDuration);
+
+        entry.count += 1;
+        if (Number.isFinite(partDuration)) entry.partDurations.push(partDuration);
+        if (Number.isFinite(ifsDuration)) entry.ifsDurations.push(ifsDuration);
+        if (Number.isFinite(variance)) {
+            entry.variances.push(variance);
+            if (variance > 0) entry.overIfsCount += 1;
+        }
+    });
+
+    return Array.from(grouped.values())
+        .sort((a, b) => a.sortValue - b.sortValue)
+        .map((entry) => ({
+            label: entry.label,
+            count: entry.count,
+            avgPartDuration: average(entry.partDurations) || 0,
+            avgIfsDuration: average(entry.ifsDurations) || 0,
+            avgVariance: average(entry.variances) || 0,
+            overIfsRate: entry.variances.length ? (entry.overIfsCount / entry.variances.length) * 100 : 0,
+        }));
+};
+
+const buildAnalytics = (records, searchTerm = '') => {
+    const normalizedSearch = normalizeText(searchTerm);
+    const enrichedRecords = records.map((record) => {
+        const partDuration = parseDuration(record.part_duration);
+        const ifsDuration = parseDuration(record.ifs_duration);
+        const variance = getVariance(partDuration, ifsDuration);
+        return {
+            ...record,
+            partDuration,
+            ifsDuration,
+            variance,
+            normalizedPartCode: normalizeText(record.part_code),
+        };
+    });
+
+    const validPartDurations = enrichedRecords.map((record) => record.partDuration).filter(Number.isFinite);
+    const comparableRecords = enrichedRecords.filter((record) => Number.isFinite(record.variance));
+    const overIfsRecords = comparableRecords.filter((record) => record.variance > 0);
+    const underIfsRecords = comparableRecords.filter((record) => record.variance < 0);
+
+    const totals = {
+        recordCount: enrichedRecords.length,
+        comparableCount: comparableRecords.length,
+        partDurationTotal: validPartDurations.reduce((sum, value) => sum + value, 0),
+        ifsDurationTotal: comparableRecords.reduce((sum, record) => sum + record.ifsDuration, 0),
+        avgPartDuration: average(validPartDurations) || 0,
+        avgIfsDuration: average(comparableRecords.map((record) => record.ifsDuration)) || 0,
+        avgVariance: average(comparableRecords.map((record) => record.variance)) || 0,
+        overIfsCount: overIfsRecords.length,
+        underIfsCount: underIfsRecords.length,
+        equalIfsCount: comparableRecords.length - overIfsRecords.length - underIfsRecords.length,
+        overIfsRate: comparableRecords.length ? (overIfsRecords.length / comparableRecords.length) * 100 : 0,
+        underIfsRate: comparableRecords.length ? (underIfsRecords.length / comparableRecords.length) * 100 : 0,
+        uniquePartCount: new Set(enrichedRecords.map((record) => record.normalizedPartCode).filter(Boolean)).size,
+        uniqueRobotCount: new Set(enrichedRecords.map((record) => record.robot_no).filter(Boolean)).size,
+    };
+
+    const lineAnalysisMap = new Map();
+    enrichedRecords.forEach((record) => {
+        const key = record.line_name || 'N/A';
+        if (!lineAnalysisMap.has(key)) {
+            lineAnalysisMap.set(key, {
+                lineName: key,
+                recordCount: 0,
+                partDurations: [],
+                ifsDurations: [],
+                variances: [],
+                overIfsCount: 0,
+                robots: new Set(),
+                parts: new Set(),
+            });
+        }
+
+        const entry = lineAnalysisMap.get(key);
+        entry.recordCount += 1;
+        if (record.robot_no) entry.robots.add(record.robot_no);
+        if (record.normalizedPartCode) entry.parts.add(record.normalizedPartCode);
+        if (Number.isFinite(record.partDuration)) entry.partDurations.push(record.partDuration);
+        if (Number.isFinite(record.ifsDuration)) entry.ifsDurations.push(record.ifsDuration);
+        if (Number.isFinite(record.variance)) {
+            entry.variances.push(record.variance);
+            if (record.variance > 0) entry.overIfsCount += 1;
+        }
+    });
+
+    const lineAnalysis = Array.from(lineAnalysisMap.values())
+        .map((entry) => ({
+            lineName: entry.lineName,
+            recordCount: entry.recordCount,
+            robotCount: entry.robots.size,
+            partCount: entry.parts.size,
+            avgPartDuration: average(entry.partDurations) || 0,
+            avgIfsDuration: average(entry.ifsDurations) || 0,
+            avgVariance: average(entry.variances) || 0,
+            overIfsRate: entry.variances.length ? (entry.overIfsCount / entry.variances.length) * 100 : 0,
+        }))
+        .sort((a, b) => (b.avgVariance - a.avgVariance) || (b.recordCount - a.recordCount));
+
+    const overIfsPartMap = new Map();
+    overIfsRecords.forEach((record) => {
+        const key = record.normalizedPartCode || 'PARÇA KODU YOK';
+        if (!overIfsPartMap.has(key)) {
+            overIfsPartMap.set(key, {
+                partCode: key,
+                overIfsCount: 0,
+                variances: [],
+                partDurations: [],
+                ifsDurations: [],
+                lines: new Set(),
+                robots: new Set(),
+            });
+        }
+
+        const entry = overIfsPartMap.get(key);
+        entry.overIfsCount += 1;
+        entry.variances.push(record.variance);
+        entry.partDurations.push(record.partDuration);
+        entry.ifsDurations.push(record.ifsDuration);
+        if (record.line_name) entry.lines.add(record.line_name);
+        if (record.robot_no) entry.robots.add(record.robot_no);
+    });
+
+    const overIfsParts = Array.from(overIfsPartMap.values())
+        .map((entry) => ({
+            partCode: entry.partCode,
+            overIfsCount: entry.overIfsCount,
+            avgVariance: average(entry.variances) || 0,
+            avgPartDuration: average(entry.partDurations) || 0,
+            avgIfsDuration: average(entry.ifsDurations) || 0,
+            lineCount: entry.lines.size,
+            robotCount: entry.robots.size,
+        }))
+        .sort((a, b) => (b.avgVariance - a.avgVariance) || (b.overIfsCount - a.overIfsCount))
+        .slice(0, 12);
+
+    const uniquePartCodes = Array.from(new Set(enrichedRecords.map((record) => record.normalizedPartCode).filter(Boolean)));
+    const showPartFocus = Boolean(normalizedSearch) || uniquePartCodes.length === 1;
+    const partFocusLabel = uniquePartCodes.length === 1 ? uniquePartCodes[0] : (normalizedSearch || 'SEÇİLİ PARÇALAR');
+
+    let partInsights = null;
+    if (showPartFocus && enrichedRecords.length > 0) {
+        const robotAnalysisMap = new Map();
+        enrichedRecords.forEach((record) => {
+            const key = record.robot_no || 'N/A';
+            if (!robotAnalysisMap.has(key)) {
+                robotAnalysisMap.set(key, {
+                    robotNo: key,
+                    recordCount: 0,
+                    partDurations: [],
+                    ifsDurations: [],
+                    variances: [],
+                    minDuration: Number.POSITIVE_INFINITY,
+                    maxDuration: Number.NEGATIVE_INFINITY,
+                });
+            }
+
+            const entry = robotAnalysisMap.get(key);
+            entry.recordCount += 1;
+            if (Number.isFinite(record.partDuration)) {
+                entry.partDurations.push(record.partDuration);
+                entry.minDuration = Math.min(entry.minDuration, record.partDuration);
+                entry.maxDuration = Math.max(entry.maxDuration, record.partDuration);
+            }
+            if (Number.isFinite(record.ifsDuration)) entry.ifsDurations.push(record.ifsDuration);
+            if (Number.isFinite(record.variance)) entry.variances.push(record.variance);
+        });
+
+        const robotBreakdown = Array.from(robotAnalysisMap.values())
+            .map((entry) => ({
+                robotNo: entry.robotNo,
+                recordCount: entry.recordCount,
+                avgPartDuration: average(entry.partDurations) || 0,
+                avgIfsDuration: average(entry.ifsDurations) || 0,
+                avgVariance: average(entry.variances) || 0,
+                minDuration: Number.isFinite(entry.minDuration) ? entry.minDuration : 0,
+                maxDuration: Number.isFinite(entry.maxDuration) ? entry.maxDuration : 0,
+            }))
+            .sort((a, b) => (b.recordCount - a.recordCount) || (a.avgPartDuration - b.avgPartDuration));
+
+        const sortedRecords = [...enrichedRecords].sort((a, b) => {
+            const dateA = getRecordDateValue(a.record_date)?.getTime() || 0;
+            const dateB = getRecordDateValue(b.record_date)?.getTime() || 0;
+            if (dateA !== dateB) return dateA - dateB;
+            if (a.robot_no !== b.robot_no) return String(a.robot_no || '').localeCompare(String(b.robot_no || ''));
+            return (a.station || 0) - (b.station || 0);
+        });
+
+        const spcValues = sortedRecords.map((record) => record.partDuration).filter(Number.isFinite);
+        const mean = average(spcValues) || 0;
+        const stdDev = calculateStdDev(spcValues, mean);
+        const avgIfs = average(sortedRecords.map((record) => record.ifsDuration).filter(Number.isFinite)) || 0;
+        const ucl = mean + (3 * stdDev);
+        const lcl = Math.max(0, mean - (3 * stdDev));
+        const outOfControlCount = sortedRecords.filter((record) => Number.isFinite(record.partDuration) && (record.partDuration > ucl || record.partDuration < lcl)).length;
+
+        const spcSeries = sortedRecords.map((record, index) => ({
+            sample: index + 1,
+            actual: record.partDuration,
+            ifs: record.ifsDuration,
+            mean,
+            ucl,
+            lcl,
+            label: `${format(getRecordDateValue(record.record_date) || new Date(), 'dd.MM.yyyy')} | ${record.robot_no} | İst. ${record.station}`,
+        }));
+
+        partInsights = {
+            label: partFocusLabel,
+            matchedPartCount: uniquePartCodes.length,
+            robotBreakdown,
+            spcSeries,
+            mean,
+            stdDev,
+            avgIfs,
+            outOfControlCount,
+        };
+    }
+
+    return {
+        totals,
+        lineAnalysis,
+        overIfsParts,
+        dailyTrend: buildTrendData(enrichedRecords, 'day'),
+        weeklyTrend: buildTrendData(enrichedRecords, 'week'),
+        monthlyTrend: buildTrendData(enrichedRecords, 'month'),
+        partInsights,
+    };
+};
+
+const MetricCard = ({ title, value, subtitle, icon: Icon, accentClass }) => (
+    <Card className="overflow-hidden border-0 shadow-sm">
+        <CardContent className="p-0">
+            <div className={`h-1 ${accentClass}`} />
+            <div className="p-5">
+                <div className="flex items-start justify-between gap-3">
+                    <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</p>
+                        <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
+                        {subtitle && <p className="mt-2 text-sm text-slate-500">{subtitle}</p>}
+                    </div>
+                    <div className="rounded-xl bg-slate-50 p-3">
+                        <Icon className="h-5 w-5 text-slate-600" />
+                    </div>
+                </div>
+            </div>
+        </CardContent>
+    </Card>
+);
+
+const AnalyticsLineChart = React.memo(({ data, linesConfig, xAxisKey = 'label', height = 360 }) => {
+    if (!data.length) {
+        return <p className="py-12 text-center text-sm text-slate-500">Grafik için yeterli veri yok.</p>;
+    }
+
+    const shouldRotateLabels = data.length > 8;
+
+    return (
+        <ResponsiveContainer width="100%" height={height}>
+            <LineChart data={data} margin={{ top: 12, right: 16, left: 0, bottom: data.length > 12 ? 52 : shouldRotateLabels ? 28 : 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <XAxis
+                    dataKey={xAxisKey}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    angle={shouldRotateLabels ? -28 : 0}
+                    textAnchor={shouldRotateLabels ? 'end' : 'middle'}
+                    height={data.length > 12 ? 84 : shouldRotateLabels ? 72 : 40}
+                    interval={0}
+                />
+                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} width={72} />
+                <Tooltip formatter={chartTooltipFormatter} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {linesConfig.map((lineConfig) => (
+                    <Line
+                        key={lineConfig.key}
+                        type="monotone"
+                        dataKey={lineConfig.key}
+                        name={lineConfig.name}
+                        stroke={lineConfig.color}
+                        strokeWidth={2.5}
+                        dot={false}
+                    />
+                ))}
+                {data.length > 12 && (
+                    <Brush
+                        dataKey={xAxisKey}
+                        height={26}
+                        stroke="#94a3b8"
+                        travellerWidth={10}
+                    />
+                )}
+            </LineChart>
+        </ResponsiveContainer>
+    );
+});
+
+const AnalyticsBarChart = React.memo(({ data, barsConfig, xAxisKey = 'label', height = 360 }) => {
+    if (!data.length) {
+        return <p className="py-12 text-center text-sm text-slate-500">Grafik için yeterli veri yok.</p>;
+    }
+
+    const shouldRotateLabels = data.length > 6;
+
+    return (
+        <ResponsiveContainer width="100%" height={height}>
+            <BarChart data={data} margin={{ top: 12, right: 16, left: 0, bottom: data.length > 10 ? 52 : shouldRotateLabels ? 28 : 0 }}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" vertical={false} />
+                <XAxis
+                    dataKey={xAxisKey}
+                    tick={{ fontSize: 11, fill: '#64748b' }}
+                    angle={shouldRotateLabels ? -28 : 0}
+                    textAnchor={shouldRotateLabels ? 'end' : 'middle'}
+                    height={data.length > 10 ? 84 : shouldRotateLabels ? 72 : 40}
+                    interval={0}
+                />
+                <YAxis tick={{ fontSize: 11, fill: '#64748b' }} width={72} />
+                <Tooltip formatter={chartTooltipFormatter} />
+                <Legend wrapperStyle={{ fontSize: 12 }} />
+                {barsConfig.map((barConfig) => (
+                    <Bar
+                        key={barConfig.key}
+                        dataKey={barConfig.key}
+                        name={barConfig.name}
+                        fill={barConfig.color}
+                        radius={[6, 6, 0, 0]}
+                    />
+                ))}
+                {data.length > 10 && (
+                    <Brush
+                        dataKey={xAxisKey}
+                        height={26}
+                        stroke="#94a3b8"
+                        travellerWidth={10}
+                    />
+                )}
+            </BarChart>
+        </ResponsiveContainer>
+    );
+});
+
+const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch, isSearchPending, filteredRecords, onEditRecord, onDeleteRecord }) => (
+    <>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
+            <MetricCard
+                title="Toplam Kayıt"
+                value={String(totals.recordCount)}
+                subtitle={`${totals.uniqueRobotCount} robot / ${totals.uniquePartCount} parça`}
+                icon={Activity}
+                accentClass="bg-gradient-to-r from-indigo-600 to-sky-500"
+            />
+            <MetricCard
+                title="Ort. Parça Süresi"
+                value={formatSeconds(totals.avgPartDuration)}
+                subtitle={`Toplam: ${formatSeconds(totals.partDurationTotal)}`}
+                icon={Clock}
+                accentClass="bg-gradient-to-r from-sky-500 to-cyan-400"
+            />
+            <MetricCard
+                title="Ort. IFS Süresi"
+                value={formatSeconds(totals.avgIfsDuration)}
+                subtitle={`Kıyaslanabilir: ${totals.comparableCount} kayıt`}
+                icon={Gauge}
+                accentClass="bg-gradient-to-r from-violet-600 to-fuchsia-500"
+            />
+            <MetricCard
+                title="IFS Altı Çalışma"
+                value={String(totals.underIfsCount)}
+                subtitle={formatPercent(totals.underIfsRate)}
+                icon={TrendingUp}
+                accentClass="bg-gradient-to-r from-emerald-600 to-lime-500"
+            />
+            <MetricCard
+                title="IFS Üstü Çalışma"
+                value={String(totals.overIfsCount)}
+                subtitle={formatPercent(totals.overIfsRate)}
+                icon={AlertTriangle}
+                accentClass="bg-gradient-to-r from-rose-600 to-orange-500"
+            />
+            <MetricCard
+                title="Ort. IFS Farkı"
+                value={formatSeconds(totals.avgVariance)}
+                subtitle={totals.avgVariance <= 0 ? 'Negatif fark daha iyi performans gösterir' : 'Pozitif fark iyileştirme fırsatını gösterir'}
+                icon={Factory}
+                accentClass="bg-gradient-to-r from-slate-700 to-slate-500"
+            />
+        </div>
+
+        {activePartSearch && (
+            <div className="rounded-2xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-700">
+                <span className="font-semibold text-slate-900">Parça odaklı analiz aktif:</span> `{activePartSearch}`
+                {analytics.partInsights?.matchedPartCount > 1 && ` · ${analytics.partInsights.matchedPartCount} farklı eşleşen parça birlikte analiz ediliyor.`}
+                {isSearchPending && <span className="ml-2 text-slate-500">Filtre güncelleniyor...</span>}
+            </div>
+        )}
+
+        <Card className="border-0 shadow-sm">
+            <CardHeader>
+                <CardTitle>Günlük Trend</CardTitle>
+                <CardDescription>Daha geniş görünüm ile daha fazla tarih ve daha detaylı eğilim analizi</CardDescription>
+            </CardHeader>
+            <CardContent>
+                <AnalyticsLineChart
+                    data={analytics.dailyTrend}
+                    linesConfig={[
+                        { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                        { key: 'avgIfsDuration', name: 'Ort. IFS Süresi', color: CHART_COLORS.ifs },
+                    ]}
+                    height={420}
+                />
+            </CardContent>
+        </Card>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card className="border-0 shadow-sm">
+                <CardHeader>
+                    <CardTitle>Haftalık Trend</CardTitle>
+                    <CardDescription>Hafta bazında tempo değişimi ve IFS hizalaması</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <AnalyticsLineChart
+                        data={analytics.weeklyTrend}
+                        linesConfig={[
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                            { key: 'avgIfsDuration', name: 'Ort. IFS Süresi', color: CHART_COLORS.ifs },
+                        ]}
+                        height={360}
+                    />
+                </CardContent>
+            </Card>
+            <Card className="border-0 shadow-sm">
+                <CardHeader>
+                    <CardTitle>Aylık Trend</CardTitle>
+                    <CardDescription>Ay bazında proses seviyesi ve ortalama süre takibi</CardDescription>
+                </CardHeader>
+                <CardContent>
+                    <AnalyticsLineChart
+                        data={analytics.monthlyTrend}
+                        linesConfig={[
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                            { key: 'avgIfsDuration', name: 'Ort. IFS Süresi', color: CHART_COLORS.ifs },
+                        ]}
+                        height={360}
+                    />
+                </CardContent>
+            </Card>
+        </div>
+
+        <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
+            <Card className="border-0 shadow-sm">
+                <CardHeader>
+                    <CardTitle>Hat Bazlı Analiz</CardTitle>
+                    <CardDescription>Hatların ortalama süre, IFS farkı ve iyileştirme sırası</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <AnalyticsBarChart
+                        data={analytics.lineAnalysis.slice(0, 12)}
+                        barsConfig={[
+                            { key: 'avgVariance', name: 'Ort. IFS Farkı', color: CHART_COLORS.warning },
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                        ]}
+                        xAxisKey="lineName"
+                        height={400}
+                    />
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="border-b bg-slate-50 text-slate-500">
+                                <tr>
+                                    {['Hat', 'Kayıt', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'IFS Üstü'].map((header) => (
+                                        <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em]">{header}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {analytics.lineAnalysis.slice(0, 8).map((line) => (
+                                    <tr key={line.lineName}>
+                                        <td className="px-3 py-2 font-semibold text-slate-900">{line.lineName}</td>
+                                        <td className="px-3 py-2">{line.recordCount}</td>
+                                        <td className="px-3 py-2">{formatSeconds(line.avgPartDuration)}</td>
+                                        <td className="px-3 py-2">{formatSeconds(line.avgIfsDuration)}</td>
+                                        <td className="px-3 py-2">{formatSeconds(line.avgVariance)}</td>
+                                        <td className="px-3 py-2">{formatPercent(line.overIfsRate)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {analytics.lineAnalysis.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Hat analizi için kayıt bulunamadı.</p>}
+                    </div>
+                </CardContent>
+            </Card>
+
+            <Card className="border-0 shadow-sm">
+                <CardHeader>
+                    <CardTitle>IFS Süresinin Üstünde Çalışılan Parçalar</CardTitle>
+                    <CardDescription>İyileştirme odağı gereken parçalar ve aşım yoğunluğu</CardDescription>
+                </CardHeader>
+                <CardContent className="space-y-4">
+                    <AnalyticsBarChart
+                        data={analytics.overIfsParts.slice(0, 12)}
+                        barsConfig={[
+                            { key: 'avgVariance', name: 'Ort. IFS Farkı', color: CHART_COLORS.warning },
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                        ]}
+                        xAxisKey="partCode"
+                        height={400}
+                    />
+                    <div className="overflow-x-auto">
+                        <table className="w-full text-sm">
+                            <thead className="border-b bg-slate-50 text-slate-500">
+                                <tr>
+                                    {['Parça', 'Aşım', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark'].map((header) => (
+                                        <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em]">{header}</th>
+                                    ))}
+                                </tr>
+                            </thead>
+                            <tbody className="divide-y divide-slate-100">
+                                {analytics.overIfsParts.slice(0, 10).map((part) => (
+                                    <tr key={part.partCode}>
+                                        <td className="px-3 py-2 font-semibold text-slate-900">{part.partCode}</td>
+                                        <td className="px-3 py-2">{part.overIfsCount}</td>
+                                        <td className="px-3 py-2">{formatSeconds(part.avgPartDuration)}</td>
+                                        <td className="px-3 py-2">{formatSeconds(part.avgIfsDuration)}</td>
+                                        <td className="px-3 py-2 text-rose-600">{formatSeconds(part.avgVariance)}</td>
+                                    </tr>
+                                ))}
+                            </tbody>
+                        </table>
+                        {analytics.overIfsParts.length === 0 && <p className="py-8 text-center text-sm text-slate-500">Seçili filtrede IFS üstü çalışan parça bulunmadı.</p>}
+                    </div>
+                </CardContent>
+            </Card>
+        </div>
+
+        {analytics.partInsights && (
+            <>
+                <div className="grid grid-cols-1 xl:grid-cols-[2fr,1fr] gap-4">
+                    <Card className="border-0 shadow-sm">
+                        <CardHeader>
+                            <CardTitle>{analytics.partInsights.label} için SPC Kontrol Grafiği</CardTitle>
+                            <CardDescription>Parça bazında gerçek süre, IFS, ortalama ve kontrol limitleri</CardDescription>
+                        </CardHeader>
+                        <CardContent>
+                            <AnalyticsLineChart
+                                data={analytics.partInsights.spcSeries.map((point) => ({ ...point, sampleLabel: String(point.sample) }))}
+                                linesConfig={[
+                                    { key: 'actual', name: 'Gerçek Süre', color: CHART_COLORS.actual },
+                                    { key: 'ifs', name: 'IFS', color: CHART_COLORS.ifs },
+                                    { key: 'mean', name: 'Ortalama', color: CHART_COLORS.accent },
+                                    { key: 'ucl', name: 'UCL', color: CHART_COLORS.warning },
+                                    { key: 'lcl', name: 'LCL', color: CHART_COLORS.positive },
+                                ]}
+                                xAxisKey="sampleLabel"
+                                height={420}
+                            />
+                        </CardContent>
+                    </Card>
+
+                    <div className="grid grid-cols-1 gap-4">
+                        <MetricCard
+                            title="Parça Ortalaması"
+                            value={formatSeconds(analytics.partInsights.mean)}
+                            subtitle={`${analytics.partInsights.matchedPartCount} eşleşen parça kodu`}
+                            icon={Gauge}
+                            accentClass="bg-gradient-to-r from-indigo-600 to-blue-500"
+                        />
+                        <MetricCard
+                            title="Standart Sapma"
+                            value={formatSeconds(analytics.partInsights.stdDev)}
+                            subtitle="3 sigma kontrol limitleri grafikte gösterilir"
+                            icon={Activity}
+                            accentClass="bg-gradient-to-r from-fuchsia-600 to-violet-500"
+                        />
+                        <MetricCard
+                            title="Kontrol Dışı Nokta"
+                            value={String(analytics.partInsights.outOfControlCount)}
+                            subtitle={`Ort. IFS: ${formatSeconds(analytics.partInsights.avgIfs)}`}
+                            icon={AlertTriangle}
+                            accentClass="bg-gradient-to-r from-rose-600 to-orange-500"
+                        />
+                    </div>
+                </div>
+
+                <Card className="border-0 shadow-sm">
+                    <CardHeader>
+                        <CardTitle>{analytics.partInsights.label} için Robot Bazlı Süre Analizi</CardTitle>
+                        <CardDescription>Aranan parçanın hangi robotta hangi sürede kaynatıldığını karşılaştırır</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                        <AnalyticsBarChart
+                            data={analytics.partInsights.robotBreakdown.slice(0, 14)}
+                            barsConfig={[
+                                { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                                { key: 'avgIfsDuration', name: 'Ort. IFS Süresi', color: CHART_COLORS.ifs },
+                            ]}
+                            xAxisKey="robotNo"
+                            height={400}
+                        />
+                        <div className="overflow-x-auto">
+                            <table className="w-full text-sm">
+                                <thead className="border-b bg-slate-50 text-slate-500">
+                                    <tr>
+                                        {['Robot', 'Kayıt', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Min', 'Maks'].map((header) => (
+                                            <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em]">{header}</th>
+                                        ))}
+                                    </tr>
+                                </thead>
+                                <tbody className="divide-y divide-slate-100">
+                                    {analytics.partInsights.robotBreakdown.map((robot) => (
+                                        <tr key={robot.robotNo}>
+                                            <td className="px-3 py-2 font-semibold text-slate-900">{robot.robotNo}</td>
+                                            <td className="px-3 py-2">{robot.recordCount}</td>
+                                            <td className="px-3 py-2">{formatSeconds(robot.avgPartDuration)}</td>
+                                            <td className="px-3 py-2">{formatSeconds(robot.avgIfsDuration)}</td>
+                                            <td className={`px-3 py-2 ${robot.avgVariance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>{formatSeconds(robot.avgVariance)}</td>
+                                            <td className="px-3 py-2">{formatSeconds(robot.minDuration)}</td>
+                                            <td className="px-3 py-2">{formatSeconds(robot.maxDuration)}</td>
+                                        </tr>
+                                    ))}
+                                </tbody>
+                            </table>
+                        </div>
+                    </CardContent>
+                </Card>
+            </>
+        )}
+
+        <Card className="border-0 shadow-sm">
+            <CardHeader>
+                <CardTitle>Detay Kayıtlar</CardTitle>
+                <CardDescription>Tarih filtresi, parça kodu araması ve IFS durumuna göre detaylı liste</CardDescription>
+            </CardHeader>
+            <CardContent className="p-0">
+                <div className="border-t overflow-x-auto">
+                    <table className="w-full">
+                        <thead className="bg-slate-50">
+                            <tr>
+                                {['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi', 'IFS Süre', 'Fark', 'Durum', 'Açıklama', ''].map(h => (
+                                    <th key={h} className="px-4 py-3 text-left text-xs font-medium text-slate-500 uppercase tracking-[0.08em]">{h}</th>
+                                ))}
+                            </tr>
+                        </thead>
+                        <tbody className="divide-y divide-slate-100">
+                            {filteredRecords.map((record) => {
+                                const partDuration = parseDuration(record.part_duration);
+                                const ifsDuration = parseDuration(record.ifs_duration);
+                                const variance = getVariance(partDuration, ifsDuration);
+                                const status = getPerformanceStatus(partDuration, ifsDuration);
+                                const statusClass = status === 'IFS Altı'
+                                    ? 'bg-emerald-100 text-emerald-800'
+                                    : status === 'IFS Üstü'
+                                        ? 'bg-rose-100 text-rose-800'
+                                        : status === 'IFS Eşit'
+                                            ? 'bg-amber-100 text-amber-800'
+                                            : 'bg-slate-100 text-slate-700';
+
+                                return (
+                                    <tr key={record.id} className="hover:bg-slate-50/80">
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">{format(getRecordDateValue(record.record_date) || new Date(), 'dd.MM.yyyy')}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{record.robot_no}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${record.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                İst. {record.station}
+                                            </span>
+                                        </td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">{record.line_name}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold">{record.part_code}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">{Number.isFinite(partDuration) ? formatSeconds(partDuration) : <span className="text-slate-400 italic">Boş</span>}</td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">{Number.isFinite(ifsDuration) ? formatSeconds(ifsDuration) : <span className="text-slate-400 italic">Boş</span>}</td>
+                                        <td className={`px-4 py-2 whitespace-nowrap text-sm font-semibold ${Number.isFinite(variance) && variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                            {Number.isFinite(variance) ? formatSeconds(variance) : '-'}
+                                        </td>
+                                        <td className="px-4 py-2 whitespace-nowrap text-sm">
+                                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{status}</span>
+                                        </td>
+                                        <td className="px-4 py-2 text-sm max-w-xs truncate" title={record.description}>{record.description || '-'}</td>
+                                        <td className="px-4 py-2 text-right whitespace-nowrap">
+                                            <Button variant="ghost" size="sm" onClick={() => onEditRecord(record)}>
+                                                <Edit className="h-4 w-4" />
+                                            </Button>
+                                            <Button variant="ghost" size="sm" onClick={() => onDeleteRecord(record)}>
+                                                <Trash2 className="h-4 w-4 text-red-500" />
+                                            </Button>
+                                        </td>
+                                    </tr>
+                                );
+                            })}
+                        </tbody>
+                    </table>
+                    {filteredRecords.length === 0 && (
+                        <p className="text-center py-10 text-slate-500">Seçili filtrelerde kayıt bulunamadı.</p>
+                    )}
+                </div>
+            </CardContent>
+        </Card>
+    </>
+));
 
 const DailyTimeTracking = () => {
     const [records, setRecords] = useState([]);
@@ -43,19 +909,18 @@ const DailyTimeTracking = () => {
     const [filters, setFilters] = useState({
         dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) },
         line_id: 'all',
-        robot_no: '',
-        part_code: '',
         station: 'all',
     });
+    const [searchInputs, setSearchInputs] = useState({ robot_no: '', part_code: '' });
+    const deferredRobotFilter = useDeferredValue(searchInputs.robot_no);
+    const deferredPartCodeFilter = useDeferredValue(searchInputs.part_code);
+    const isSearchPending = searchInputs.robot_no !== deferredRobotFilter || searchInputs.part_code !== deferredPartCodeFilter;
 
     const fetchData = useCallback(async () => {
         setLoading(true);
         try {
-            const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
-            const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
-
             const [recordsData, linesData, robotsData] = await Promise.all([
-                supabase.from('daily_time_tracking').select('*').gte('record_date', from).lte('record_date', to).order('record_date', { ascending: false }),
+                supabase.from('daily_time_tracking').select('*').order('record_date', { ascending: false }),
                 supabase.from('lines').select('*').eq('deleted', false),
                 supabase.from('robots').select('*').eq('deleted', false).eq('active', true).order('name'),
             ]);
@@ -76,45 +941,32 @@ const DailyTimeTracking = () => {
         } finally {
             setLoading(false);
         }
-    }, [toast, filters.dateRange]);
+    }, []);
 
     useEffect(() => {
         fetchData();
     }, [fetchData]);
 
-    // Robot numarasını çıkar (RK001 -> 1, RK002 -> 2) - RK1'den başlayarak sıralı
-    const getRobotSortNum = (robotNo) => {
-        if (!robotNo) return 9999;
-        const m = String(robotNo).match(/RK0*(\d+)/i) || String(robotNo).match(/(\d+)/);
-        return m ? parseInt(m[1], 10) : 9999;
-    };
-
-    // Filtreleme ve sıralama: Tarih (azalan) → Robot No (RK1, RK2...) → İstasyon
     const filteredRecords = useMemo(() => {
-        const filtered = records.filter(r => {
-            if (filters.line_id !== 'all' && r.line_id !== filters.line_id) return false;
-            if (filters.robot_no && !r.robot_no.toLowerCase().includes(filters.robot_no.toLowerCase())) return false;
-            if (filters.part_code && !r.part_code.toLowerCase().includes(filters.part_code.toLowerCase())) return false;
-            if (filters.station !== 'all' && r.station !== Number(filters.station)) return false;
-            return true;
+        return filterAndSortDailyTimeRecords(records, {
+            dateRange: filters.dateRange,
+            line_id: filters.line_id,
+            station: filters.station,
+            robotSearch: deferredRobotFilter,
+            partSearch: deferredPartCodeFilter,
         });
-        return [...filtered].sort((a, b) => {
-            const dateA = new Date(a.record_date).getTime();
-            const dateB = new Date(b.record_date).getTime();
-            if (dateB !== dateA) return dateB - dateA;
-            const robotNumA = getRobotSortNum(a.robot_no);
-            const robotNumB = getRobotSortNum(b.robot_no);
-            if (robotNumA !== robotNumB) return robotNumA - robotNumB;
-            return (a.station || 0) - (b.station || 0);
-        });
-    }, [records, filters]);
+    }, [records, filters.dateRange, filters.line_id, filters.station, deferredRobotFilter, deferredPartCodeFilter]);
 
-    // Toplamlar
-    const totals = useMemo(() => {
-        const partDurationTotal = filteredRecords.reduce((sum, r) => sum + (r.part_duration || 0), 0);
-        const ifsDurationTotal = filteredRecords.reduce((sum, r) => sum + (r.ifs_duration || 0), 0);
-        return { partDurationTotal, ifsDurationTotal };
-    }, [filteredRecords]);
+    const analytics = useMemo(() => buildAnalytics(filteredRecords, deferredPartCodeFilter), [filteredRecords, deferredPartCodeFilter]);
+    const totals = analytics.totals;
+    const activePartSearch = normalizeText(deferredPartCodeFilter);
+    const getCurrentListRecords = useCallback(() => filterAndSortDailyTimeRecords(records, {
+        dateRange: filters.dateRange,
+        line_id: filters.line_id,
+        station: filters.station,
+        robotSearch: searchInputs.robot_no,
+        partSearch: searchInputs.part_code,
+    }), [records, filters.dateRange, filters.line_id, filters.station, searchInputs.robot_no, searchInputs.part_code]);
 
     // Taslak satırları: Her robot için 2 istasyon (robot.line_id ile hat bilgisi)
     const lineMap = useMemo(() => new Map(lines.map(l => [l.id, l.name])), [lines]);
@@ -190,7 +1042,7 @@ const DailyTimeTracking = () => {
         } finally {
             setTemplateLoading(false);
         }
-    }, [templateRows, toast]);
+    }, [templateRows]);
 
     useEffect(() => {
         if (viewMode === 'template' && templateRows.length > 0) {
@@ -239,7 +1091,7 @@ const DailyTimeTracking = () => {
         }
     };
 
-    const resetForm = () => {
+    const resetForm = useCallback(() => {
         setFormState({
             record_date: new Date().toISOString().split('T')[0],
             robot_no: '',
@@ -251,9 +1103,9 @@ const DailyTimeTracking = () => {
             description: '',
         });
         setEditingRecord(null);
-    };
+    }, []);
 
-    const openDialog = (record = null) => {
+    const openDialog = useCallback((record = null) => {
         if (record) {
             setEditingRecord(record);
             setFormState({
@@ -270,7 +1122,7 @@ const DailyTimeTracking = () => {
             resetForm();
         }
         setShowDialog(true);
-    };
+    }, [resetForm]);
 
     const handleSave = async () => {
         // Validasyon
@@ -373,44 +1225,245 @@ const DailyTimeTracking = () => {
                     return (a.station || 0) - (b.station || 0);
                 });
             } else {
-                reportRecords = filteredRecords;
+                reportRecords = getCurrentListRecords();
             }
-            const partTotal = reportRecords.reduce((s, r) => s + (r.part_duration || 0), 0);
-            const ifsTotal = reportRecords.reduce((s, r) => s + (r.ifs_duration || 0), 0);
+
+            if (reportRecords.length === 0) {
+                toast({ title: 'Veri Yok', description: 'Rapor oluşturmak için filtreye uygun kayıt bulunamadı.', variant: 'destructive' });
+                return;
+            }
+
+            const reportAnalytics = buildAnalytics(reportRecords, searchInputs.part_code);
             const periodLabel = viewMode === 'template'
                 ? format(new Date(templateDate + 'T12:00:00'), 'dd.MM.yyyy', { locale: tr })
                 : `${format(filters.dateRange?.from || new Date(), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`;
+
+            const reportSections = [];
+
+            if (reportAnalytics.lineAnalysis.length > 0) {
+                reportSections.push({
+                    type: 'chart',
+                    title: 'Hat Bazlı Performans Grafiği',
+                    chartType: 'bar',
+                    data: reportAnalytics.lineAnalysis.slice(0, 12),
+                    config: {
+                        xAxisKey: 'lineName',
+                        bars: [
+                            { key: 'avgVariance', name: 'Ort. IFS Farkı', color: CHART_COLORS.warning },
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                        ],
+                        height: 320,
+                        xAxisAngle: reportAnalytics.lineAnalysis.length > 6 ? -35 : 0,
+                        xAxisHeight: reportAnalytics.lineAnalysis.length > 6 ? 88 : 44,
+                        yAxisWidth: 72,
+                    },
+                });
+            }
+
+            if (reportAnalytics.lineAnalysis.length > 0) {
+                reportSections.push({
+                    title: 'Hat Bazlı Performans Analizi',
+                    headers: ['Hat', 'Kayıt', 'Robot', 'Parça', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'IFS Üstü Oran'],
+                    rows: reportAnalytics.lineAnalysis.map((line) => [
+                        line.lineName,
+                        String(line.recordCount),
+                        String(line.robotCount),
+                        String(line.partCount),
+                        formatNumber(line.avgPartDuration),
+                        formatNumber(line.avgIfsDuration),
+                        formatNumber(line.avgVariance),
+                        formatPercent(line.overIfsRate),
+                    ]),
+                    options: {
+                        columnWidths: ['18%', '10%', '10%', '10%', '13%', '13%', '13%', '13%'],
+                        rightAlignColumns: [1, 2, 3, 4, 5, 6, 7],
+                    },
+                });
+            }
+
+            if (reportAnalytics.overIfsParts.length > 0) {
+                reportSections.push({
+                    type: 'chart',
+                    title: 'IFS Üstü Parçalar Grafiği',
+                    chartType: 'bar',
+                    data: reportAnalytics.overIfsParts.slice(0, 12),
+                    config: {
+                        xAxisKey: 'partCode',
+                        bars: [
+                            { key: 'avgVariance', name: 'Ort. IFS Farkı', color: CHART_COLORS.warning },
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                        ],
+                        height: 320,
+                        xAxisAngle: reportAnalytics.overIfsParts.length > 6 ? -35 : 0,
+                        xAxisHeight: reportAnalytics.overIfsParts.length > 6 ? 88 : 44,
+                        yAxisWidth: 72,
+                    },
+                });
+
+                reportSections.push({
+                    title: 'IFS Süresinin Üstünde Çalışılan Parçalar',
+                    headers: ['Parça', 'Aşım Kaydı', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Hat', 'Robot'],
+                    rows: reportAnalytics.overIfsParts.map((part) => [
+                        part.partCode,
+                        String(part.overIfsCount),
+                        formatNumber(part.avgPartDuration),
+                        formatNumber(part.avgIfsDuration),
+                        formatNumber(part.avgVariance),
+                        String(part.lineCount),
+                        String(part.robotCount),
+                    ]),
+                    options: {
+                        columnWidths: ['22%', '12%', '14%', '14%', '14%', '12%', '12%'],
+                        rightAlignColumns: [1, 2, 3, 4, 5, 6],
+                    },
+                });
+            }
+
+            const trendSections = [
+                { title: 'Günlük Trend', data: reportAnalytics.dailyTrend },
+                { title: 'Haftalık Trend', data: reportAnalytics.weeklyTrend },
+                { title: 'Aylık Trend', data: reportAnalytics.monthlyTrend },
+            ];
+
+            trendSections.forEach((section) => {
+                if (section.data.length === 0) return;
+                reportSections.push({
+                    type: 'chart',
+                    title: section.title,
+                    chartType: 'line',
+                    data: section.data,
+                    config: {
+                        xAxisKey: 'label',
+                        lines: [
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                            { key: 'avgIfsDuration', name: 'Ort. IFS Süresi', color: CHART_COLORS.ifs },
+                        ],
+                        xAxisAngle: section.data.length > 8 ? -35 : 0,
+                        xAxisHeight: section.data.length > 8 ? 80 : 40,
+                        yAxisWidth: 72,
+                    },
+                });
+            });
+
+            if (reportAnalytics.partInsights?.spcSeries?.length > 0) {
+                reportSections.push({
+                    type: 'chart',
+                    title: `${reportAnalytics.partInsights.label} - SPC Kontrol Grafiği`,
+                    chartType: 'line',
+                    data: reportAnalytics.partInsights.spcSeries.map((point) => ({
+                        ...point,
+                        sampleLabel: String(point.sample),
+                    })),
+                    config: {
+                        xAxisKey: 'sampleLabel',
+                        lines: [
+                            { key: 'actual', name: 'Gerçek Süre', color: CHART_COLORS.actual },
+                            { key: 'ifs', name: 'IFS', color: CHART_COLORS.ifs },
+                            { key: 'mean', name: 'Ortalama', color: CHART_COLORS.accent },
+                            { key: 'ucl', name: 'UCL', color: CHART_COLORS.warning },
+                            { key: 'lcl', name: 'LCL', color: CHART_COLORS.positive },
+                        ],
+                        yAxisWidth: 72,
+                    },
+                });
+
+                reportSections.push({
+                    type: 'chart',
+                    title: `${reportAnalytics.partInsights.label} - Robot Bazlı Süre Karşılaştırması`,
+                    chartType: 'bar',
+                    data: reportAnalytics.partInsights.robotBreakdown,
+                    config: {
+                        xAxisKey: 'robotNo',
+                        bars: [
+                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                            { key: 'avgIfsDuration', name: 'Ort. IFS Süresi', color: CHART_COLORS.ifs },
+                        ],
+                        yAxisWidth: 72,
+                    },
+                });
+
+                reportSections.push({
+                    title: `${reportAnalytics.partInsights.label} - Robot Bazlı Detay`,
+                    headers: ['Robot', 'Kayıt', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Min', 'Maks'],
+                    rows: reportAnalytics.partInsights.robotBreakdown.map((robot) => [
+                        robot.robotNo,
+                        String(robot.recordCount),
+                        formatNumber(robot.avgPartDuration),
+                        formatNumber(robot.avgIfsDuration),
+                        formatNumber(robot.avgVariance),
+                        formatNumber(robot.minDuration),
+                        formatNumber(robot.maxDuration),
+                    ]),
+                    options: {
+                        columnWidths: ['20%', '10%', '14%', '14%', '14%', '14%', '14%'],
+                        rightAlignColumns: [1, 2, 3, 4, 5, 6],
+                    },
+                });
+            }
+
             const reportData = {
-                title: 'Günlük Süre Takibi - Detaylı Rapor',
+                title: 'Günlük Süre Takibi - Analitik Rapor',
                 reportId: `RPR-DAILY-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`,
                 filters: {
+                    'Rapor Modu': viewMode === 'template' ? 'Taslak Günlük Rapor' : 'Filtreli Analiz Raporu',
                     'Rapor Dönemi': periodLabel,
                     'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
-                    'Toplam Kayıt': reportRecords.length + ' adet',
-                    'Toplam Parça Süresi': partTotal.toFixed(2) + ' sn',
-                    'Toplam IFS Süre': ifsTotal.toFixed(2) + ' sn',
+                    'Hat Filtresi': filters.line_id !== 'all' ? (lines.find((line) => line.id === filters.line_id)?.name || 'Seçili Hat') : 'Tümü',
+                    'Robot Filtresi': searchInputs.robot_no || 'Tümü',
+                    'Parça Araması': searchInputs.part_code || 'Tümü',
+                    'İstasyon': filters.station !== 'all' ? `İstasyon ${filters.station}` : 'Tümü',
+                    'Toplam Kayıt': `${reportAnalytics.totals.recordCount} adet`,
+                    'IFS Kıyaslanabilir Kayıt': `${reportAnalytics.totals.comparableCount} adet`,
                 },
+                landscape: true,
                 kpiCards: [
-                    { title: 'Toplam Kayıt', value: reportRecords.length.toString() },
-                    { title: 'Parça Süresi (sn)', value: partTotal.toFixed(2) },
-                    { title: 'IFS Süre (sn)', value: ifsTotal.toFixed(2) },
+                    { title: 'Toplam Kayıt', value: String(reportAnalytics.totals.recordCount) },
+                    { title: 'Ort. Parça Süresi', value: formatNumber(reportAnalytics.totals.avgPartDuration) },
+                    { title: 'Ort. IFS', value: formatNumber(reportAnalytics.totals.avgIfsDuration) },
+                    { title: 'IFS Altı', value: String(reportAnalytics.totals.underIfsCount) },
+                    { title: 'IFS Üstü', value: String(reportAnalytics.totals.overIfsCount) },
+                    { title: 'Ort. Fark', value: formatNumber(reportAnalytics.totals.avgVariance) },
                 ],
+                sections: reportSections,
                 tableData: {
-                    headers: ['Tarih', 'Robot No', 'İst.', 'Hat', 'Parça', 'Süre (sn)', 'IFS (sn)', 'Açıklama'],
+                    headers: ['Tarih', 'Robot No', 'İst.', 'Hat', 'Parça', 'Süre (sn)', 'IFS (sn)', 'Fark', 'Durum', 'Açıklama'],
                     rows: reportRecords.map(r => [
-                        format(new Date(r.record_date), 'dd.MM.yyyy'),
+                        format(getRecordDateValue(r.record_date) || new Date(), 'dd.MM.yyyy'),
                         r.robot_no,
                         'İst. ' + r.station,
                         r.line_name,
                         r.part_code || '-',
-                        r.part_duration != null ? String(r.part_duration) : '-',
-                        r.ifs_duration != null ? String(r.ifs_duration) : '-',
+                        Number.isFinite(parseDuration(r.part_duration)) ? formatNumber(parseDuration(r.part_duration)) : '-',
+                        Number.isFinite(parseDuration(r.ifs_duration)) ? formatNumber(parseDuration(r.ifs_duration)) : '-',
+                        (() => {
+                            const variance = getVariance(parseDuration(r.part_duration), parseDuration(r.ifs_duration));
+                            return Number.isFinite(variance)
+                                ? {
+                                    value: formatNumber(variance),
+                                    style: { color: variance > 0 ? '#b91c1c' : '#047857', fontWeight: 700 }
+                                }
+                                : '-';
+                        })(),
+                        (() => {
+                            const status = getPerformanceStatus(parseDuration(r.part_duration), parseDuration(r.ifs_duration));
+                            const tone = status === 'IFS Altı'
+                                ? { background: '#dcfce7', color: '#166534' }
+                                : status === 'IFS Üstü'
+                                    ? { background: '#fee2e2', color: '#991b1b' }
+                                    : status === 'IFS Eşit'
+                                        ? { background: '#fef3c7', color: '#92400e' }
+                                        : { background: '#e2e8f0', color: '#334155' };
+                            return {
+                                value: status,
+                                badge: tone,
+                            };
+                        })(),
                         r.description || '-',
                     ]),
                     options: {
-                        columnWidths: ['10%', '10%', '8%', '11%', '12%', '12%', '12%', '25%'],
-                        wrapColumns: [7],
-                        rightAlignColumns: [5, 6],
+                        columnWidths: ['10%', '10%', '7%', '10%', '10%', '10%', '10%', '10%', '9%', '14%'],
+                        wrapColumns: [9],
+                        rightAlignColumns: [5, 6, 7],
                     },
                 },
             };
@@ -423,21 +1476,27 @@ const DailyTimeTracking = () => {
 
     // CSV Export
     const handleExport = () => {
-        if (filteredRecords.length === 0) {
+        const currentListRecords = getCurrentListRecords();
+
+        if (currentListRecords.length === 0) {
             toast({ title: "Uyarı", description: "Dışa aktarılacak veri bulunamadı." });
             return;
         }
 
         const lineMap = new Map(lines.map(l => [l.id, l.name]));
-        const headers = ['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (sn)', 'IFS Süre (sn)', 'Açıklama'];
-        const rows = filteredRecords.map(r => [
-            format(new Date(r.record_date), 'dd.MM.yyyy'),
+        const headers = ['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (sn)', 'IFS Süre (sn)', 'IFS Farkı (sn)', 'Durum', 'Açıklama'];
+        const rows = currentListRecords.map(r => [
+            format(getRecordDateValue(r.record_date) || new Date(), 'dd.MM.yyyy'),
             r.robot_no,
             r.station,
             lineMap.get(r.line_id) || 'N/A',
             r.part_code,
             r.part_duration != null ? r.part_duration : '',
             r.ifs_duration != null ? r.ifs_duration : '',
+            Number.isFinite(getVariance(parseDuration(r.part_duration), parseDuration(r.ifs_duration)))
+                ? getVariance(parseDuration(r.part_duration), parseDuration(r.ifs_duration))
+                : '',
+            getPerformanceStatus(parseDuration(r.part_duration), parseDuration(r.ifs_duration)),
             r.description || ''
         ]);
 
@@ -450,7 +1509,7 @@ const DailyTimeTracking = () => {
         link.download = `gunluk_sure_takibi_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
         link.click();
         URL.revokeObjectURL(url);
-        toast({ title: "İndirildi", description: `${filteredRecords.length} kayıt CSV olarak indirildi.` });
+        toast({ title: "İndirildi", description: `${currentListRecords.length} kayıt CSV olarak indirildi.` });
     };
 
     // Hızlı tarih butonları
@@ -633,8 +1692,8 @@ const DailyTimeTracking = () => {
             {/* Liste modu: Filtreler, Toplamlar, Tablo */}
             {viewMode === 'list' && (
             <>
-            <Card>
-                <CardContent className="pt-6">
+            <Card className="border-0 shadow-sm">
+                <CardContent className="pt-6 space-y-4">
                     <div className="flex flex-wrap items-center gap-3">
                         <DateRangePicker
                             value={filters.dateRange}
@@ -648,121 +1707,68 @@ const DailyTimeTracking = () => {
                             <Button variant="outline" size="sm" onClick={() => setQuickDate('thisMonth')}>Bu Ay</Button>
                         </div>
                         <Select value={filters.line_id} onValueChange={v => setFilters(prev => ({ ...prev, line_id: v }))}>
-                            <SelectTrigger className="w-[180px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger>
+                            <SelectTrigger className="w-[190px]"><SelectValue placeholder="Tüm Hatlar" /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Tüm Hatlar</SelectItem>
                                 {lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}
                             </SelectContent>
                         </Select>
                         <Select value={filters.station} onValueChange={v => setFilters(prev => ({ ...prev, station: v }))}>
-                            <SelectTrigger className="w-[140px]"><SelectValue placeholder="Tüm İst." /></SelectTrigger>
+                            <SelectTrigger className="w-[150px]"><SelectValue placeholder="Tüm İst." /></SelectTrigger>
                             <SelectContent>
                                 <SelectItem value="all">Tüm İstasyonlar</SelectItem>
                                 <SelectItem value="1">İstasyon 1</SelectItem>
                                 <SelectItem value="2">İstasyon 2</SelectItem>
                             </SelectContent>
                         </Select>
-                        <Input
-                            placeholder="Robot No..."
-                            value={filters.robot_no}
-                            onChange={e => setFilters(prev => ({ ...prev, robot_no: e.target.value }))}
-                            className="w-[140px]"
-                        />
-                        <Input
-                            placeholder="Parça Kodu..."
-                            value={filters.part_code}
-                            onChange={e => setFilters(prev => ({ ...prev, part_code: e.target.value }))}
-                            className="w-[160px]"
-                        />
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <Input
+                                placeholder="Robot No"
+                                value={searchInputs.robot_no}
+                                onChange={e => setSearchInputs(prev => ({ ...prev, robot_no: e.target.value }))}
+                                className="w-[150px] pl-9"
+                            />
+                        </div>
+                        <div className="relative">
+                            <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+                            <Input
+                                placeholder="Parça Kodu Ara"
+                                value={searchInputs.part_code}
+                                onChange={e => setSearchInputs(prev => ({ ...prev, part_code: e.target.value }))}
+                                className="w-[190px] pl-9"
+                            />
+                        </div>
+                        <Button
+                            variant="ghost"
+                            size="sm"
+                            onClick={() => {
+                                setFilters({
+                                    dateRange: { from: startOfMonth(new Date()), to: endOfMonth(new Date()) },
+                                    line_id: 'all',
+                                    station: 'all',
+                                });
+                                setSearchInputs({ robot_no: '', part_code: '' });
+                            }}
+                        >
+                            Temizle
+                        </Button>
+                    </div>
+
+                    <div className="rounded-2xl border border-indigo-100 bg-indigo-50/80 px-4 py-3 text-sm text-indigo-950">
+                        <span className="font-semibold">IFS:</span> Bir parçanın hedeflenen ideal üretim süresidir. IFS altı süreler hedef üstü performans, IFS üstü süreler ise iyileştirme alanı olarak değerlendirilir.
                     </div>
                 </CardContent>
             </Card>
-
-            {/* Toplam Kartlar */}
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Toplam Kayıt</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{filteredRecords.length}</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Toplam Parça Süresi</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totals.partDurationTotal.toFixed(2)} sn</div>
-                    </CardContent>
-                </Card>
-                <Card>
-                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Toplam IFS Süre</CardTitle>
-                    </CardHeader>
-                    <CardContent>
-                        <div className="text-2xl font-bold">{totals.ifsDurationTotal.toFixed(2)} sn</div>
-                    </CardContent>
-                </Card>
-            </div>
-
-            {/* Tablo */}
-            <Card>
-                <CardContent className="p-0">
-                    <div className="border rounded-lg overflow-x-auto">
-                        <table className="w-full">
-                            <thead className="bg-gray-50">
-                                <tr>
-                                    {['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (sn)', 'IFS Süre (sn)', 'Açıklama', ''].map(h => (
-                                        <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
-                                    ))}
-                                </tr>
-                            </thead>
-                            <tbody className="divide-y">
-                                {filteredRecords.map(record => (
-                                    <tr key={record.id} className="hover:bg-gray-50">
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm">{format(new Date(record.record_date), 'dd.MM.yyyy')}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">{record.robot_no}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${record.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                                                İst. {record.station}
-                                            </span>
-                                        </td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm">{record.line_name}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm font-semibold">{record.part_code}</td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                            {record.part_duration != null ? (
-                                                <span className="font-medium">{record.part_duration}</span>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Boş</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                            {record.ifs_duration != null ? (
-                                                <span className="font-medium">{record.ifs_duration}</span>
-                                            ) : (
-                                                <span className="text-gray-400 italic">Boş</span>
-                                            )}
-                                        </td>
-                                        <td className="px-4 py-2 text-sm max-w-xs truncate" title={record.description}>{record.description || '-'}</td>
-                                        <td className="px-4 py-2 text-right whitespace-nowrap">
-                                            <Button variant="ghost" size="sm" onClick={() => openDialog(record)}>
-                                                <Edit className="h-4 w-4" />
-                                            </Button>
-                                            <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm(record)}>
-                                                <Trash2 className="h-4 w-4 text-red-500" />
-                                            </Button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                        {filteredRecords.length === 0 && (
-                            <p className="text-center py-8 text-gray-500">Kayıt bulunamadı.</p>
-                        )}
-                    </div>
-                </CardContent>
-            </Card>
+            <ListAnalyticsDashboard
+                analytics={analytics}
+                totals={totals}
+                activePartSearch={activePartSearch}
+                isSearchPending={isSearchPending}
+                filteredRecords={filteredRecords}
+                onEditRecord={openDialog}
+                onDeleteRecord={setDeleteConfirm}
+            />
             </>
             )}
 

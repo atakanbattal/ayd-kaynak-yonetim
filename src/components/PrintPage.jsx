@@ -1,12 +1,75 @@
-import React, { useEffect, useState } from 'react';
-import { useSearchParams, useNavigate } from 'react-router-dom';
+import React, { useEffect, useRef, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { supabase } from '@/lib/customSupabaseClient';
+import { sanitizeReportData } from '@/lib/utils';
 import { Button } from '@/components/ui/button';
 import { Printer, Download } from 'lucide-react';
 import {
   BarChart, Bar, LineChart, Line, PieChart, Pie, Cell,
   XAxis, YAxis, CartesianGrid, Tooltip, Legend, ResponsiveContainer
 } from 'recharts';
+
+const sleep = (ms) => new Promise((resolve) => window.setTimeout(resolve, ms));
+
+const waitForAnimationFrames = async (count = 2) => {
+  for (let index = 0; index < count; index += 1) {
+    await new Promise((resolve) => window.requestAnimationFrame(() => resolve()));
+  }
+};
+
+const waitForImages = async (root = document) => {
+  const images = Array.from(root.querySelectorAll('img'));
+  await Promise.all(
+    images.map((image) => {
+      if (image.complete) return Promise.resolve();
+      return new Promise((resolve) => {
+        image.addEventListener('load', resolve, { once: true });
+        image.addEventListener('error', resolve, { once: true });
+      });
+    })
+  );
+};
+
+const waitForCharts = async (root = document, timeoutMs = 4000) => {
+  const startTime = performance.now();
+
+  while (performance.now() - startTime < timeoutMs) {
+    const chartContainers = Array.from(root.querySelectorAll('.recharts-responsive-container'));
+
+    if (chartContainers.length === 0) {
+      return;
+    }
+
+    const allChartsReady = chartContainers.every((container) => {
+      const containerRect = container.getBoundingClientRect();
+      const svgElement = container.querySelector('svg');
+      return containerRect.width > 0 && containerRect.height > 0 && svgElement;
+    });
+
+    if (allChartsReady) {
+      return;
+    }
+
+    await waitForAnimationFrames(1);
+  }
+};
+
+const waitForPrintAssets = async (root = document) => {
+  await waitForAnimationFrames(2);
+
+  if (document.fonts?.ready) {
+    try {
+      await document.fonts.ready;
+    } catch (error) {
+      console.warn('Print fonts readiness check failed:', error);
+    }
+  }
+
+  await waitForImages(root);
+  await waitForAnimationFrames(2);
+  await waitForCharts(root);
+  await sleep(150);
+};
 
 // Kurumsal Renkler
 const COLORS = {
@@ -461,23 +524,80 @@ const GeneralReportLayout = ({ reportData }) => {
   // Renk Paleti
   const CHART_COLORS = ['#1e40af', '#059669', '#d97706', '#7c3aed', '#0891b2', '#dc2626', '#65a30d', '#475569'];
 
+  const formatChartValue = (value, formatType = 'number') => {
+    const numericValue = Number(value);
+    if (!Number.isFinite(numericValue)) return value ?? '-';
+
+    if (formatType === 'currency') {
+      return new Intl.NumberFormat('tr-TR', {
+        style: 'currency',
+        currency: 'TRY',
+        minimumFractionDigits: 0,
+        maximumFractionDigits: 2
+      }).format(numericValue);
+    }
+
+    if (formatType === 'percent') {
+      return `%${numericValue.toFixed(2)}`;
+    }
+
+    return numericValue.toLocaleString('tr-TR');
+  };
+
   // Grafik Render
   const renderChart = (chartType, data, config = {}) => {
-    const { dataKey = 'value', nameKey = 'name', xAxisKey = 'name', bars = [], lines = [] } = config;
+    const {
+      dataKey = 'value',
+      nameKey = 'name',
+      xAxisKey = 'name',
+      bars = [],
+      lines = [],
+      colors = CHART_COLORS,
+      height = 240,
+      xAxisAngle = 0,
+      xAxisHeight = xAxisAngle ? 60 : 30,
+      yAxisWidth = 60,
+      yAxisFormat = 'number'
+    } = config;
     if (!data || data.length === 0) return <p style={{ color: '#6b7280', fontStyle: 'italic', textAlign: 'center', padding: '16px' }}>Grafik verisi bulunamadı.</p>;
 
-    const chartHeight = 200;
+    const seriesFormats = Object.fromEntries(
+      [...bars, ...lines]
+        .filter(series => series?.key)
+        .map(series => [series.key, series.format || yAxisFormat || 'number'])
+    );
+
+    const tooltipFormatter = (value, name, item) => {
+      const formatType = seriesFormats[item?.dataKey] || yAxisFormat || 'number';
+      return [formatChartValue(value, formatType), name];
+    };
 
     if (chartType === 'bar') {
       return (
-        <div style={{ width: '100%', height: chartHeight }}>
+        <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
-            <BarChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+            <BarChart data={data} margin={{ top: 10, right: 10, left: 4, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-              <XAxis dataKey={xAxisKey} tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} />
-              {bars.length > 0 ? bars.map((bar, idx) => <Bar key={idx} dataKey={bar.key} name={bar.name} fill={bar.color || CHART_COLORS[idx % CHART_COLORS.length]} />) : <Bar dataKey={dataKey} fill={CHART_COLORS[0]} />}
+              <XAxis
+                dataKey={xAxisKey}
+                tick={{ fontSize: 9, fill: '#4b5563' }}
+                axisLine={false}
+                tickLine={false}
+                angle={xAxisAngle}
+                textAnchor={xAxisAngle ? 'end' : 'middle'}
+                interval={0}
+                height={xAxisHeight}
+              />
+              <YAxis
+                tick={{ fontSize: 9, fill: '#4b5563' }}
+                axisLine={false}
+                tickLine={false}
+                width={yAxisWidth}
+                tickFormatter={(value) => formatChartValue(value, yAxisFormat)}
+              />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} formatter={tooltipFormatter} />
+              <Legend wrapperStyle={{ fontSize: '9px' }} />
+              {bars.length > 0 ? bars.map((bar, idx) => <Bar key={idx} dataKey={bar.key} name={bar.name} fill={bar.color || colors[idx % colors.length]} />) : <Bar dataKey={dataKey} fill={colors[0]} />}
             </BarChart>
           </ResponsiveContainer>
         </div>
@@ -485,14 +605,30 @@ const GeneralReportLayout = ({ reportData }) => {
     }
     if (chartType === 'line') {
       return (
-        <div style={{ width: '100%', height: chartHeight }}>
+        <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={data} margin={{ top: 10, right: 10, left: 0, bottom: 5 }}>
+            <LineChart data={data} margin={{ top: 10, right: 10, left: 4, bottom: 10 }}>
               <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e5e7eb" />
-              <XAxis dataKey={xAxisKey} tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fontSize: 9, fill: '#4b5563' }} axisLine={false} tickLine={false} width={40} />
-              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} />
-              {lines.length > 0 ? lines.map((line, idx) => <Line key={idx} type="monotone" dataKey={line.key} name={line.name} stroke={line.color || CHART_COLORS[idx % CHART_COLORS.length]} strokeWidth={2} dot={false} />) : <Line type="monotone" dataKey={dataKey} stroke={CHART_COLORS[0]} strokeWidth={2} dot={false} />}
+              <XAxis
+                dataKey={xAxisKey}
+                tick={{ fontSize: 9, fill: '#4b5563' }}
+                axisLine={false}
+                tickLine={false}
+                angle={xAxisAngle}
+                textAnchor={xAxisAngle ? 'end' : 'middle'}
+                interval={0}
+                height={xAxisHeight}
+              />
+              <YAxis
+                tick={{ fontSize: 9, fill: '#4b5563' }}
+                axisLine={false}
+                tickLine={false}
+                width={yAxisWidth}
+                tickFormatter={(value) => formatChartValue(value, yAxisFormat)}
+              />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} formatter={tooltipFormatter} />
+              <Legend wrapperStyle={{ fontSize: '9px' }} />
+              {lines.length > 0 ? lines.map((line, idx) => <Line key={idx} type="monotone" dataKey={line.key} name={line.name} stroke={line.color || colors[idx % colors.length]} strokeWidth={2} dot={false} />) : <Line type="monotone" dataKey={dataKey} stroke={colors[0]} strokeWidth={2} dot={false} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -500,13 +636,23 @@ const GeneralReportLayout = ({ reportData }) => {
     }
     if (chartType === 'pie') {
       return (
-        <div style={{ width: '100%', height: chartHeight }}>
+        <div style={{ width: '100%', height }}>
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
-              <Pie data={data} cx="50%" cy="50%" outerRadius={70} fill="#8884d8" dataKey={dataKey} nameKey={nameKey} label={({ percent }) => `${(percent * 100).toFixed(0)}%`} labelLine={false}>
-                {data.map((entry, index) => <Cell key={`cell-${index}`} fill={CHART_COLORS[index % CHART_COLORS.length]} />)}
+              <Pie
+                data={data}
+                cx="50%"
+                cy="50%"
+                outerRadius={78}
+                fill="#8884d8"
+                dataKey={dataKey}
+                nameKey={nameKey}
+                label={({ percent }) => `${(percent * 100).toFixed(0)}%`}
+                labelLine={false}
+              >
+                {data.map((entry, index) => <Cell key={`cell-${index}`} fill={colors[index % colors.length]} />)}
               </Pie>
-              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} />
+              <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} formatter={(value) => formatChartValue(value, config.valueFormat || 'number')} />
               <Legend wrapperStyle={{ fontSize: '9px' }} />
             </PieChart>
           </ResponsiveContainer>
@@ -615,6 +761,10 @@ const GeneralReportLayout = ({ reportData }) => {
                 borderBottom: '1px solid #e2e8f0'
               }}>
                 {row.map((cell, cellIdx) => {
+                  const isObjectCell = cell && typeof cell === 'object' && !Array.isArray(cell);
+                  const cellValue = isObjectCell ? (cell.value ?? '-') : cell;
+                  const cellStyleOverride = isObjectCell && cell.style ? cell.style : {};
+                  const badgeStyle = isObjectCell && cell.badge ? cell.badge : null;
                   const isWrap = wrapColumns.includes(cellIdx);
                   const isNoTruncate = noTruncateColumns.includes(cellIdx);
                   const isRightAlign = rightAlignColumns.includes(cellIdx);
@@ -635,8 +785,22 @@ const GeneralReportLayout = ({ reportData }) => {
                           : { whiteSpace: 'nowrap' }
                       ),
                       ...(isRightAlign ? { textAlign: 'right', fontFamily: 'monospace', letterSpacing: '-0.02em' } : {}),
-                      ...(isLastCol && !isRightAlign ? { fontWeight: '600' } : {})
-                    }}>{cell}</td>
+                      ...(isLastCol && !isRightAlign ? { fontWeight: '600' } : {}),
+                      ...cellStyleOverride
+                    }}>
+                      {badgeStyle ? (
+                        <span style={{
+                          display: 'inline-block',
+                          padding: '2px 8px',
+                          borderRadius: '999px',
+                          fontWeight: '700',
+                          fontSize: compact ? '6pt' : '7pt',
+                          ...badgeStyle
+                        }}>
+                          {cellValue}
+                        </span>
+                      ) : cellValue}
+                    </td>
                   );
                 })}
               </tr>
@@ -791,7 +955,7 @@ const GeneralReportLayout = ({ reportData }) => {
 
               if (section.type === 'chart') {
                 return (
-                  <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', breakInside: 'avoid' }}>
+                  <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', breakInside: 'avoid-page', pageBreakInside: 'avoid' }}>
                     <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 12px', background: '#f8fafc' }}>
                       <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase' }}>{section.title}</h3>
                     </div>
@@ -805,7 +969,7 @@ const GeneralReportLayout = ({ reportData }) => {
               const sectionOptions = section.options || {};
 
               return (
-                <div key={sectionIndex} style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'hidden', breakInside: 'avoid', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+                <div key={sectionIndex} style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'visible', breakInside: 'auto', pageBreakInside: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
                   <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 14px', background: isTopSection ? '#eff6ff' : '#f8fafc', borderBottom: `1px solid #e2e8f0` }}>
                     <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{section.title}</h3>
                     </div>
@@ -853,14 +1017,30 @@ const GeneralReportLayout = ({ reportData }) => {
   );
 };
 
+const PrintableLayout = React.memo(({ reportContent }) => {
+  if (reportContent.wpsData) {
+    return <WPSPrintLayout wpsData={reportContent.wpsData} />;
+  }
+  if (reportContent.examData) {
+    return <ExamPrintLayout examData={reportContent.examData} />;
+  }
+  if (reportContent.certificateData) {
+    return <CertificatePrintLayout certificateData={reportContent.certificateData} />;
+  }
+  return <GeneralReportLayout reportData={reportContent} />;
+});
+
 const PrintPage = () => {
   const [searchParams] = useSearchParams();
-  const navigate = useNavigate();
+  const snapshotId = searchParams.get('snapshot_id');
   const landscapeFromUrl = new URLSearchParams(window.location.search).get('landscape') === '1';
   const [reportContent, setReportContent] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [isPrintReady, setIsPrintReady] = useState(false);
+  const [isPreparingPrint, setIsPreparingPrint] = useState(false);
   const [pageClass, setPageClass] = useState(landscapeFromUrl ? 'page-landscape' : 'page-portrait');
+  const printInProgressRef = useRef(false);
 
   // URL'den landscape=1 varsa @page stilini hemen uygula (veri gelmeden önce)
   useEffect(() => {
@@ -887,8 +1067,6 @@ const PrintPage = () => {
   }, [landscapeFromUrl]);
 
   useEffect(() => {
-    const snapshotId = searchParams.get('snapshot_id');
-
     const fetchSnapshot = async (id) => {
       const { data, error: fetchError } = await supabase
         .from('report_snapshots')
@@ -904,11 +1082,14 @@ const PrintPage = () => {
 
     const loadData = async () => {
       try {
+        setIsPrintReady(false);
+        setIsPreparingPrint(true);
+
         if (!snapshotId) {
           throw new Error("Geçersiz Rapor ID'si. Lütfen ilgili sayfaya geri dönüp tekrar deneyin.");
         }
 
-        const data = await fetchSnapshot(snapshotId);
+        const data = sanitizeReportData(await fetchSnapshot(snapshotId));
         setReportContent(data);
 
         if (data.certificateData || data.landscape) {
@@ -938,7 +1119,7 @@ const PrintPage = () => {
         setError(e.message);
       } finally {
         setLoading(false);
-      }
+      } 
     };
 
     loadData();
@@ -946,7 +1127,35 @@ const PrintPage = () => {
       const el = document.getElementById('print-landscape-page-style');
       if (el) el.remove();
     };
-  }, [searchParams, navigate]);
+  }, [snapshotId]);
+
+  useEffect(() => {
+    if (!reportContent || loading || error) return undefined;
+
+    let cancelled = false;
+
+    const preparePrintSurface = async () => {
+      setIsPrintReady(false);
+      setIsPreparingPrint(true);
+
+      try {
+        await waitForPrintAssets(document);
+        if (!cancelled) {
+          setIsPrintReady(true);
+        }
+      } finally {
+        if (!cancelled) {
+          setIsPreparingPrint(false);
+        }
+      }
+    };
+
+    preparePrintSurface();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [error, loading, pageClass, reportContent]);
 
   if (loading) {
     return <div className="flex items-center justify-center h-screen">Rapor verisi hazırlanıyor...</div>;
@@ -966,34 +1175,56 @@ const PrintPage = () => {
     return <div className="flex items-center justify-center h-screen">Yazdırılacak veri bulunamadı.</div>;
   }
 
-  const renderLayout = () => {
-    if (reportContent.wpsData) {
-      return <WPSPrintLayout wpsData={reportContent.wpsData} />;
+  const triggerPrint = async () => {
+    if (!reportContent || !isPrintReady || isPreparingPrint || printInProgressRef.current) {
+      return;
     }
-    if (reportContent.examData) {
-      return <ExamPrintLayout examData={reportContent.examData} />;
+
+    printInProgressRef.current = true;
+
+    try {
+      await waitForPrintAssets(document);
+      await waitForAnimationFrames(2);
+
+      const handleAfterPrint = () => {
+        printInProgressRef.current = false;
+        window.removeEventListener('afterprint', handleAfterPrint);
+      };
+
+      window.addEventListener('afterprint', handleAfterPrint);
+      window.print();
+    } catch (printError) {
+      printInProgressRef.current = false;
+      console.error('Print preparation failed:', printError);
     }
-    if (reportContent.certificateData) {
-      return <CertificatePrintLayout certificateData={reportContent.certificateData} />;
-    }
-    return <GeneralReportLayout reportData={reportContent} />;
   };
 
   const handleSaveAsPDF = () => {
     // Tarayıcının native yazdırma/PDF kaydetme penceresini aç
     // Bu yöntem CSS @page kurallarına saygı duyar, metinleri bölmez ve en kaliteli çıktıyı verir.
-    window.print();
+    triggerPrint();
   };
 
   return (
     <>
       <div className="print-controls no-print fixed top-4 right-4 flex flex-col gap-2">
-        <Button onClick={() => window.print()}><Printer className="mr-2 h-4 w-4" /> Yazdır</Button>
-        <Button onClick={handleSaveAsPDF} variant="default"><Download className="mr-2 h-4 w-4" /> PDF Olarak Kaydet</Button>
+        <Button onClick={triggerPrint} disabled={loading || !reportContent || !isPrintReady || isPreparingPrint}>
+          <Printer className="mr-2 h-4 w-4" />
+          {isPreparingPrint ? 'Hazırlanıyor...' : 'Yazdır'}
+        </Button>
+        <Button onClick={handleSaveAsPDF} variant="default" disabled={loading || !reportContent || !isPrintReady || isPreparingPrint}>
+          <Download className="mr-2 h-4 w-4" />
+          {isPreparingPrint ? 'Hazırlanıyor...' : 'PDF Olarak Kaydet'}
+        </Button>
         <Button variant="secondary" onClick={() => window.close()}>Kapat</Button>
+        {(!isPrintReady || isPreparingPrint) && !loading && (
+          <div className="rounded-md bg-white/95 px-3 py-2 text-xs text-slate-600 shadow-sm border border-slate-200 max-w-[220px]">
+            Rapor, grafik ve tablolar tam yüklenene kadar hazırlanıyor.
+          </div>
+        )}
       </div>
       <div className={`print-area ${pageClass}`}>
-        {renderLayout()}
+        <PrintableLayout reportContent={reportContent} />
       </div>
       <style dangerouslySetInnerHTML={{ __html: `
         body {
@@ -1041,12 +1272,22 @@ const PrintPage = () => {
             box-shadow: none !important; border: none !important;
             padding: 0 !important; margin: 0 !important; background: white !important;
           }
-          table { width: 100% !important; border-collapse: collapse !important; page-break-inside: auto !important; }
+          table { width: 100% !important; border-collapse: collapse !important; page-break-inside: auto !important; break-inside: auto !important; }
           thead { display: table-header-group !important; }
           tbody { display: table-row-group !important; }
-          tr { page-break-inside: avoid !important; break-inside: avoid !important; }
-          th, td { page-break-inside: avoid !important; }
-          section { page-break-inside: avoid !important; break-inside: avoid !important; }
+          tr { page-break-inside: auto !important; break-inside: auto !important; }
+          th, td { page-break-inside: auto !important; break-inside: auto !important; }
+          section { page-break-inside: auto !important; break-inside: auto !important; }
+          .print-area section,
+          .print-area div {
+            orphans: 2;
+            widows: 2;
+          }
+          .print-area h2,
+          .print-area h3 {
+            page-break-after: avoid !important;
+            break-after: avoid !important;
+          }
           header { page-break-after: avoid !important; }
           .signature-section, footer { page-break-inside: avoid !important; break-inside: avoid !important; }
           .recharts-responsive-container { page-break-inside: avoid !important; break-inside: avoid !important; }
