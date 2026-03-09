@@ -104,6 +104,37 @@ const getRobotSortNum = (robotNo) => {
     return match ? parseInt(match[1], 10) : 9999;
 };
 
+const hasDailyTimeEntryContent = (record) => {
+    const textValues = [record?.part_code, record?.description];
+    const numericValues = [record?.part_duration, record?.ifs_duration];
+
+    return textValues.some((value) => String(value || '').trim() !== '')
+        || numericValues.some((value) => value !== null && value !== undefined && String(value).trim() !== '');
+};
+
+const getDailyTimeRecordKey = (record) => (
+    record?.robot_id ? `${record.robot_id}-${record.station}` : `${record?.robot_no}-${record?.station}`
+);
+
+const buildUniqueDailyTimeRecords = (records) => {
+    const uniqueMap = new Map();
+
+    records.forEach((record) => {
+        if (!hasDailyTimeEntryContent(record)) return;
+
+        const key = getDailyTimeRecordKey(record);
+        const existing = uniqueMap.get(key);
+        const recordTimestamp = new Date(record?.updated_at || record?.created_at || 0).getTime();
+        const existingTimestamp = new Date(existing?.updated_at || existing?.created_at || 0).getTime();
+
+        if (!existing || recordTimestamp >= existingTimestamp) {
+            uniqueMap.set(key, record);
+        }
+    });
+
+    return Array.from(uniqueMap.values());
+};
+
 const filterAndSortDailyTimeRecords = (records, {
     dateRange,
     line_id = 'all',
@@ -720,24 +751,22 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
         {analytics.partInsights && (
             <>
                 <div className="grid grid-cols-1 xl:grid-cols-[2fr,1fr] gap-4">
-                    <Card className="border-0 shadow-sm">
-                        <CardHeader>
-                            <CardTitle>{analytics.partInsights.label} için SPC Kontrol Grafiği</CardTitle>
-                            <CardDescription>Parça bazında gerçek süre, IFS, ortalama ve kontrol limitleri</CardDescription>
-                        </CardHeader>
-                        <CardContent>
-                            <AnalyticsLineChart
-                                data={analytics.partInsights.spcSeries.map((point) => ({ ...point, sampleLabel: String(point.sample) }))}
-                                linesConfig={[
-                                    { key: 'actual', name: 'Gerçek Süre', color: CHART_COLORS.actual },
-                                    { key: 'ifs', name: 'IFS', color: CHART_COLORS.ifs },
-                                    { key: 'mean', name: 'Ortalama', color: CHART_COLORS.accent },
-                                    { key: 'ucl', name: 'UCL', color: CHART_COLORS.warning },
-                                    { key: 'lcl', name: 'LCL', color: CHART_COLORS.positive },
-                                ]}
-                                xAxisKey="sampleLabel"
-                                height={420}
-                            />
+                        <Card className="border-0 shadow-sm">
+                            <CardHeader>
+                                <CardTitle>{analytics.partInsights.label} için Süre Kararlılık Grafiği</CardTitle>
+                                <CardDescription>Parça bazında gerçek süre, IFS ve ortalama karşılaştırması</CardDescription>
+                            </CardHeader>
+                            <CardContent>
+                                <AnalyticsLineChart
+                                    data={analytics.partInsights.spcSeries.map((point) => ({ ...point, sampleLabel: String(point.sample) }))}
+                                    linesConfig={[
+                                        { key: 'actual', name: 'Gerçek Süre', color: CHART_COLORS.actual },
+                                        { key: 'ifs', name: 'IFS', color: CHART_COLORS.ifs },
+                                        { key: 'mean', name: 'Ortalama', color: CHART_COLORS.accent },
+                                    ]}
+                                    xAxisKey="sampleLabel"
+                                    height={420}
+                                />
                         </CardContent>
                     </Card>
 
@@ -752,7 +781,7 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                         <MetricCard
                             title="Standart Sapma"
                             value={formatSeconds(analytics.partInsights.stdDev)}
-                            subtitle="3 sigma kontrol limitleri grafikte gösterilir"
+                            subtitle="Süre dağılımının ne kadar değiştiğini gösterir"
                             icon={Activity}
                             accentClass="bg-gradient-to-r from-fuchsia-600 to-violet-500"
                         />
@@ -892,8 +921,10 @@ const DailyTimeTracking = () => {
     const [showDialog, setShowDialog] = useState(false);
     const [editingRecord, setEditingRecord] = useState(null);
     const [deleteConfirm, setDeleteConfirm] = useState(null);
-    const [viewMode, setViewMode] = useState('template'); // 'template' | 'list' - varsayılan taslak
+    const [viewMode, setViewMode] = useState('template'); // 'template' | 'list' - varsayılan veri girişi
     const [templateDate, setTemplateDate] = useState(new Date().toISOString().split('T')[0]);
+    const [templatePanelMode, setTemplatePanelMode] = useState('entry');
+    const [isSavingTemplate, setIsSavingTemplate] = useState(false);
 
     const [formState, setFormState] = useState({
         record_date: new Date().toISOString().split('T')[0],
@@ -1050,20 +1081,94 @@ const DailyTimeTracking = () => {
         }
     }, [viewMode, templateDate, templateRows.length, loadTemplateForDate]);
 
+    useEffect(() => {
+        setTemplatePanelMode('entry');
+    }, [templateDate]);
+
     const updateTemplateRow = (key, field, value) => {
         setTemplateData(prev => prev.map(r => r.key === key ? { ...r, [field]: value } : r));
     };
 
+    const templateSavedRecords = useMemo(() => (
+        [...buildUniqueDailyTimeRecords(records.filter((record) => record.record_date === templateDate))].sort((a, b) => {
+            const lineCompare = String(a.line_name || '').localeCompare(String(b.line_name || ''));
+            if (lineCompare !== 0) return lineCompare;
+            const robotCompare = getRobotSortNum(a.robot_no) - getRobotSortNum(b.robot_no);
+            if (robotCompare !== 0) return robotCompare;
+            return (a.station || 0) - (b.station || 0);
+        })
+    ), [records, templateDate]);
+
+    const templatePreviewStats = useMemo(() => {
+        const comparableRecords = templateSavedRecords.filter((record) => {
+            const partDuration = parseDuration(record.part_duration);
+            const ifsDuration = parseDuration(record.ifs_duration);
+            return Number.isFinite(partDuration) && Number.isFinite(ifsDuration);
+        });
+
+        return {
+            totalCount: templateSavedRecords.length,
+            comparableCount: comparableRecords.length,
+            overIfsCount: comparableRecords.filter((record) => getPerformanceStatus(parseDuration(record.part_duration), parseDuration(record.ifs_duration)) === 'IFS Üstü').length,
+            underIfsCount: comparableRecords.filter((record) => getPerformanceStatus(parseDuration(record.part_duration), parseDuration(record.ifs_duration)) === 'IFS Altı').length,
+        };
+    }, [templateSavedRecords]);
+
     const handleSaveTemplate = async () => {
-        const toSave = templateData.filter(r => (r.part_code || '').trim() !== '' || (r.part_duration || '').trim() !== '');
-        if (toSave.length === 0) {
-            toast({ title: 'Uyarı', description: 'En az bir satırda parça kodu veya parça süresi girin.', variant: 'default' });
-            return;
-        }
+        if (isSavingTemplate) return;
+
+        setIsSavingTemplate(true);
         try {
-            for (const row of toSave) {
+            const { data: existingRecords, error: existingError } = await supabase
+                .from('daily_time_tracking')
+                .select('id, robot_id, robot_no, station')
+                .eq('record_date', templateDate);
+
+            if (existingError) throw existingError;
+
+            const existingByKey = new Map();
+            (existingRecords || []).forEach((record) => {
+                const key = getDailyTimeRecordKey(record);
+                if (!existingByKey.has(key)) {
+                    existingByKey.set(key, []);
+                }
+                existingByKey.get(key).push(record);
+            });
+
+            const preparedRows = templateData.map((row) => {
+                const rowKey = getDailyTimeRecordKey(row);
+                return {
+                    row,
+                    rowKey,
+                    hasContent: hasDailyTimeEntryContent(row),
+                    existingMatches: existingByKey.get(rowKey) || [],
+                };
+            });
+
+            const rowsToSave = preparedRows.filter((item) => item.hasContent);
+            const idsToDelete = [...new Set(preparedRows
+                .filter((item) => !item.hasContent)
+                .flatMap((item) => item.existingMatches.map((record) => record.id))
+                .filter(Boolean))];
+
+            if (rowsToSave.length === 0 && idsToDelete.length === 0) {
+                toast({ title: 'Uyarı', description: 'Kaydedilecek bir veri bulunamadı.', variant: 'default' });
+                return;
+            }
+
+            if (idsToDelete.length > 0) {
+                const { error: deleteEmptyError } = await supabase
+                    .from('daily_time_tracking')
+                    .delete()
+                    .in('id', idsToDelete);
+
+                if (deleteEmptyError) throw deleteEmptyError;
+            }
+
+            for (const { row, existingMatches } of rowsToSave) {
                 const partDur = row.part_duration ? parseFloat(row.part_duration) : null;
                 const ifsDur = row.ifs_duration ? parseFloat(row.ifs_duration) : null;
+                const primaryExistingRecord = existingMatches[0];
                 const payload = {
                     record_date: templateDate,
                     robot_no: row.robot_no,
@@ -1076,18 +1181,45 @@ const DailyTimeTracking = () => {
                     description: (row.description || '').trim() || null,
                     updated_at: new Date().toISOString(),
                 };
-                if (row.existingId) {
-                    await supabase.from('daily_time_tracking').update(payload).eq('id', row.existingId);
+
+                if (primaryExistingRecord?.id) {
+                    const { error: updateError } = await supabase
+                        .from('daily_time_tracking')
+                        .update(payload)
+                        .eq('id', primaryExistingRecord.id);
+
+                    if (updateError) throw updateError;
+
+                    if (existingMatches.length > 1) {
+                        const duplicateIds = existingMatches.slice(1).map((record) => record.id);
+                        if (duplicateIds.length > 0) {
+                            const { error: duplicateDeleteError } = await supabase
+                                .from('daily_time_tracking')
+                                .delete()
+                                .in('id', duplicateIds);
+
+                            if (duplicateDeleteError) throw duplicateDeleteError;
+                        }
+                    }
                 } else {
-                    await supabase.from('daily_time_tracking').insert(payload);
+                    const { error: insertError } = await supabase
+                        .from('daily_time_tracking')
+                        .insert(payload);
+
+                    if (insertError) throw insertError;
                 }
             }
-            toast({ title: 'Başarılı', description: `${toSave.length} kayıt kaydedildi.` });
-            logAction('SAVE_TEMPLATE_DAILY_TIME', `${templateDate}: ${toSave.length} satır`, user);
-            loadTemplateForDate(templateDate);
-            fetchData();
+
+            const saveSummary = `${rowsToSave.length} kayıt güncellendi${idsToDelete.length > 0 ? `, ${idsToDelete.length} boş kayıt temizlendi` : ''}.`;
+            toast({ title: 'Başarılı', description: saveSummary });
+            logAction('SAVE_TEMPLATE_DAILY_TIME', `${templateDate}: ${saveSummary}`, user);
+            await fetchData();
+            await loadTemplateForDate(templateDate);
+            setTemplatePanelMode('preview');
         } catch (error) {
             toast({ title: 'Kayıt Başarısız', description: error.message, variant: 'destructive' });
+        } finally {
+            setIsSavingTemplate(false);
         }
     };
 
@@ -1212,11 +1344,11 @@ const DailyTimeTracking = () => {
         try {
             let reportRecords;
             if (viewMode === 'template') {
-                let dateRecords = records.filter(r => r.record_date === templateDate);
+                let dateRecords = templateSavedRecords;
                 if (dateRecords.length === 0) {
                     const { data } = await supabase.from('daily_time_tracking').select('*').eq('record_date', templateDate);
                     const lm = new Map(lines.map(l => [l.id, l.name]));
-                    dateRecords = (data || []).map(r => ({ ...r, line_name: lm.get(r.line_id) || 'N/A' }));
+                    dateRecords = buildUniqueDailyTimeRecords((data || []).map(r => ({ ...r, line_name: lm.get(r.line_id) || 'N/A' })));
                 }
                 reportRecords = [...dateRecords].sort((a, b) => {
                     const rnA = getRobotSortNum(a.robot_no);
@@ -1348,7 +1480,7 @@ const DailyTimeTracking = () => {
             if (reportAnalytics.partInsights?.spcSeries?.length > 0) {
                 reportSections.push({
                     type: 'chart',
-                    title: `${reportAnalytics.partInsights.label} - SPC Kontrol Grafiği`,
+                    title: `${reportAnalytics.partInsights.label} - Süre Kararlılık Grafiği`,
                     chartType: 'line',
                     data: reportAnalytics.partInsights.spcSeries.map((point) => ({
                         ...point,
@@ -1360,8 +1492,6 @@ const DailyTimeTracking = () => {
                             { key: 'actual', name: 'Gerçek Süre', color: CHART_COLORS.actual },
                             { key: 'ifs', name: 'IFS', color: CHART_COLORS.ifs },
                             { key: 'mean', name: 'Ortalama', color: CHART_COLORS.accent },
-                            { key: 'ucl', name: 'UCL', color: CHART_COLORS.warning },
-                            { key: 'lcl', name: 'LCL', color: CHART_COLORS.positive },
                         ],
                         yAxisWidth: 72,
                     },
@@ -1405,7 +1535,7 @@ const DailyTimeTracking = () => {
                 title: 'Günlük Süre Takibi - Analitik Rapor',
                 reportId: `RPR-DAILY-${format(new Date(), 'yyyyMMdd')}-${Math.floor(1000 + Math.random() * 9000)}`,
                 filters: {
-                    'Rapor Modu': viewMode === 'template' ? 'Taslak Günlük Rapor' : 'Filtreli Analiz Raporu',
+                    'Rapor Modu': viewMode === 'template' ? 'Günlük Veri Giriş Raporu' : 'Filtreli Analiz Raporu',
                     'Rapor Dönemi': periodLabel,
                     'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
                     'Hat Filtresi': filters.line_id !== 'all' ? (lines.find((line) => line.id === filters.line_id)?.name || 'Seçili Hat') : 'Tümü',
@@ -1557,7 +1687,7 @@ const DailyTimeTracking = () => {
                             onClick={() => setViewMode('template')}
                             className={viewMode === 'template' ? 'bg-indigo-600' : ''}
                         >
-                            <LayoutGrid className="h-4 w-4 mr-1" /> Taslak Giriş
+                            <LayoutGrid className="h-4 w-4 mr-1" /> Veri Girişi
                         </Button>
                         <Button
                             variant={viewMode === 'list' ? 'default' : 'ghost'}
@@ -1565,7 +1695,7 @@ const DailyTimeTracking = () => {
                             onClick={() => setViewMode('list')}
                             className={viewMode === 'list' ? 'bg-indigo-600' : ''}
                         >
-                            <List className="h-4 w-4 mr-1" /> Liste
+                            <List className="h-4 w-4 mr-1" /> Analiz ve Liste
                         </Button>
                     </div>
                     <Button variant="outline" onClick={handleExport}>
@@ -1582,18 +1712,18 @@ const DailyTimeTracking = () => {
                 </div>
             </div>
 
-            {/* Taslak Giriş Modu */}
+            {/* Veri Girişi Modu */}
             {viewMode === 'template' && (
                 <Card>
                     <CardHeader>
                         <div className="flex flex-wrap items-center justify-between gap-4">
                             <div>
-                                <CardTitle>Taslak Giriş</CardTitle>
+                                <CardTitle>Günlük Veri Girişi</CardTitle>
                                 <CardDescription>
-                                    Tarih seçin, robot ve hat bilgileri hazır. Sadece parça kodu ve parça süresini girin.
+                                    Tarih seçin, robot ve hat bilgileri hazır. Girişi yaptıktan sonra kayıtları ayrı görüntüleme ekranından kontrol edin.
                                 </CardDescription>
                             </div>
-                            <div className="flex items-center gap-2">
+                            <div className="flex flex-wrap items-center justify-end gap-2">
                                 <Label className="text-sm font-medium">Tarih:</Label>
                                 <Input
                                     type="date"
@@ -1601,89 +1731,218 @@ const DailyTimeTracking = () => {
                                     onChange={e => setTemplateDate(e.target.value)}
                                     className="w-[160px] h-10"
                                 />
-                                <Button onClick={handleSaveTemplate} disabled={templateLoading} className="bg-indigo-600 hover:bg-indigo-700">
-                                    <Save className="h-4 w-4 mr-2" /> Tümünü Kaydet
-                                </Button>
+                                <div className="flex rounded-lg border border-gray-200 bg-gray-50 p-1">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={templatePanelMode === 'entry' ? 'default' : 'ghost'}
+                                        className={templatePanelMode === 'entry' ? 'bg-indigo-600' : ''}
+                                        onClick={() => {
+                                            setTemplatePanelMode('entry');
+                                            loadTemplateForDate(templateDate);
+                                        }}
+                                    >
+                                        Veri Girişi
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={templatePanelMode === 'preview' ? 'default' : 'ghost'}
+                                        className={templatePanelMode === 'preview' ? 'bg-indigo-600' : ''}
+                                        onClick={() => setTemplatePanelMode('preview')}
+                                    >
+                                        Kayıt Görüntüle
+                                    </Button>
+                                </div>
+                                {templatePanelMode === 'entry' ? (
+                                    <Button
+                                        onClick={handleSaveTemplate}
+                                        disabled={templateLoading || isSavingTemplate}
+                                        className="bg-indigo-600 hover:bg-indigo-700"
+                                    >
+                                        <Save className="h-4 w-4 mr-2" />
+                                        {isSavingTemplate ? 'Kaydediliyor...' : 'Girişi Kaydet'}
+                                    </Button>
+                                ) : (
+                                    <Button
+                                        variant="outline"
+                                        onClick={() => {
+                                            setTemplatePanelMode('entry');
+                                            loadTemplateForDate(templateDate);
+                                        }}
+                                    >
+                                        Düzenlemeye Dön
+                                    </Button>
+                                )}
                             </div>
                         </div>
                     </CardHeader>
-                    <CardContent className="p-0">
-                        <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
-                            <table className="w-full text-sm">
-                                <thead className="bg-gray-50 sticky top-0 z-10">
-                                    <tr>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[100px]">ROBOT</th>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[120px]">HAT ADI</th>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[70px]">İst.</th>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase min-w-[140px]">PARÇA KODU</th>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[100px]">PARÇA SÜRESİ (sn)</th>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[90px]">IFS (sn)</th>
-                                        <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase">Açıklama</th>
-                                    </tr>
-                                </thead>
-                                <tbody className="divide-y divide-gray-100">
-                                    {templateLoading ? (
-                                        <tr><td colSpan="7" className="px-4 py-8 text-center text-gray-500">Yükleniyor...</td></tr>
-                                    ) : (
-                                        templateData.map((row, idx) => {
-                                            const lineColors = { ATMACA: 'bg-amber-50', KARTAL: 'bg-sky-50', PARS: 'bg-amber-50/70', KURT: 'bg-emerald-50' };
-                                            const bg = lineColors[row.line_name] || 'bg-white';
-                                            return (
-                                                <tr key={row.key} className={`${bg} hover:bg-gray-50/80`}>
-                                                    <td className="px-4 py-2 font-medium text-gray-900">{row.robot_no}</td>
-                                                    <td className="px-4 py-2 font-medium text-gray-700">{row.line_name}</td>
-                                                    <td className="px-4 py-2">
-                                                        <span className={`px-2 py-0.5 rounded text-xs font-semibold ${row.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
-                                                            {row.station}
-                                                        </span>
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <Input
-                                                            placeholder="Parça kodu"
-                                                            value={row.part_code}
-                                                            onChange={e => updateTemplateRow(row.key, 'part_code', e.target.value)}
-                                                            className="h-9 text-sm border-gray-200"
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <Input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            placeholder="0"
-                                                            value={row.part_duration}
-                                                            onChange={e => updateTemplateRow(row.key, 'part_duration', e.target.value)}
-                                                            className="h-9 text-sm border-gray-200 w-20"
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <Input
-                                                            type="number"
-                                                            step="0.01"
-                                                            min="0"
-                                                            placeholder="0"
-                                                            value={row.ifs_duration}
-                                                            onChange={e => updateTemplateRow(row.key, 'ifs_duration', e.target.value)}
-                                                            className="h-9 text-sm border-gray-200 w-20"
-                                                        />
-                                                    </td>
-                                                    <td className="px-4 py-2">
-                                                        <Input
-                                                            placeholder="Opsiyonel"
-                                                            value={row.description}
-                                                            onChange={e => updateTemplateRow(row.key, 'description', e.target.value)}
-                                                            className="h-9 text-sm border-gray-200"
-                                                        />
-                                                    </td>
-                                                </tr>
-                                            );
-                                        })
-                                    )}
-                                </tbody>
-                            </table>
+                    <CardContent className="space-y-4 p-4">
+                        <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
+                            {templatePanelMode === 'entry'
+                                ? 'Aynı tarih ve aynı robot-istasyon için tekrar kaydettiğinizde yeni kayıt açılmaz, mevcut kayıt güncellenir. Boş bırakılan satırlar kaydedilmez.'
+                                : `Bu alanda ${format(new Date(`${templateDate}T12:00:00`), 'dd.MM.yyyy', { locale: tr })} tarihine ait kaydedilmiş verileri görüyorsunuz. Yeni kayıt eklemek veya düzenlemek için "Düzenlemeye Dön" kullanın.`}
                         </div>
-                        {templateData.length === 0 && !templateLoading && (
-                            <p className="text-center py-8 text-gray-500">Robot tanımı bulunamadı. Ana Veri modülünden robot ekleyin.</p>
+
+                        {templatePanelMode === 'entry' ? (
+                            <>
+                                <div className="overflow-x-auto max-h-[60vh] overflow-y-auto">
+                                    <table className="w-full text-sm">
+                                        <thead className="bg-gray-50 sticky top-0 z-10">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[100px]">ROBOT</th>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[120px]">HAT ADI</th>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[70px]">İst.</th>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase min-w-[140px]">PARÇA KODU</th>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[100px]">PARÇA SÜRESİ (sn)</th>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase w-[90px]">IFS (sn)</th>
+                                                <th className="px-4 py-3 text-left font-medium text-gray-500 uppercase">Açıklama</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-gray-100">
+                                            {templateLoading ? (
+                                                <tr><td colSpan="7" className="px-4 py-8 text-center text-gray-500">Yükleniyor...</td></tr>
+                                            ) : (
+                                                templateData.map((row) => {
+                                                    const lineColors = { ATMACA: 'bg-amber-50', KARTAL: 'bg-sky-50', PARS: 'bg-amber-50/70', KURT: 'bg-emerald-50' };
+                                                    const bg = lineColors[row.line_name] || 'bg-white';
+                                                    return (
+                                                        <tr key={row.key} className={`${bg} hover:bg-gray-50/80`}>
+                                                            <td className="px-4 py-2 font-medium text-gray-900">{row.robot_no}</td>
+                                                            <td className="px-4 py-2 font-medium text-gray-700">{row.line_name}</td>
+                                                            <td className="px-4 py-2">
+                                                                <span className={`px-2 py-0.5 rounded text-xs font-semibold ${row.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                                    {row.station}
+                                                                </span>
+                                                            </td>
+                                                            <td className="px-4 py-2">
+                                                                <Input
+                                                                    placeholder="Parça kodu"
+                                                                    value={row.part_code}
+                                                                    onChange={e => updateTemplateRow(row.key, 'part_code', e.target.value)}
+                                                                    className="h-9 text-sm border-gray-200"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-2">
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    placeholder="0"
+                                                                    value={row.part_duration}
+                                                                    onChange={e => updateTemplateRow(row.key, 'part_duration', e.target.value)}
+                                                                    className="h-9 text-sm border-gray-200 w-20"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-2">
+                                                                <Input
+                                                                    type="number"
+                                                                    step="0.01"
+                                                                    min="0"
+                                                                    placeholder="0"
+                                                                    value={row.ifs_duration}
+                                                                    onChange={e => updateTemplateRow(row.key, 'ifs_duration', e.target.value)}
+                                                                    className="h-9 text-sm border-gray-200 w-20"
+                                                                />
+                                                            </td>
+                                                            <td className="px-4 py-2">
+                                                                <Input
+                                                                    placeholder="Opsiyonel"
+                                                                    value={row.description}
+                                                                    onChange={e => updateTemplateRow(row.key, 'description', e.target.value)}
+                                                                    className="h-9 text-sm border-gray-200"
+                                                                />
+                                                            </td>
+                                                        </tr>
+                                                    );
+                                                })
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                                {templateData.length === 0 && !templateLoading && (
+                                    <p className="text-center py-8 text-gray-500">Robot tanımı bulunamadı. Ana Veri modülünden robot ekleyin.</p>
+                                )}
+                            </>
+                        ) : (
+                            <>
+                                <div className="grid gap-3 md:grid-cols-4">
+                                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Kaydedilen Kayıt</p>
+                                        <p className="mt-1 text-2xl font-bold text-slate-900">{templatePreviewStats.totalCount}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">IFS Kıyaslanan</p>
+                                        <p className="mt-1 text-2xl font-bold text-slate-900">{templatePreviewStats.comparableCount}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-600">IFS Üstü</p>
+                                        <p className="mt-1 text-2xl font-bold text-rose-700">{templatePreviewStats.overIfsCount}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-emerald-600">IFS Altı</p>
+                                        <p className="mt-1 text-2xl font-bold text-emerald-700">{templatePreviewStats.underIfsCount}</p>
+                                    </div>
+                                </div>
+
+                                <div className="overflow-x-auto max-h-[60vh] overflow-y-auto rounded-xl border border-slate-200">
+                                    <table className="w-full text-sm">
+                                        <thead className="sticky top-0 z-10 bg-slate-50">
+                                            <tr>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Robot</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Hat</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">İst.</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Parça Kodu</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Parça Süresi</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">IFS</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Fark</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Durum</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Açıklama</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody className="divide-y divide-slate-100 bg-white">
+                                            {templateSavedRecords.map((record) => {
+                                                const partDuration = parseDuration(record.part_duration);
+                                                const ifsDuration = parseDuration(record.ifs_duration);
+                                                const variance = getVariance(partDuration, ifsDuration);
+                                                const status = getPerformanceStatus(partDuration, ifsDuration);
+                                                const statusClass = status === 'IFS Altı'
+                                                    ? 'bg-emerald-100 text-emerald-800'
+                                                    : status === 'IFS Üstü'
+                                                        ? 'bg-rose-100 text-rose-800'
+                                                        : status === 'IFS Eşit'
+                                                            ? 'bg-amber-100 text-amber-800'
+                                                            : 'bg-slate-100 text-slate-700';
+
+                                                return (
+                                                    <tr key={record.id || getDailyTimeRecordKey(record)} className="hover:bg-slate-50/80">
+                                                        <td className="px-4 py-2 font-medium text-slate-900">{record.robot_no}</td>
+                                                        <td className="px-4 py-2">{record.line_name}</td>
+                                                        <td className="px-4 py-2">
+                                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${record.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                                İst. {record.station}
+                                                            </span>
+                                                        </td>
+                                                        <td className="px-4 py-2 font-semibold text-slate-900">{record.part_code || '-'}</td>
+                                                        <td className="px-4 py-2">{Number.isFinite(partDuration) ? formatSeconds(partDuration) : '-'}</td>
+                                                        <td className="px-4 py-2">{Number.isFinite(ifsDuration) ? formatSeconds(ifsDuration) : '-'}</td>
+                                                        <td className={`px-4 py-2 font-semibold ${Number.isFinite(variance) && variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                            {Number.isFinite(variance) ? formatSeconds(variance) : '-'}
+                                                        </td>
+                                                        <td className="px-4 py-2">
+                                                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{status}</span>
+                                                        </td>
+                                                        <td className="px-4 py-2 text-slate-600">{record.description || '-'}</td>
+                                                    </tr>
+                                                );
+                                            })}
+                                        </tbody>
+                                    </table>
+                                    {templateSavedRecords.length === 0 && (
+                                        <p className="py-10 text-center text-slate-500">Bu tarih için henüz kaydedilmiş veri bulunmuyor.</p>
+                                    )}
+                                </div>
+                            </>
                         )}
                     </CardContent>
                 </Card>
