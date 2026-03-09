@@ -135,6 +135,38 @@ const buildUniqueDailyTimeRecords = (records) => {
     return Array.from(uniqueMap.values());
 };
 
+const fetchAllDailyTimeTrackingRecords = async (filters = {}) => {
+    const pageSize = 1000;
+    let from = 0;
+    const allRecords = [];
+
+    while (true) {
+        let query = supabase
+            .from('daily_time_tracking')
+            .select('*')
+            .range(from, from + pageSize - 1)
+            .order('record_date', { ascending: false })
+            .order('updated_at', { ascending: false });
+
+        if (filters.record_date) {
+            query = query.eq('record_date', filters.record_date);
+        }
+
+        const { data, error } = await query;
+        if (error) throw error;
+
+        allRecords.push(...(data || []));
+
+        if (!data || data.length < pageSize) {
+            break;
+        }
+
+        from += pageSize;
+    }
+
+    return allRecords;
+};
+
 const filterAndSortDailyTimeRecords = (records, {
     dateRange,
     line_id = 'all',
@@ -951,19 +983,19 @@ const DailyTimeTracking = () => {
         setLoading(true);
         try {
             const [recordsData, linesData, robotsData] = await Promise.all([
-                supabase.from('daily_time_tracking').select('*').order('record_date', { ascending: false }),
+                fetchAllDailyTimeTrackingRecords(),
                 supabase.from('lines').select('*').eq('deleted', false),
                 supabase.from('robots').select('*').eq('deleted', false).eq('active', true).order('name'),
             ]);
 
-            if (recordsData.error) throw recordsData.error;
             if (linesData.error) throw linesData.error;
+            if (robotsData.error) throw robotsData.error;
 
             setLines(linesData.data || []);
             setRobots(robotsData.data || []);
 
             const lineMap = new Map((linesData.data || []).map(l => [l.id, l.name]));
-            setRecords((recordsData.data || []).map(r => ({
+            setRecords((recordsData || []).map(r => ({
                 ...r,
                 line_name: lineMap.get(r.line_id) || 'N/A'
             })));
@@ -1041,12 +1073,9 @@ const DailyTimeTracking = () => {
         if (!dateStr) return;
         setTemplateLoading(true);
         try {
-            const { data } = await supabase
-                .from('daily_time_tracking')
-                .select('*')
-                .eq('record_date', dateStr);
+            const data = await fetchAllDailyTimeTrackingRecords({ record_date: dateStr });
             const existingMap = new Map();
-            (data || []).forEach(rec => {
+            buildUniqueDailyTimeRecords(data || []).forEach(rec => {
                 // robot_id ile eşleştirme - aynı isimde birden fazla robot varsa doğru satıra düşmesi için
                 const key = rec.robot_id ? `${rec.robot_id}-${rec.station}` : `${rec.robot_no}-${rec.station}`;
                 existingMap.set(key, rec);
@@ -1080,10 +1109,6 @@ const DailyTimeTracking = () => {
             loadTemplateForDate(templateDate);
         }
     }, [viewMode, templateDate, templateRows.length, loadTemplateForDate]);
-
-    useEffect(() => {
-        setTemplatePanelMode('entry');
-    }, [templateDate]);
 
     const updateTemplateRow = (key, field, value) => {
         setTemplateData(prev => prev.map(r => r.key === key ? { ...r, [field]: value } : r));
@@ -1346,8 +1371,8 @@ const DailyTimeTracking = () => {
             if (viewMode === 'template') {
                 let dateRecords = templateSavedRecords;
                 if (dateRecords.length === 0) {
-                    const { data } = await supabase.from('daily_time_tracking').select('*').eq('record_date', templateDate);
                     const lm = new Map(lines.map(l => [l.id, l.name]));
+                    const data = await fetchAllDailyTimeTrackingRecords({ record_date: templateDate });
                     dateRecords = buildUniqueDailyTimeRecords((data || []).map(r => ({ ...r, line_name: lm.get(r.line_id) || 'N/A' })));
                 }
                 reportRecords = [...dateRecords].sort((a, b) => {
@@ -1886,17 +1911,17 @@ const DailyTimeTracking = () => {
                                 </div>
 
                                 <div className="overflow-x-auto max-h-[60vh] overflow-y-auto rounded-xl border border-slate-200">
-                                    <table className="w-full text-sm">
+                                    <table className="min-w-full text-sm">
                                         <thead className="sticky top-0 z-10 bg-slate-50">
                                             <tr>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Robot</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Hat</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">İst.</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Parça Kodu</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Parça Süresi</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">IFS</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Fark</th>
-                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Durum</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[100px]">Robot</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[140px]">Hat</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[90px]">İst.</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[180px]">Parça Kodu</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[150px]">Parça Süresi</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[120px]">IFS</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[130px]">Fark</th>
+                                                <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase whitespace-nowrap min-w-[120px]">Durum</th>
                                                 <th className="px-4 py-3 text-left font-medium text-slate-500 uppercase">Açıklama</th>
                                             </tr>
                                         </thead>
@@ -1916,21 +1941,21 @@ const DailyTimeTracking = () => {
 
                                                 return (
                                                     <tr key={record.id || getDailyTimeRecordKey(record)} className="hover:bg-slate-50/80">
-                                                        <td className="px-4 py-2 font-medium text-slate-900">{record.robot_no}</td>
-                                                        <td className="px-4 py-2">{record.line_name}</td>
-                                                        <td className="px-4 py-2">
-                                                            <span className={`px-2 py-1 rounded-full text-xs font-semibold ${record.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
+                                                        <td className="px-4 py-2 font-medium text-slate-900 whitespace-nowrap">{record.robot_no}</td>
+                                                        <td className="px-4 py-2 whitespace-nowrap">{record.line_name}</td>
+                                                        <td className="px-4 py-2 whitespace-nowrap">
+                                                            <span className={`inline-flex items-center whitespace-nowrap px-2 py-1 rounded-full text-xs font-semibold ${record.station === 1 ? 'bg-blue-100 text-blue-800' : 'bg-purple-100 text-purple-800'}`}>
                                                                 İst. {record.station}
                                                             </span>
                                                         </td>
-                                                        <td className="px-4 py-2 font-semibold text-slate-900">{record.part_code || '-'}</td>
-                                                        <td className="px-4 py-2">{Number.isFinite(partDuration) ? formatSeconds(partDuration) : '-'}</td>
-                                                        <td className="px-4 py-2">{Number.isFinite(ifsDuration) ? formatSeconds(ifsDuration) : '-'}</td>
-                                                        <td className={`px-4 py-2 font-semibold ${Number.isFinite(variance) && variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
+                                                        <td className="px-4 py-2 font-semibold text-slate-900 whitespace-nowrap">{record.part_code || '-'}</td>
+                                                        <td className="px-4 py-2 whitespace-nowrap">{Number.isFinite(partDuration) ? formatSeconds(partDuration) : '-'}</td>
+                                                        <td className="px-4 py-2 whitespace-nowrap">{Number.isFinite(ifsDuration) ? formatSeconds(ifsDuration) : '-'}</td>
+                                                        <td className={`px-4 py-2 font-semibold whitespace-nowrap ${Number.isFinite(variance) && variance > 0 ? 'text-rose-600' : 'text-emerald-600'}`}>
                                                             {Number.isFinite(variance) ? formatSeconds(variance) : '-'}
                                                         </td>
-                                                        <td className="px-4 py-2">
-                                                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{status}</span>
+                                                        <td className="px-4 py-2 whitespace-nowrap">
+                                                            <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{status}</span>
                                                         </td>
                                                         <td className="px-4 py-2 text-slate-600">{record.description || '-'}</td>
                                                     </tr>
