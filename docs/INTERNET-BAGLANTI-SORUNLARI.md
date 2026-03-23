@@ -2,6 +2,53 @@
 
 Tarayıcıda **“Bağlantı sıfırlandı”** veya **`ERR_CONNECTION_RESET`** görüyorsanız, sayfa genelde **sunucuya ulaşamadan** TCP bağlantısı kopuyor demektir. Bu, çoğunlukla **uygulama kaynaklı değildir**; aynı adres bazı ağlarda açılıp bazılarında (özellikle **telefon interneti / hotspot**) açılmıyorsa sorun **operatör, tethering veya bilgisayar ağ ayarları** ile ilgilidir.
 
+**iPhone’da Safari:** *“Sunucu beklenmedik bir şekilde bağlantıyı kesti”* mesajı da aynı aileye aittir: **Wi‑Fi’de çalışıp yalnızca mobil veride (4G/5G) açılmıyorsa** sorun neredeyse her zaman **mobil hat yolu veya iPhone ağ ayarları**dır; Netlify “meşgul” olsa bile genelde farklı bir hata görürdünüz.
+
+---
+
+## iPhone / iPad — Sadece mobil veride açılmıyor (Wi‑Fi tamam)
+
+Aşağıdakileri sırayla deneyin:
+
+### 1. iCloud Özel Röle (Private Relay)
+
+**Ayarlar → Apple Kimliği → iCloud → Özel Röle** (veya **Ayarlar → Wi‑Fi / Mobil Veri** altında ilgili seçenekler)  
+Mobil veri trafiğini ara sunucu üzerinden yönlendirir; bazı sitelerde bağlantı kopması yapabilir.  
+→ **Kapatın** veya yalnızca **Wi‑Fi için açık** bırakıp mobil veride kapalı olduğundan emin olun.
+
+### 2. Düşük Veri Modu
+
+**Ayarlar → Mobil Şebeke → Mobil Veri Seçenekleri → Düşük Veri Modu** → **Kapalı** olsun.
+
+### 3. VPN ve “iCloud Özel Röle” dışındaki VPN uygulamaları
+
+**Ayarlar → Genel → VPN ve Cihaz Yönetimi** — aktif VPN varsa **kapatın** ve tekrar deneyin. (Bazı hatlarda tam tersi: VPN **açıkken** site açılır; denemekte fayda var.)
+
+### 4. Safari önbelleği / veri
+
+**Ayarlar → Safari → Geçmiş ve Web Sitesi Verilerini Temizle** — sonra mobil veride yeniden deneyin.
+
+### 5. Farklı tarayıcı (teşhis)
+
+App Store’dan **Chrome** veya **Firefox** ile aynı adresi **mobil veri** üzerinden açın.  
+Bazen yalnızca Safari etkilenir; bu da yine cihaz/ayar veya ağ yolunu işaret eder.
+
+### 6. Uçak modu + şebeke yenileme
+
+**Uçak modunu** 10 sn açıp kapatın veya telefonu yeniden başlatın.
+
+### 7. Son çare: Ağ ayarlarını sıfırlama
+
+**Ayarlar → Genel → Aktarım veya iPhone’u Sıfırla → Ağı Sıfırla**  
+*(Wi‑Fi şifreleri silinir; yedek alın.)*
+
+### 8. Operatör
+
+Wi‑Fi’de sorun yok, **yalnızca hücresel veride** tüm adımlara rağmen aynı hata devam ediyorsa, operatörünüzün **CGNAT, IPv6 veya HTTPS trafiğine** müdahale ettiği veya belirli hedeflere giden rotada sorun olduğu ihtimali vardır. Destek hattına şunu iletin:  
+*“Yalnızca mobil veride `https://ayd-kaynakteknolojileri.netlify.app` adresine HTTPS bağlantısı kopuyor; Wi‑Fi’de sorun yok.”*
+
+---
+
 ## Hızlı denemeler
 
 1. **Sayfayı ve DNS önbelleğini yenileyin**  
