@@ -125,6 +125,12 @@ git push origin main
 
 Detaylı deployment rehberi: [DEPLOYMENT.md](./DEPLOYMENT.md)
 
+## 📶 Bağlantı sorunları (mobil internet / hotspot)
+
+Bazı ağlarda **“Bağlantı sıfırlandı”** (`ERR_CONNECTION_RESET`) görüyorsanız, bu genelde **operatör, tethering veya bilgisayar MTU/DNS** kaynaklıdır; uygulama kodundan bağımsızdır. Adım adım çözüm önerileri:
+
+→ **[docs/INTERNET-BAGLANTI-SORUNLARI.md](./docs/INTERNET-BAGLANTI-SORUNLARI.md)**
+
 ## 📂 Proje Yapısı
 
 ```
