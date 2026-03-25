@@ -2665,7 +2665,7 @@ const ManualDataTracking = () => {
                                                                             <td className="px-5 py-3 text-gray-600">{rec.line_name}</td>
                                                                             <td className="px-5 py-3 font-semibold text-indigo-600 font-mono">{rec.part_code || '-'}</td>
                                                                             <td className="px-5 py-3 font-medium text-gray-900">{rec.quantity}</td>
-                                                                            <td className="px-5 py-3 text-gray-500">{durationSeconds}s</td>
+                                                                            <td className="px-5 py-3 text-gray-500">{toSafeNumber(rec.duration_seconds)}s</td>
                                                                             <td className="px-5 py-3 font-bold text-gray-900">{formatCurrency(cost)}</td>
                                                                             <td className="px-5 py-3">
                                                                                 <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'manual' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors">
@@ -2708,7 +2708,7 @@ const ManualDataTracking = () => {
                                                                             <td className="px-5 py-3 text-gray-600">{rec.source_line_name}</td>
                                                                             <td className="px-5 py-3 text-orange-600 font-medium">{rec.repair_line_name}</td>
                                                                             <td className="px-5 py-3 font-medium text-gray-900">{rec.quantity}</td>
-                                                                            <td className="px-5 py-3 text-gray-500">{durationSeconds}s</td>
+                                                                            <td className="px-5 py-3 text-gray-500">{toSafeNumber(rec.duration_seconds)}s</td>
                                                                             <td className="px-5 py-3 font-bold text-gray-900">{formatCurrency(cost)}</td>
                                                                             <td className="px-5 py-3">
                                                                                 <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'repair' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition-colors">
@@ -3513,7 +3513,7 @@ const ManualDataTracking = () => {
                                                             }
                                                         </td>
                                                         <td className="px-3 py-2 text-right font-semibold">{r.quantity}</td>
-                                                        <td className="px-3 py-2 text-right">{r.durationSeconds || 0}</td>
+                                                        <td className="px-3 py-2 text-right">{toSafeNumber(r.duration_seconds ?? r.durationSeconds)}</td>
                                                         <td className="px-3 py-2 text-right font-semibold text-green-600">{formatCurrency(r.cost || 0)}</td>
                                                     </tr>
                                                 ))}
