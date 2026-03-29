@@ -262,6 +262,11 @@ const MasterData = () => {
             <div className="space-y-2"><Label>Marka</Label><Input value={item.brand || ''} onChange={(e) => setItem({ ...item, brand: e.target.value })} /></div>
             <div className="space-y-2"><Label>Model</Label><Input value={item.model || ''} onChange={(e) => setItem({ ...item, model: e.target.value })} /></div>
             <div className="space-y-2"><Label>Bağlı Olduğu Hat</Label><Select value={item.line_id || ''} onValueChange={(value) => setItem({ ...item, line_id: value })}><SelectTrigger><SelectValue /></SelectTrigger><SelectContent>{lines.filter(l => !l.deleted).map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent></Select></div>
+            <div className="col-span-2 flex items-center space-x-2">
+              <Switch id="robot_active" checked={item.active !== false} onCheckedChange={(checked) => setItem({ ...item, active: checked })} />
+              <Label htmlFor="robot_active">Aktif</Label>
+              <span className="text-sm text-gray-500">Kapalıysa pasif kabul edilir.</span>
+            </div>
           </div>
         );
       case 'fixtures':

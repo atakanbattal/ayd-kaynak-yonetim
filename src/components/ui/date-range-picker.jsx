@@ -190,13 +190,13 @@ export function DateRangePicker({
         <>
         {/* Arka plan overlay - dışarı tıklayınca kapat */}
         <div
-            className="fixed inset-0 z-[99998] bg-black/30"
+            className="fixed inset-0 z-[99998] bg-black/30 pointer-events-auto"
             aria-hidden="true"
             onClick={() => { setIsOpen(false); setTempRange(value); }}
         />
         <div
             ref={dropdownRef}
-            className="fixed z-[99999] bg-white dark:bg-gray-900 border rounded-lg shadow-2xl"
+            className="fixed z-[99999] bg-white dark:bg-gray-900 border rounded-lg shadow-2xl pointer-events-auto"
             style={{
                 top: dropdownPosition.top,
                 left: dropdownPosition.left,
