@@ -13,7 +13,7 @@ import { supabase } from '@/lib/customSupabaseClient';
 import { useAuth } from '@/contexts/SupabaseAuthContext';
 import { logAction, openPrintWindow } from '@/lib/utils';
 import { ResponsiveContainer, BarChart, Bar, CartesianGrid, XAxis, YAxis, Tooltip, Legend, LineChart, Line, Brush } from 'recharts';
-import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay, parseISO } from 'date-fns';
+import { format, startOfMonth, endOfMonth, startOfWeek, endOfWeek, startOfDay, endOfDay, parseISO, subDays } from 'date-fns';
 import { tr } from 'date-fns/locale';
 
 const CHART_COLORS = {
@@ -1069,17 +1069,49 @@ const DailyTimeTracking = () => {
     // Taslak için mevcut kayıtları yükle ve birleştir
     const [templateData, setTemplateData] = useState([]);
     const [templateLoading, setTemplateLoading] = useState(false);
+    /** Seçili tarihte DB'de kayıt yokken taslak hangi günden kopyalandı (yyyy-MM-dd) — yoksa null */
+    const [templateCopySourceDate, setTemplateCopySourceDate] = useState(null);
+
     const loadTemplateForDate = useCallback(async (dateStr) => {
         if (!dateStr) return;
         setTemplateLoading(true);
+        setTemplateCopySourceDate(null);
         try {
             const data = await fetchAllDailyTimeTrackingRecords({ record_date: dateStr });
-            const existingMap = new Map();
-            buildUniqueDailyTimeRecords(data || []).forEach(rec => {
-                // robot_id ile eşleştirme - aynı isimde birden fazla robot varsa doğru satıra düşmesi için
-                const key = rec.robot_id ? `${rec.robot_id}-${rec.station}` : `${rec.robot_no}-${rec.station}`;
-                existingMap.set(key, rec);
-            });
+            const hasSavedRowsForDate = (data || []).length > 0;
+
+            let existingMap = new Map();
+            let copyFromPreviousDay = false;
+
+            if (hasSavedRowsForDate) {
+                buildUniqueDailyTimeRecords(data || []).forEach(rec => {
+                    const key = rec.robot_id ? `${rec.robot_id}-${rec.station}` : `${rec.robot_no}-${rec.station}`;
+                    existingMap.set(key, rec);
+                });
+            } else {
+                let cursor = subDays(parseISO(`${dateStr}T12:00:00`), 1);
+                for (let i = 0; i < 31; i++) {
+                    const prevStr = format(cursor, 'yyyy-MM-dd');
+                    const prevData = await fetchAllDailyTimeTrackingRecords({ record_date: prevStr });
+                    if ((prevData || []).length === 0) {
+                        cursor = subDays(cursor, 1);
+                        continue;
+                    }
+                    const prevUnique = buildUniqueDailyTimeRecords(prevData || []);
+                    if (prevUnique.length === 0) {
+                        cursor = subDays(cursor, 1);
+                        continue;
+                    }
+                    prevUnique.forEach(rec => {
+                        const key = rec.robot_id ? `${rec.robot_id}-${rec.station}` : `${rec.robot_no}-${rec.station}`;
+                        existingMap.set(key, rec);
+                    });
+                    copyFromPreviousDay = true;
+                    setTemplateCopySourceDate(prevStr);
+                    break;
+                }
+            }
+
             const merged = templateRows.map(row => {
                 const key = row.robot_id ? `${row.robot_id}-${row.station}` : `${row.robot_no}-${row.station}`;
                 const existing = existingMap.get(key);
@@ -1090,19 +1122,27 @@ const DailyTimeTracking = () => {
                         part_duration: existing.part_duration != null ? String(existing.part_duration) : '',
                         ifs_duration: existing.ifs_duration != null ? String(existing.ifs_duration) : '',
                         description: existing.description || '',
-                        existingId: existing.id,
+                        existingId: copyFromPreviousDay ? null : existing.id,
                     };
                 }
                 return row;
             });
             setTemplateData(merged);
+
+            if (copyFromPreviousDay) {
+                toast({
+                    title: 'Önceki kayıtlar getirildi',
+                    description: 'Bu tarih için henüz kayıt yoktu; son dolu günün parça ve süreleri taslak olarak yüklendi. İstediğiniz gibi düzenleyip kaydedin.',
+                });
+            }
         } catch (e) {
             toast({ title: 'Hata', description: e.message, variant: 'destructive' });
             setTemplateData(templateRows);
+            setTemplateCopySourceDate(null);
         } finally {
             setTemplateLoading(false);
         }
-    }, [templateRows]);
+    }, [templateRows, toast]);
 
     useEffect(() => {
         if (viewMode === 'template' && templateRows.length > 0) {
@@ -1639,8 +1679,22 @@ const DailyTimeTracking = () => {
         }
 
         const lineMap = new Map(lines.map(l => [l.id, l.name]));
+        const sortedForExport = [...currentListRecords].sort((a, b) => {
+            const lineA = String(a.line_name || lineMap.get(a.line_id) || 'N/A');
+            const lineB = String(b.line_name || lineMap.get(b.line_id) || 'N/A');
+            const lineCmp = lineA.localeCompare(lineB, 'tr', { sensitivity: 'base' });
+            if (lineCmp !== 0) return lineCmp;
+            const dateA = getRecordDateValue(a.record_date)?.getTime() || 0;
+            const dateB = getRecordDateValue(b.record_date)?.getTime() || 0;
+            if (dateA !== dateB) return dateA - dateB;
+            const robotNumA = getRobotSortNum(a.robot_no);
+            const robotNumB = getRobotSortNum(b.robot_no);
+            if (robotNumA !== robotNumB) return robotNumA - robotNumB;
+            return (a.station || 0) - (b.station || 0);
+        });
+
         const headers = ['Tarih', 'Robot No', 'İstasyon', 'Hat Adı', 'Parça Kodu', 'Parça Süresi (sn)', 'IFS Süre (sn)', 'IFS Farkı (sn)', 'Durum', 'Açıklama'];
-        const rows = currentListRecords.map(r => [
+        const rows = sortedForExport.map(r => [
             format(getRecordDateValue(r.record_date) || new Date(), 'dd.MM.yyyy'),
             r.robot_no,
             r.station,
@@ -1664,7 +1718,7 @@ const DailyTimeTracking = () => {
         link.download = `gunluk_sure_takibi_${format(new Date(), 'yyyyMMdd_HHmm')}.csv`;
         link.click();
         URL.revokeObjectURL(url);
-        toast({ title: "İndirildi", description: `${currentListRecords.length} kayıt CSV olarak indirildi.` });
+        toast({ title: "İndirildi", description: `${sortedForExport.length} kayıt CSV olarak indirildi (hat adına göre sıralı).` });
     };
 
     // Hızlı tarih butonları
@@ -1745,7 +1799,7 @@ const DailyTimeTracking = () => {
                             <div>
                                 <CardTitle>Günlük Veri Girişi</CardTitle>
                                 <CardDescription>
-                                    Tarih seçin, robot ve hat bilgileri hazır. Girişi yaptıktan sonra kayıtları ayrı görüntüleme ekranından kontrol edin.
+                                    Tarih seçin, robot ve hat bilgileri hazır. Seçilen günde kayıt yoksa, son dolu günün parça ve süreleri otomatik taslak olarak gelir; düzenleyip kaydedebilirsiniz.
                                 </CardDescription>
                             </div>
                             <div className="flex flex-wrap items-center justify-end gap-2">
@@ -1804,9 +1858,20 @@ const DailyTimeTracking = () => {
                     </CardHeader>
                     <CardContent className="space-y-4 p-4">
                         <div className="rounded-xl border border-slate-200 bg-slate-50 px-4 py-3 text-sm text-slate-600">
-                            {templatePanelMode === 'entry'
-                                ? 'Aynı tarih ve aynı robot-istasyon için tekrar kaydettiğinizde yeni kayıt açılmaz, mevcut kayıt güncellenir. Boş bırakılan satırlar kaydedilmez.'
-                                : `Bu alanda ${format(new Date(`${templateDate}T12:00:00`), 'dd.MM.yyyy', { locale: tr })} tarihine ait kaydedilmiş verileri görüyorsunuz. Yeni kayıt eklemek veya düzenlemek için "Düzenlemeye Dön" kullanın.`}
+                            {templatePanelMode === 'entry' ? (
+                                <>
+                                    <p>Aynı tarih ve aynı robot-istasyon için tekrar kaydettiğinizde yeni kayıt açılmaz, mevcut kayıt güncellenir. Boş bırakılan satırlar kaydedilmez.</p>
+                                    {templateCopySourceDate && (
+                                        <p className="mt-2 pt-2 border-t border-slate-200 text-indigo-900 font-medium">
+                                            Seçili gün için henüz kayıt yoktu;{' '}
+                                            <span className="whitespace-nowrap">{format(new Date(`${templateCopySourceDate}T12:00:00`), 'dd.MM.yyyy', { locale: tr })}</span>
+                                            {' '}tarihindeki parça ve süreler taslak olarak getirildi. Düzenleyip &quot;Girişi Kaydet&quot; ile bugüne yazın; böylece her yeni gün önceki dolu günden devam edebilirsiniz.
+                                        </p>
+                                    )}
+                                </>
+                            ) : (
+                                `Bu alanda ${format(new Date(`${templateDate}T12:00:00`), 'dd.MM.yyyy', { locale: tr })} tarihine ait kaydedilmiş verileri görüyorsunuz. Yeni kayıt eklemek veya düzenlemek için "Düzenlemeye Dön" kullanın.`
+                            )}
                         </div>
 
                         {templatePanelMode === 'entry' ? (

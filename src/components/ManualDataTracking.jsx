@@ -386,6 +386,7 @@ const ManualDataTracking = () => {
     const { user } = useAuth();
 
     const [showDialog, setShowDialog] = useState(false);
+    /** null | { type: 'daily', date: string } | { type: 'row', id: string, recordType: 'manual' | 'repair' } */
     const [deleteConfirm, setDeleteConfirm] = useState(null);
     const [viewingDetails, setViewingDetails] = useState(null);
     const [editingRecord, setEditingRecord] = useState(null);
@@ -1238,6 +1239,55 @@ const ManualDataTracking = () => {
 
     const handleDelete = async () => {
         if (!deleteConfirm) return;
+
+        if (deleteConfirm.type === 'row') {
+            const tableName = deleteConfirm.recordType === 'manual' ? 'manual_production_records' : 'repair_records';
+            const { error } = await supabase.from(tableName).delete().eq('id', deleteConfirm.id);
+
+            if (error) {
+                toast({ title: "Silme Başarısız", description: error.message, variant: "destructive" });
+                return;
+            }
+
+            toast({
+                title: "Silindi",
+                description: deleteConfirm.recordType === 'manual' ? "Manuel kayıt silindi." : "Tamir kaydı silindi.",
+                variant: "destructive"
+            });
+            logAction(
+                'DELETE_SINGLE_MANUAL_REPAIR_RECORD',
+                `${deleteConfirm.recordType === 'manual' ? 'Manuel' : 'Tamir'} kayıt ${deleteConfirm.id} silindi.`,
+                user
+            );
+
+            if (editingRecord?.id === deleteConfirm.id) {
+                setEditingRecord(null);
+            }
+
+            if (viewingDetails) {
+                if (deleteConfirm.recordType === 'manual') {
+                    setViewingDetails({
+                        ...viewingDetails,
+                        manuals: viewingDetails.manuals.filter(r => r.id !== deleteConfirm.id)
+                    });
+                } else {
+                    setViewingDetails({
+                        ...viewingDetails,
+                        repairs: viewingDetails.repairs.filter(r => r.id !== deleteConfirm.id)
+                    });
+                }
+            }
+
+            if (deleteConfirm.recordType === 'manual') {
+                setManualRecords(prev => prev.filter(r => r.id !== deleteConfirm.id));
+            } else {
+                setRepairRecords(prev => prev.filter(r => r.id !== deleteConfirm.id));
+            }
+
+            setDeleteConfirm(null);
+            fetchData();
+            return;
+        }
 
         const { error: manualError } = await supabase.from('manual_production_records').delete().eq('record_date', deleteConfirm.date);
         const { error: repairError } = await supabase.from('repair_records').delete().eq('record_date', deleteConfirm.date);
@@ -2572,7 +2622,7 @@ const ManualDataTracking = () => {
                                                     </td>
                                                     <td className="px-4 py-2" onClick={(e) => e.stopPropagation()}><div className="flex gap-2">
                                                         <Button size="sm" variant="outline" onClick={() => handleViewDetails(rec.date)}><Eye className="h-4 w-4 mr-1" />Detay</Button>
-                                                        <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm(rec)}><Trash2 className="h-4 w-4 text-red-500" /></Button>
+                                                        <Button size="sm" variant="ghost" onClick={() => setDeleteConfirm({ type: 'daily', date: rec.date })}><Trash2 className="h-4 w-4 text-red-500" /></Button>
                                                     </div></td>
                                                 </tr>
                                             );
@@ -2668,9 +2718,14 @@ const ManualDataTracking = () => {
                                                                             <td className="px-5 py-3 text-gray-500">{toSafeNumber(rec.duration_seconds)}s</td>
                                                                             <td className="px-5 py-3 font-bold text-gray-900">{formatCurrency(cost)}</td>
                                                                             <td className="px-5 py-3">
-                                                                                <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'manual' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors">
-                                                                                    <Edit className="h-4 w-4" />
-                                                                                </Button>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'manual' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-indigo-600 transition-colors" title="Düzenle">
+                                                                                        <Edit className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm({ type: 'row', id: rec.id, recordType: 'manual' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors" title="Sil">
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                </div>
                                                                             </td>
                                                                         </tr>
                                                                     );
@@ -2711,9 +2766,14 @@ const ManualDataTracking = () => {
                                                                             <td className="px-5 py-3 text-gray-500">{toSafeNumber(rec.duration_seconds)}s</td>
                                                                             <td className="px-5 py-3 font-bold text-gray-900">{formatCurrency(cost)}</td>
                                                                             <td className="px-5 py-3">
-                                                                                <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'repair' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition-colors">
-                                                                                    <Edit className="h-4 w-4" />
-                                                                                </Button>
+                                                                                <div className="flex items-center gap-1">
+                                                                                    <Button variant="ghost" size="sm" onClick={() => setEditingRecord({ ...rec, recordType: 'repair' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-orange-600 transition-colors" title="Düzenle">
+                                                                                        <Edit className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                    <Button variant="ghost" size="sm" onClick={() => setDeleteConfirm({ type: 'row', id: rec.id, recordType: 'repair' })} className="h-8 w-8 p-0 rounded-full hover:bg-gray-100 text-gray-400 hover:text-red-600 transition-colors" title="Sil">
+                                                                                        <Trash2 className="h-4 w-4" />
+                                                                                    </Button>
+                                                                                </div>
                                                                             </td>
                                                                         </tr>
                                                                     );
@@ -2777,10 +2837,21 @@ const ManualDataTracking = () => {
                             </DialogHeader>
                             <div className="p-6 space-y-6">
                                 <div className="text-base text-gray-600 leading-relaxed">
-                                    {deleteConfirm && <span className="font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded mr-1">{format(new Date(deleteConfirm.date), 'dd MMMM yyyy', { locale: tr })}</span>}
-                                    tarihli tüm manuel ve tamir kayıtlarını kalıcı olarak silmek üzeresiniz.
-                                    <br /><br />
-                                    Devam etmek istediğinizden emin misiniz?
+                                    {deleteConfirm?.type === 'daily' && (
+                                        <>
+                                            <span className="font-semibold text-gray-900 bg-gray-100 px-2 py-0.5 rounded mr-1">{format(new Date(deleteConfirm.date), 'dd MMMM yyyy', { locale: tr })}</span>
+                                            tarihli tüm manuel ve tamir kayıtlarını kalıcı olarak silmek üzeresiniz.
+                                            <br /><br />
+                                            Devam etmek istediğinizden emin misiniz?
+                                        </>
+                                    )}
+                                    {deleteConfirm?.type === 'row' && (
+                                        <>
+                                            Bu {deleteConfirm.recordType === 'manual' ? 'manuel üretim' : 'tamir hattı'} kaydını kalıcı olarak silmek üzeresiniz.
+                                            <br /><br />
+                                            Devam etmek istediğinizden emin misiniz?
+                                        </>
+                                    )}
                                 </div>
 
                                 <DialogFooter className="gap-3 sm:justify-between w-full">
