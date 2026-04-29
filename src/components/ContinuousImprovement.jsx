@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3, Eye } from 'lucide-react';
+import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3, Eye, Table2 } from 'lucide-react';
+import * as XLSX from 'xlsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -47,6 +48,14 @@ const statusMap = {
 };
 
 const getStatusStyle = (status) => statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
+
+const IMPROVEMENT_TYPE_LABELS = {
+  cycle_time: 'Çevrim Süresi',
+  quality: 'Kalite',
+  cost: 'Maliyet',
+  ergonomics: 'Ergonomi',
+  other: 'Diğer',
+};
 
 const ImprovementFilters = ({ filters, setFilters, lines }) => {
   return (
@@ -941,6 +950,34 @@ const ContinuousImprovement = () => {
     });
   }, [improvements, filters]);
 
+  const handleExportExcel = useCallback(() => {
+    if (filteredImprovements.length === 0) {
+      toast({ title: 'Uyarı', description: 'Mevcut filtrelere uygun dışa aktarılacak kayıt bulunamadı.', variant: 'destructive' });
+      return;
+    }
+    const rows = filteredImprovements.map((item) => ({
+      'Kayıt Tarihi': item.created_at ? format(new Date(item.created_at), 'dd.MM.yyyy') : '',
+      'Kayıt Saati': item.created_at ? format(new Date(item.created_at), 'HH:mm:ss') : '',
+      'İyileştirme Tarihi': format(parseISO(item.improvement_date), 'dd.MM.yyyy'),
+      Tip: IMPROVEMENT_TYPE_LABELS[item.type] || item.type || '',
+      Açıklama: item.description || '',
+      'Parça Kodu': item.part_code || '',
+      Hat: getLineName(item.line_id),
+      Robot: getRobotName(item.robot_id),
+      Sorumlu: getEmployeeName(item.responsible_id),
+      'Önceki Süre (sn)': item.prev_time ?? '',
+      'Yeni Süre (sn)': item.new_time ?? '',
+      'Yıllık Adet': item.annual_quantity ?? '',
+      'Yıllık Etki': calculateImpact(item),
+      Durum: getStatusStyle(item.status).label,
+    }));
+    const ws = XLSX.utils.json_to_sheet(rows);
+    const wb = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(wb, ws, 'Iyilestirmeler');
+    XLSX.writeFile(wb, `surekli_iyilestirme_${format(new Date(), 'yyyyMMdd_HHmm')}.xlsx`);
+    toast({ title: 'İndirildi', description: `${filteredImprovements.length} kayıt Excel dosyası olarak indirildi.` });
+  }, [filteredImprovements, calculateImpact, getLineName, getRobotName, getEmployeeName, toast]);
+
   const renderForm = () => (
     <>
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
@@ -1285,6 +1322,7 @@ const ContinuousImprovement = () => {
             <div className="flex space-x-2">
               <Button onClick={() => openDialog()}><Plus className="h-4 w-4 mr-2" />Yeni İyileştirme</Button>
               <Button variant="outline" onClick={() => handlePrint()}><FileText className="h-4 w-4 mr-2" />Yazdır</Button>
+              <Button variant="outline" onClick={handleExportExcel}><Table2 className="h-4 w-4 mr-2" />Excel'e Aktar</Button>
               <Button variant="outline" onClick={handleGenerateDetailedReport}><Download className="h-4 w-4 mr-2" />Detaylı Rapor</Button>
             </div>
           </div>
