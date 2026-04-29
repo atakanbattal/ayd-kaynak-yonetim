@@ -23,12 +23,12 @@ import React, { useState, useEffect, useCallback } from 'react';
           .eq('training_id', trainingId)
           .eq('status', 'Başarılı');
         
-        // Tüm katılımcılar (eğitime katılanlar)
+        // Kayıtlı katılımcılar (Bekleniyor + Katıldı; Katılmadı hariç — sertifika verilmeyecekler)
         const { data: allParticipantsData, error: allParticipantsError } = await supabase
           .from('training_participants')
-          .select('id, employee:employees(id, first_name, last_name)')
+          .select('id, participation_status, employee:employees(id, first_name, last_name)')
           .eq('training_id', trainingId)
-          .eq('participation_status', 'Katıldı');
+          .or('participation_status.is.null,participation_status.neq.Katılmadı');
     
         const { data: certsData, error: certsError } = await supabase
           .from('training_certificates')
@@ -51,10 +51,10 @@ import React, { useState, useEffect, useCallback } from 'react';
     
       const handleGenerateCertificates = async () => {
         const certsToCreate = successfulParticipants
-          .filter(p => !certificates.some(c => c.participant_id === p.participant.id))
+          .filter(p => p.participant_id && !certificates.some(c => c.participant_id === p.participant_id))
           .map(p => ({
             training_id: trainingId,
-            participant_id: p.participant.id,
+            participant_id: p.participant_id,
             certificate_number: `AYD-CERT-${new Date().getFullYear()}-${String(Math.floor(Math.random() * 9000) + 1000).padStart(4, '0')}`,
             issue_date: new Date().toISOString(),
           }));
@@ -67,7 +67,7 @@ import React, { useState, useEffect, useCallback } from 'react';
         const { error } = await supabase.from('training_certificates').insert(certsToCreate);
     
         if (error) {
-          toast({ title: 'Hata', description: 'Sertifikalar oluşturulamadı.', variant: 'destructive' });
+          toast({ title: 'Hata', description: error.message || 'Sertifikalar oluşturulamadı.', variant: 'destructive' });
         } else {
           toast({ title: 'Başarılı', description: `${certsToCreate.length} adet yeni sertifika kaydı oluşturuldu.` });
           fetchData();
@@ -93,7 +93,7 @@ import React, { useState, useEffect, useCallback } from 'react';
         const { error } = await supabase.from('training_certificates').insert(certsToCreate);
     
         if (error) {
-          toast({ title: 'Hata', description: 'Sertifikalar oluşturulamadı.', variant: 'destructive' });
+          toast({ title: 'Hata', description: error.message || 'Sertifikalar oluşturulamadı.', variant: 'destructive' });
         } else {
           toast({ title: 'Başarılı', description: `${certsToCreate.length} adet yeni sertifika kaydı oluşturuldu (Tüm katılımcılar için).` });
           fetchData();
@@ -172,12 +172,13 @@ import React, { useState, useEffect, useCallback } from 'react';
     
       // Tüm katılımcılar için sertifika listesi oluştur
       const participantsWithCerts = allParticipants.map(p => {
-        const result = successfulParticipants.find(sp => sp.participant.id === p.id);
+        const sp = successfulParticipants.find(r => r.participant_id === p.id || r.participant?.id === p.id);
         return {
           id: p.id,
+          participationStatus: p.participation_status,
           participant: { id: p.id, employee: p.employee },
           certificate: certificates.find(c => c.participant_id === p.id),
-          isSuccessful: !!result
+          isSuccessful: !!sp
         };
       });
       
@@ -189,7 +190,7 @@ import React, { useState, useEffect, useCallback } from 'react';
             <div className="flex justify-between items-center">
               <div>
                 <CardTitle>Sertifika Yönetimi</CardTitle>
-                <CardDescription>Başarılı personeller için sertifikaları yönetin veya tüm katılımcılar için toplu sertifika oluşturun.</CardDescription>
+                <CardDescription>Sınavda başarılı olanlar veya tüm kayıtlı katılımcılar için sertifika (Katılmadı işaretlenenler listede yer almaz).</CardDescription>
               </div>
               <div className="flex flex-wrap gap-2">
                 <Button onClick={handleGenerateCertificates} disabled={successfulParticipants.length === 0}>
@@ -212,7 +213,8 @@ import React, { useState, useEffect, useCallback } from 'react';
             {participantsWithCerts.length === 0 ? (
               <div className="text-center py-12 text-gray-500">
                 <Award className="mx-auto h-10 w-10 text-gray-400" />
-                <p className="mt-2 text-lg">Henüz eğitime katılan personel bulunmuyor.</p>
+                <p className="mt-2 text-lg">Sertifika için uygun katılımcı yok.</p>
+                <p className="text-sm mt-1">Katılımcılar sekmesinden ekleyin; &quot;Katılmadı&quot; işaretlenenler bu listede görünmez.</p>
               </div>
             ) : (
               <div className="border rounded-lg">
@@ -220,7 +222,8 @@ import React, { useState, useEffect, useCallback } from 'react';
                   <thead className="bg-gray-50">
                     <tr>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Personel</th>
-                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Durum</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Katılım</th>
+                      <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sınav</th>
                       <th className="px-4 py-2 text-left text-xs font-medium text-gray-500 uppercase">Sertifika Durumu</th>
                       <th className="px-4 py-2 text-right text-xs font-medium text-gray-500 uppercase">İşlemler</th>
                     </tr>
@@ -231,11 +234,14 @@ import React, { useState, useEffect, useCallback } from 'react';
                         <td className="px-4 py-2 whitespace-nowrap text-sm font-medium">
                           {p.participant.employee.first_name} {p.participant.employee.last_name}
                         </td>
+                        <td className="px-4 py-2 whitespace-nowrap text-sm text-gray-600">
+                          {p.participationStatus || '—'}
+                        </td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm">
                           {p.isSuccessful ? (
                             <span className="text-green-600 font-semibold">Başarılı</span>
                           ) : (
-                            <span className="text-gray-500">Katılımcı</span>
+                            <span className="text-gray-500">—</span>
                           )}
                         </td>
                         <td className="px-4 py-2 whitespace-nowrap text-sm">
