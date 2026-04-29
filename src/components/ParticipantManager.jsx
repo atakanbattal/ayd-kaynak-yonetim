@@ -11,6 +11,7 @@ const ParticipantManager = ({ trainingId }) => {
   const [participants, setParticipants] = useState([]);
   const [allEmployees, setAllEmployees] = useState([]);
   const [selectedEmployees, setSelectedEmployees] = useState([]);
+  const [includeInactiveEmployees, setIncludeInactiveEmployees] = useState(false);
   const [loading, setLoading] = useState(true);
   const { toast } = useToast();
 
@@ -21,33 +22,43 @@ const ParticipantManager = ({ trainingId }) => {
       .select('*, employee:employees(*)')
       .eq('training_id', trainingId);
 
-    const { data: employeesData, error: employeesError } = await supabase
-      .from('employees')
-      .select('*')
-      .eq('is_active', true);
+    let employeesQuery = supabase.from('employees').select('*');
+    if (!includeInactiveEmployees) {
+      employeesQuery = employeesQuery.eq('is_active', true);
+    }
+    const { data: employeesData, error: employeesError } = await employeesQuery.order('registration_number', {
+      ascending: true,
+    });
 
     if (participantsError || employeesError) {
       toast({ title: 'Hata', description: 'Veriler alınamadı.', variant: 'destructive' });
     } else {
-      setParticipants(participantsData);
-      setAllEmployees(employeesData);
+      setParticipants(participantsData ?? []);
+      setAllEmployees(employeesData ?? []);
     }
     setLoading(false);
-  }, [trainingId, toast]);
+  }, [trainingId, toast, includeInactiveEmployees]);
 
   useEffect(() => {
     fetchData();
   }, [fetchData]);
 
   const employeeOptions = useMemo(() => {
-    const participantIds = new Set(participants.map(p => p.employee_id));
+    const participantIds = new Set(participants.map((p) => p.employee_id));
     return allEmployees
-      .filter(emp => !participantIds.has(emp.id))
-      .map(emp => ({
-        value: emp.id,
-        label: `${emp.registration_number} - ${emp.first_name} ${emp.last_name}`
-      }))
-      .sort((a, b) => a.label.localeCompare(b.label));
+      .filter((emp) => !participantIds.has(emp.id))
+      .map((emp) => {
+        const reg = emp.registration_number != null ? String(emp.registration_number) : '';
+        const regTrim = reg.replace(/^0+/, '') || reg;
+        const inactiveNote = emp.is_active === false ? ' (pasif)' : '';
+        const label = `${reg || '—'} - ${emp.first_name} ${emp.last_name}${inactiveNote}`;
+        return {
+          value: emp.id,
+          label,
+          keywords: [reg, regTrim, emp.first_name, emp.last_name].filter(Boolean),
+        };
+      })
+      .sort((a, b) => a.label.localeCompare(b.label, 'tr'));
   }, [allEmployees, participants]);
 
   const handleAddParticipants = async () => {
@@ -106,22 +117,35 @@ const ParticipantManager = ({ trainingId }) => {
       </CardHeader>
       <CardContent>
         <div className="space-y-4">
+          <div className="flex flex-wrap items-center gap-4">
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="inactive-employees-training"
+                checked={includeInactiveEmployees}
+                onChange={(e) => setIncludeInactiveEmployees(e.target.checked)}
+                className="h-4 w-4 rounded border border-input accent-primary cursor-pointer"
+              />
+              <label htmlFor="inactive-employees-training" className="text-sm text-muted-foreground cursor-pointer">
+                Pasif personeli de göster
+              </label>
+            </div>
+          </div>
           <div className="flex gap-2 items-end">
             <div className="flex-grow">
               <label className="text-sm font-medium">Personel Ekle</label>
               <Combobox
                 options={employeeOptions}
                 value={selectedEmployees}
-                onSelect={(value) => {
-                  if (selectedEmployees.includes(value)) {
-                    setSelectedEmployees(selectedEmployees.filter((v) => v !== value));
-                  } else {
-                    setSelectedEmployees([...selectedEmployees, value]);
-                  }
+                onSelect={(id) => {
+                  if (!id) return;
+                  setSelectedEmployees((prev) =>
+                    prev.includes(id) ? prev.filter((v) => v !== id) : [...prev, id]
+                  );
                 }}
                 placeholder="Personel seç..."
-                searchPlaceholder="Personel ara..."
-                emptyPlaceholder="Tüm personeller eklenmiş."
+                searchPlaceholder="Ad, soyad veya sicil ile ara..."
+                emptyPlaceholder="Eklenecek personel yok (zaten katılımcı veya liste boş)."
                 isMulti={true}
               />
             </div>

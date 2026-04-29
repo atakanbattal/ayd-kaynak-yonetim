@@ -17,8 +17,53 @@ import {
   PopoverTrigger,
 } from "@/components/ui/popover"
 
-const Combobox = ({ options, value, onSelect, placeholder, searchPlaceholder, emptyPlaceholder, triggerClassName }) => {
+/** Türkçe karakterlere duyarlı arama (İ/I, ı/i vb.) */
+function trIncludes(haystack, needle) {
+  if (!needle?.trim()) return true
+  const h = String(haystack ?? "").toLocaleLowerCase("tr-TR")
+  const n = needle.toLocaleLowerCase("tr-TR")
+  return h.includes(n)
+}
+
+const Combobox = ({
+  options,
+  value,
+  onSelect,
+  placeholder,
+  searchPlaceholder,
+  emptyPlaceholder,
+  triggerClassName,
+  isMulti = false,
+}) => {
   const [open, setOpen] = React.useState(false)
+
+  const triggerLabel = React.useMemo(() => {
+    if (isMulti && Array.isArray(value)) {
+      if (value.length === 0) return null
+      if (value.length === 1) {
+        return options.find((o) => o.value === value[0])?.label ?? null
+      }
+      return `${value.length} personel seçildi`
+    }
+    if (value) return options.find((o) => o.value === value)?.label
+    return null
+  }, [isMulti, value, options])
+
+  const isSelected = (optionValue) => {
+    if (isMulti && Array.isArray(value)) return value.includes(optionValue)
+    return value === optionValue
+  }
+
+  const commandFilter = React.useCallback(
+    (itemValue, search) => {
+      const opt = options.find((o) => o.label === itemValue)
+      if (!opt) return 0
+      if (trIncludes(opt.label, search)) return 1
+      if (opt.keywords?.some((k) => trIncludes(String(k), search))) return 1
+      return 0
+    },
+    [options]
+  )
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
@@ -29,14 +74,12 @@ const Combobox = ({ options, value, onSelect, placeholder, searchPlaceholder, em
           aria-expanded={open}
           className={cn("w-full justify-between font-normal", triggerClassName)}
         >
-          {value
-            ? options.find((option) => option.value === value)?.label
-            : placeholder}
+          <span className="truncate text-left">{triggerLabel ?? placeholder}</span>
           <ChevronsUpDown className="ml-2 h-4 w-4 shrink-0 opacity-50" />
         </Button>
       </PopoverTrigger>
       <PopoverContent className="w-[var(--radix-popover-trigger-width)] max-w-none sm:w-[400px] p-0" align="start">
-        <Command>
+        <Command filter={commandFilter}>
           <CommandInput placeholder={searchPlaceholder} />
           <CommandList>
             <CommandEmpty>{emptyPlaceholder}</CommandEmpty>
@@ -44,16 +87,20 @@ const Combobox = ({ options, value, onSelect, placeholder, searchPlaceholder, em
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label} 
+                  value={option.label}
                   onSelect={() => {
-                    onSelect(option.value === value ? "" : option.value)
-                    setOpen(false)
+                    if (isMulti) {
+                      onSelect(option.value)
+                    } else {
+                      onSelect(option.value === value ? "" : option.value)
+                      setOpen(false)
+                    }
                   }}
                 >
                   <Check
                     className={cn(
                       "mr-2 h-4 w-4",
-                      value === option.value ? "opacity-100" : "opacity-0"
+                      isSelected(option.value) ? "opacity-100" : "opacity-0"
                     )}
                   />
                   {option.label}
