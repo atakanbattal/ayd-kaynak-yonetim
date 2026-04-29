@@ -56,7 +56,11 @@ const Combobox = ({
 
   const commandFilter = React.useCallback(
     (itemValue, search) => {
-      const opt = options.find((o) => o.label === itemValue)
+      // cmdk, Item value'yu önce trim + toLowerCase ile saklar; label ile === kıyaslamak hep başarısız olurdu.
+      const opt = options.find(
+        (o) =>
+          String(o.value).trim().toLowerCase() === String(itemValue ?? "").trim().toLowerCase()
+      )
       if (!opt) return 0
       if (trIncludes(opt.label, search)) return 1
       if (opt.keywords?.some((k) => trIncludes(String(k), search))) return 1
@@ -87,7 +91,7 @@ const Combobox = ({
               {options.map((option) => (
                 <CommandItem
                   key={option.value}
-                  value={option.label}
+                  value={String(option.value)}
                   onSelect={() => {
                     if (isMulti) {
                       onSelect(option.value)
