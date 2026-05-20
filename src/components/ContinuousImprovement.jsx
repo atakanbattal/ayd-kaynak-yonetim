@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo, useCallback } from 'react';
 import { motion } from 'framer-motion';
-import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3, Eye, Table2 } from 'lucide-react';
+import { TrendingUp, Plus, Edit, Trash2, Save, FileText, Bot, Factory, Paperclip, Upload, X, Crown, Calendar as CalendarIcon, Download, BarChart3, Eye, Table2, Users, Search } from 'lucide-react';
 import * as XLSX from 'xlsx';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -49,6 +49,25 @@ const statusMap = {
 
 const getStatusStyle = (status) => statusMap[status] || { label: status, color: 'bg-gray-100 text-gray-800' };
 
+const CHART_HEIGHT = 420;
+const truncateChartLabel = (label, max = 14) => (label && label.length > max ? `${label.substring(0, max)}…` : label);
+
+const formatCompactCurrency = (value) => {
+  const num = Number(value);
+  if (!Number.isFinite(num)) return '₺0';
+  if (Math.abs(num) >= 1_000_000) return `${(num / 1_000_000).toFixed(1)}M ₺`;
+  if (Math.abs(num) >= 1_000) return `${(num / 1_000).toFixed(0)}K ₺`;
+  return `${Math.round(num).toLocaleString('tr-TR')} ₺`;
+};
+
+const pdfChartConfig = (dataLength, extra = {}) => ({
+  xAxisAngle: dataLength > 4 ? -30 : 0,
+  xAxisHeight: dataLength > 4 ? 72 : 40,
+  yAxisWidth: 56,
+  height: 340,
+  ...extra,
+});
+
 const IMPROVEMENT_TYPE_LABELS = {
   cycle_time: 'Çevrim Süresi',
   quality: 'Kalite',
@@ -57,7 +76,7 @@ const IMPROVEMENT_TYPE_LABELS = {
   other: 'Diğer',
 };
 
-const ImprovementFilters = ({ filters, setFilters, lines }) => {
+const ImprovementFilters = ({ filters, setFilters, lines, employeeOptions }) => {
   return (
     <div className="p-4 bg-gray-50 rounded-lg mb-4 flex flex-wrap items-center gap-4">
       <DateRangePicker
@@ -80,6 +99,15 @@ const ImprovementFilters = ({ filters, setFilters, lines }) => {
         <SelectTrigger className="w-[180px]"><SelectValue /></SelectTrigger>
         <SelectContent><SelectItem value="all">Tüm Hatlar</SelectItem>{lines.map(l => <SelectItem key={l.id} value={l.id}>{l.name}</SelectItem>)}</SelectContent>
       </Select>
+      <Combobox
+        options={[{ value: 'all', label: 'Tüm Personeller' }, ...employeeOptions]}
+        value={filters.responsible || 'all'}
+        onSelect={v => setFilters(prev => ({ ...prev, responsible: v || 'all' }))}
+        placeholder="Personel seçin"
+        searchPlaceholder="Personel ara..."
+        emptyPlaceholder="Personel bulunamadı."
+        triggerClassName="w-[220px]"
+      />
     </div>
   );
 };
@@ -114,10 +142,10 @@ const KpiCards = ({ improvements, calculateImpact, getLineName }) => {
   );
 };
 
-const ImprovementTable = ({ improvements, calculateImpact, getLineName, setViewingItem, handlePrint, openDialog, setDeleteConfirm }) => (
+const ImprovementTable = ({ improvements, calculateImpact, getLineName, getEmployeeName, setViewingItem, openPersonnelDetailModal, handlePrint, openDialog, setDeleteConfirm }) => (
   <div className="border rounded-lg overflow-x-auto">
     <table className="w-full">
-      <thead className="bg-gray-50"><tr>{['Kayıt Tarihi/Saat', 'İyileştirme Tarihi', 'Açıklama', 'Parça Kodu', 'Hat', 'Süre (Ö/Y)', 'Yıllık Etki', 'Durum', ''].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
+      <thead className="bg-gray-50"><tr>{['Kayıt Tarihi/Saat', 'İyileştirme Tarihi', 'Açıklama', 'Parça Kodu', 'Hat', 'Sorumlu', 'Süre (Ö/Y)', 'Yıllık Etki', 'Durum', ''].map(h => <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>)}</tr></thead>
       <tbody className="divide-y">
         {improvements.map(item => {
           const statusStyle = getStatusStyle(item.status);
@@ -133,6 +161,19 @@ const ImprovementTable = ({ improvements, calculateImpact, getLineName, setViewi
               <td className="px-4 py-2 max-w-sm truncate" title={item.description}>{item.description}</td>
               <td className="px-4 py-2 whitespace-nowrap font-semibold">{item.part_code || 'N/A'}</td>
               <td className="px-4 py-2 whitespace-nowrap">{getLineName(item.line_id)}</td>
+              <td
+                className="px-4 py-2 whitespace-nowrap"
+                onClick={(e) => {
+                  if (item.responsible_id) {
+                    e.stopPropagation();
+                    openPersonnelDetailModal(item.responsible_id);
+                  }
+                }}
+              >
+                <span className={cn(item.responsible_id && 'text-indigo-600 hover:underline cursor-pointer font-medium')}>
+                  {getEmployeeName(item.responsible_id)}
+                </span>
+              </td>
               <td className="px-4 py-2 whitespace-nowrap">{item.prev_time}s → {item.new_time}s</td>
               <td className="px-4 py-2 font-medium text-green-600 whitespace-nowrap">{formatCurrency(calculateImpact(item))}</td>
               <td className="px-4 py-2"><span className={cn('px-2 inline-flex text-xs leading-5 font-semibold rounded-full', statusStyle.color)}>{statusStyle.label}</span></td>
@@ -160,6 +201,7 @@ const ContinuousImprovement = () => {
     type: 'all',
     line: 'all',
     partCode: '',
+    responsible: 'all',
   });
   const [showDialog, setShowDialog] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
@@ -173,6 +215,7 @@ const ContinuousImprovement = () => {
   const [metricsItem, setMetricsItem] = useState(null);
   const [monthlyMetrics, setMonthlyMetrics] = useState([]);
   const [metricsForm, setMetricsForm] = useState({ year_month: format(new Date(), 'yyyy-MM'), shipped_qty: '', notes: '' });
+  const [selectedPersonnelAnalysisId, setSelectedPersonnelAnalysisId] = useState(null);
   const { toast } = useToast();
   const { user } = useAuth();
 
@@ -187,6 +230,10 @@ const ContinuousImprovement = () => {
     const emp = employees.find(e => e.id === employeeId);
     return emp ? `${emp.first_name} ${emp.last_name}` : 'N/A';
   }, [employees]);
+
+  const openPersonnelDetailModal = useCallback((employeeId) => {
+    setSelectedPersonnelAnalysisId(employeeId || null);
+  }, []);
 
   const fetchData = useCallback(async () => {
     try {
@@ -580,18 +627,37 @@ const ContinuousImprovement = () => {
       }
     } else {
       const totalAnnualImpact = filteredImprovements.reduce((sum, item) => sum + calculateImpact(item), 0);
+
+      const byResponsible = filteredImprovements.reduce((acc, item) => {
+        const empId = item.responsible_id || 'none';
+        if (!acc[empId]) {
+          acc[empId] = { name: getEmployeeName(item.responsible_id), count: 0, impact: 0, completed: 0 };
+        }
+        acc[empId].count += 1;
+        acc[empId].impact += calculateImpact(item);
+        if (item.status === 'Tamamlandı') acc[empId].completed += 1;
+        return acc;
+      }, {});
+
+      const topPersonnel = Object.values(byResponsible)
+        .filter(p => p.name !== 'N/A')
+        .sort((a, b) => b.impact - a.impact)
+        .slice(0, 10);
+
       reportData.kpiCards = [
         { title: 'Toplam Yıllık Etki', value: formatCurrency(totalAnnualImpact) },
         { title: 'Toplam İyileştirme', value: filteredImprovements.length },
         { title: 'Ortalama Etki', value: formatCurrency(totalAnnualImpact / (filteredImprovements.length || 1)) },
+        { title: 'Aktif Personel', value: topPersonnel.length.toString() },
       ];
       reportData.tableData = {
-        headers: ['Tarih', 'Parça Kodu', 'Hat', 'Önceki Süre', 'Yeni Süre', 'Yıllık Etki'],
+        headers: ['Tarih', 'Parça Kodu', 'Hat', 'Sorumlu', 'Önceki Süre', 'Yeni Süre', 'Yıllık Etki'],
         rows: filteredImprovements.flatMap(s => [
           [
             format(parseISO(s.improvement_date), 'dd.MM.yyyy'),
             s.part_code || 'N/A',
             getLineName(s.line_id),
+            getEmployeeName(s.responsible_id),
             s.prev_time,
             s.new_time,
             formatCurrency(calculateImpact(s))
@@ -599,6 +665,72 @@ const ContinuousImprovement = () => {
           ['__DESC__', s.description || '-']
         ])
       };
+
+      if (topPersonnel.length > 0) {
+        const chartData = topPersonnel.map(p => ({
+          name: truncateChartLabel(p.name, 16),
+          count: p.count,
+          impact: p.impact,
+          completionRate: p.count > 0 ? Math.round((p.completed / p.count) * 100) : 0,
+        }));
+        reportData.sections = [
+          {
+            type: 'chart',
+            title: 'İyileştirme Sayısı (TOP 10)',
+            chartType: 'bar',
+            data: chartData,
+            config: {
+              xAxisKey: 'name',
+              bars: [{ key: 'count', name: 'İyileştirme Sayısı', color: '#6366f1' }],
+              ...pdfChartConfig(chartData.length),
+            },
+          },
+          {
+            type: 'chart',
+            title: 'Toplam Etki (TOP 10)',
+            chartType: 'bar',
+            data: chartData,
+            config: {
+              xAxisKey: 'name',
+              bars: [{ key: 'impact', name: 'Toplam Etki', color: '#10b981', format: 'currency' }],
+              yAxisFormat: 'currency',
+              yAxisWidth: 80,
+              ...pdfChartConfig(chartData.length),
+            },
+          },
+          {
+            type: 'chart',
+            title: 'Tamamlanma Oranı (TOP 10)',
+            chartType: 'bar',
+            data: chartData,
+            config: {
+              xAxisKey: 'name',
+              bars: [{ key: 'completionRate', name: 'Tamamlanma (%)', color: '#8b5cf6' }],
+              ...pdfChartConfig(chartData.length),
+            },
+          },
+          {
+            type: 'chart',
+            title: 'Etki Dağılımı (TOP 10)',
+            chartType: 'pie',
+            data: chartData.map(p => ({ name: p.name, value: p.impact })),
+            config: { dataKey: 'value', nameKey: 'name', height: 340 },
+          },
+          {
+            title: 'Personel Performans Özeti',
+            headers: ['#', 'Personel', 'İyileştirme', 'Toplam Etki', 'Tamamlanan', 'Oran (%)'],
+            options: { rightAlignColumns: [2, 3, 4] },
+            rows: topPersonnel.map((p, index) => [
+              (index + 1).toString(),
+              p.name,
+              p.count.toString(),
+              formatCurrency(p.impact),
+              p.completed.toString(),
+              `%${Math.round((p.completed / p.count) * 100)}`,
+            ]),
+          },
+        ];
+      }
     }
 
     await openPrintWindow(reportData, toast);
@@ -646,7 +778,8 @@ const ContinuousImprovement = () => {
         const typeMatch = filters.type === 'all' || item.type === filters.type;
         const lineMatch = filters.line === 'all' || item.line_id === filters.line;
         const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
-        return typeMatch && lineMatch && partCodeMatch;
+        const responsibleMatch = filters.responsible === 'all' || item.responsible_id === filters.responsible;
+        return typeMatch && lineMatch && partCodeMatch && responsibleMatch;
       });
 
       const totalAnnualImpact = filteredData.reduce((sum, item) => sum + calculateImpact(item), 0);
@@ -730,6 +863,11 @@ const ContinuousImprovement = () => {
         .sort((a, b) => b.impact - a.impact)
         .slice(0, 10);
 
+      const allPersonnelSummary = Object.entries(byResponsible)
+        .map(([name, data]) => ({ name, ...data }))
+        .filter(p => p.name !== 'Belirtilmemiş')
+        .sort((a, b) => b.impact - a.impact);
+
       // Ortalama süre kazancı hesapla
       Object.keys(byLine).forEach(lineName => {
         const lineData = byLine[lineName];
@@ -753,7 +891,7 @@ const ContinuousImprovement = () => {
         reportId,
         filters: {
           'Rapor Dönemi': `${format(filters.dateRange?.from || new Date('2020-01-01'), 'dd.MM.yyyy', { locale: tr })} - ${format(filters.dateRange?.to || new Date(), 'dd.MM.yyyy', { locale: tr })}`,
-          'Filtreler': `Tip: ${filters.type === 'all' ? 'Tümü' : filters.type}, Hat: ${filters.line === 'all' ? 'Tümü' : getLineName(filters.line)}, Parça Kodu: ${filters.partCode || 'Yok'}`,
+          'Filtreler': `Tip: ${filters.type === 'all' ? 'Tümü' : filters.type}, Hat: ${filters.line === 'all' ? 'Tümü' : getLineName(filters.line)}, Personel: ${filters.responsible === 'all' ? 'Tümü' : getEmployeeName(filters.responsible)}, Parça Kodu: ${filters.partCode || 'Yok'}`,
           'Rapor Tarihi': format(new Date(), 'dd.MM.yyyy HH:mm', { locale: tr }),
           'Toplam Gün': Math.ceil((new Date(dateTo) - new Date(dateFrom)) / (1000 * 60 * 60 * 24)) + 1 + ' gün'
         },
@@ -870,6 +1008,72 @@ const ContinuousImprovement = () => {
             `%${Math.round((resp.completed / resp.count) * 100)}`
           ])
         },
+        ...(top10Responsible.length > 0 ? (() => {
+          const chartData = top10Responsible.map(r => ({
+            name: truncateChartLabel(r.name, 16),
+            count: r.count,
+            impact: r.impact,
+            completionRate: r.count > 0 ? Math.round((r.completed / r.count) * 100) : 0,
+          }));
+          return [
+            {
+              type: 'chart',
+              title: 'İyileştirme Sayısı (TOP 10)',
+              chartType: 'bar',
+              data: chartData,
+              config: {
+                xAxisKey: 'name',
+                bars: [{ key: 'count', name: 'İyileştirme Sayısı', color: '#6366f1' }],
+                ...pdfChartConfig(chartData.length),
+              },
+            },
+            {
+              type: 'chart',
+              title: 'Toplam Etki (TOP 10)',
+              chartType: 'bar',
+              data: chartData,
+              config: {
+                xAxisKey: 'name',
+                bars: [{ key: 'impact', name: 'Toplam Etki', color: '#10b981', format: 'currency' }],
+                yAxisFormat: 'currency',
+                yAxisWidth: 80,
+                ...pdfChartConfig(chartData.length),
+              },
+            },
+            {
+              type: 'chart',
+              title: 'Tamamlanma Oranı (TOP 10)',
+              chartType: 'bar',
+              data: chartData,
+              config: {
+                xAxisKey: 'name',
+                bars: [{ key: 'completionRate', name: 'Tamamlanma (%)', color: '#8b5cf6' }],
+                ...pdfChartConfig(chartData.length),
+              },
+            },
+            {
+              type: 'chart',
+              title: 'Etki Dağılımı (TOP 10)',
+              chartType: 'pie',
+              data: chartData.map(r => ({ name: r.name, value: r.impact })),
+              config: { dataKey: 'value', nameKey: 'name', height: 340 },
+            },
+          ];
+        })() : []),
+        {
+          title: 'Tüm Personel Performans Özeti',
+          headers: ['#', 'Personel', 'İyileştirme', 'Toplam Etki', 'Ort. Etki', 'Tamamlanan', 'Oran (%)'],
+          options: { rightAlignColumns: [2, 3, 4, 5] },
+          rows: allPersonnelSummary.map((p, index) => [
+            (index + 1).toString(),
+            p.name,
+            p.count.toString(),
+            formatCurrency(p.impact),
+            formatCurrency(p.count > 0 ? p.impact / p.count : 0),
+            p.completed.toString(),
+            `%${Math.round((p.completed / p.count) * 100)}`,
+          ]),
+        },
         {
           title: 'Tip Bazlı Analiz',
           headers: ['Tip', 'Adet', 'Toplam Etki', 'Ort. Etki'],
@@ -943,7 +1147,8 @@ const ContinuousImprovement = () => {
         const typeMatch = filters.type === 'all' || item.type === filters.type;
         const lineMatch = filters.line === 'all' || item.line_id === filters.line;
         const partCodeMatch = !filters.partCode || (item.part_code && item.part_code.toLowerCase().includes(filters.partCode.toLowerCase()));
-        return inDateRange && typeMatch && lineMatch && partCodeMatch;
+        const responsibleMatch = filters.responsible === 'all' || item.responsible_id === filters.responsible;
+        return inDateRange && typeMatch && lineMatch && partCodeMatch && responsibleMatch;
       } catch (e) {
         return false;
       }
@@ -1135,7 +1340,19 @@ const ContinuousImprovement = () => {
         <div className="col-span-2"><p className="font-semibold text-gray-500">Açıklama:</p><p className="font-medium text-lg">{viewingItem.description}</p></div>
         <div><p className="font-semibold text-gray-500">Parça Kodu:</p><p className="font-semibold">{viewingItem.part_code || 'N/A'}</p></div>
         <div><p className="font-semibold text-gray-500">Hat / Robot:</p><p>{getLineName(viewingItem.line_id)} / {getRobotName(viewingItem.robot_id)}</p></div>
-        <div><p className="font-semibold text-gray-500">Sorumlu:</p><p>{getEmployeeName(viewingItem.responsible_id)}</p></div>
+        <div><p className="font-semibold text-gray-500">Sorumlu:</p>
+          {viewingItem.responsible_id ? (
+            <button
+              type="button"
+              className="text-indigo-600 hover:underline font-medium"
+              onClick={() => openPersonnelDetailModal(viewingItem.responsible_id)}
+            >
+              {getEmployeeName(viewingItem.responsible_id)}
+            </button>
+          ) : (
+            <p>N/A</p>
+          )}
+        </div>
         <div><p className="font-semibold text-gray-500">İyileştirme Tarihi:</p><p>{format(parseISO(viewingItem.improvement_date), 'dd.MM.yyyy')}</p></div>
         <div><p className="font-semibold text-gray-500">Kayıt Tarihi/Saat:</p><p>{viewingItem.created_at ? format(new Date(viewingItem.created_at), 'dd.MM.yyyy HH:mm:ss') : '-'}</p></div>
         <div><p className="font-semibold text-gray-500">Durum:</p><p>{getStatusStyle(viewingItem.status).label}</p></div>
@@ -1296,17 +1513,222 @@ const ContinuousImprovement = () => {
       .sort((a, b) => b.totalImpact - a.totalImpact)
       .slice(0, 10);
 
+    // Personel bazlı analiz
+    const byResponsible = filtered.reduce((acc, item) => {
+      const empId = item.responsible_id || 'none';
+      if (!acc[empId]) {
+        acc[empId] = {
+          employeeId: empId,
+          name: getEmployeeName(item.responsible_id),
+          count: 0,
+          totalImpact: 0,
+          avgImpact: 0,
+          completed: 0,
+          completionRate: 0,
+        };
+      }
+      acc[empId].count += 1;
+      acc[empId].totalImpact += calculateImpact(item);
+      if (item.status === 'Tamamlandı') acc[empId].completed += 1;
+      return acc;
+    }, {});
+
+    Object.keys(byResponsible).forEach(empId => {
+      const data = byResponsible[empId];
+      data.avgImpact = data.count > 0 ? data.totalImpact / data.count : 0;
+      data.completionRate = data.count > 0 ? (data.completed / data.count) * 100 : 0;
+    });
+
+    const top10Responsible = Object.values(byResponsible)
+      .filter(p => p.employeeId !== 'none' && p.name !== 'N/A')
+      .sort((a, b) => b.totalImpact - a.totalImpact)
+      .slice(0, 10);
+
+    const allPersonnel = Object.values(byResponsible)
+      .filter(p => p.employeeId !== 'none' && p.name !== 'N/A')
+      .sort((a, b) => b.totalImpact - a.totalImpact);
+
     return {
       byType,
       byLine,
       byStatus,
+      byResponsible,
+      top10Responsible,
+      allPersonnel,
       monthlyTrend: monthlyTrendArray,
       top10Improvements,
       top10Parts,
       totalImpact: filtered.reduce((sum, item) => sum + calculateImpact(item), 0),
       totalCount: filtered.length
     };
-  }, [filteredImprovements, filters, calculateImpact, getLineName]);
+  }, [filteredImprovements, filters, calculateImpact, getLineName, getEmployeeName]);
+
+  const personnelDetail = useMemo(() => {
+    if (!selectedPersonnelAnalysisId) return null;
+
+    const stats = analysisData.byResponsible[selectedPersonnelAnalysisId];
+    if (!stats) return null;
+
+    const from = filters.dateRange?.from ? format(filters.dateRange.from, 'yyyy-MM-dd') : '2000-01-01';
+    const to = filters.dateRange?.to ? format(filters.dateRange.to, 'yyyy-MM-dd') : format(new Date(), 'yyyy-MM-dd');
+
+    const items = filteredImprovements
+      .filter(i => i.responsible_id === selectedPersonnelAnalysisId)
+      .filter(i => {
+        const itemDate = format(parseISO(i.improvement_date), 'yyyy-MM-dd');
+        return itemDate >= from && itemDate <= to;
+      })
+      .map(i => ({ ...i, impact: calculateImpact(i) }))
+      .sort((a, b) => b.impact - a.impact);
+
+    const byStatus = items.reduce((acc, item) => {
+      const status = getStatusStyle(item.status).label;
+      if (!acc[status]) acc[status] = { count: 0, impact: 0 };
+      acc[status].count += 1;
+      acc[status].impact += item.impact;
+      return acc;
+    }, {});
+
+    const monthlyTrend = {};
+    items.forEach(item => {
+      const month = format(parseISO(item.improvement_date), 'yyyy-MM');
+      if (!monthlyTrend[month]) monthlyTrend[month] = { month, count: 0, totalImpact: 0 };
+      monthlyTrend[month].count += 1;
+      monthlyTrend[month].totalImpact += item.impact;
+    });
+
+    const emp = employees.find(e => e.id === selectedPersonnelAnalysisId);
+    const rank = analysisData.allPersonnel.findIndex(p => p.employeeId === selectedPersonnelAnalysisId) + 1;
+
+    return {
+      ...stats,
+      items,
+      byStatus,
+      rank: rank > 0 ? rank : null,
+      monthlyTrend: Object.values(monthlyTrend)
+        .sort((a, b) => a.month.localeCompare(b.month))
+        .map(m => ({
+          ...m,
+          monthLabel: format(parseISO(`${m.month}-01`), 'MMM yyyy', { locale: tr }),
+        })),
+      department: emp?.department || '-',
+      position: emp?.position || '-',
+      registrationNumber: emp?.registration_number || '-',
+    };
+  }, [selectedPersonnelAnalysisId, analysisData, filteredImprovements, filters, calculateImpact, employees]);
+
+  const personnelChartData = useMemo(() => (
+    analysisData.top10Responsible.map(p => ({
+      personel: truncateChartLabel(p.name),
+      sayi: p.count,
+      etki: p.totalImpact,
+      oran: Math.round(p.completionRate),
+    }))
+  ), [analysisData.top10Responsible]);
+
+  const renderPersonnelDetailView = () => {
+    if (!personnelDetail) return null;
+    return (
+      <div className="space-y-4">
+        <div className="flex flex-wrap items-start justify-between gap-3">
+          <div>
+            <h3 className="text-xl font-bold text-indigo-900">{personnelDetail.name}</h3>
+            <p className="text-sm text-muted-foreground mt-1">
+              Sicil: {personnelDetail.registrationNumber} · {personnelDetail.department} · {personnelDetail.position}
+            </p>
+            {personnelDetail.rank && (
+              <p className="text-xs text-indigo-600 font-medium mt-1">
+                Genel sıralama: #{personnelDetail.rank} / {analysisData.allPersonnel.length}
+              </p>
+            )}
+          </div>
+          <span className={cn(
+            'px-3 py-1 rounded-full text-sm font-semibold',
+            personnelDetail.completionRate >= 80 ? 'bg-green-100 text-green-800' :
+            personnelDetail.completionRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+            'bg-red-100 text-red-800'
+          )}>
+            Tamamlanma: %{Math.round(personnelDetail.completionRate)}
+          </span>
+        </div>
+
+        <div className="grid grid-cols-2 md:grid-cols-4 gap-3">
+          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">İyileştirme</p><p className="text-2xl font-bold">{personnelDetail.count}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Toplam Etki</p><p className="text-2xl font-bold text-green-600">{formatCurrency(personnelDetail.totalImpact)}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Ort. Etki</p><p className="text-2xl font-bold">{formatCurrency(personnelDetail.avgImpact)}</p></CardContent></Card>
+          <Card><CardContent className="p-4"><p className="text-xs text-muted-foreground">Tamamlanan</p><p className="text-2xl font-bold">{personnelDetail.completed} / {personnelDetail.count}</p></CardContent></Card>
+        </div>
+
+        {Object.keys(personnelDetail.byStatus).length > 0 && (
+          <div className="flex flex-wrap gap-2">
+            {Object.entries(personnelDetail.byStatus).map(([status, data]) => {
+              const style = getStatusStyle(status);
+              return (
+                <span key={status} className={cn('px-3 py-1.5 rounded-lg text-sm font-medium', style.color)}>
+                  {status}: {data.count} kayıt · {formatCurrency(data.impact)}
+                </span>
+              );
+            })}
+          </div>
+        )}
+
+        {personnelDetail.monthlyTrend.length > 1 && (
+          <Card>
+            <CardHeader className="pb-2"><CardTitle className="text-sm">Aylık Performans Trendi</CardTitle></CardHeader>
+            <CardContent>
+              <ResponsiveContainer width="100%" height={280}>
+                <AreaChart data={personnelDetail.monthlyTrend}>
+                  <CartesianGrid strokeDasharray="3 3" />
+                  <XAxis dataKey="monthLabel" tick={{ fontSize: 12 }} />
+                  <YAxis yAxisId="left" />
+                  <YAxis yAxisId="right" orientation="right" />
+                  <Tooltip formatter={(value, name) => name === 'totalImpact' ? formatCurrency(value) : value} />
+                  <Legend />
+                  <Area yAxisId="left" type="monotone" dataKey="count" stroke="#6366f1" fill="#6366f1" fillOpacity={0.3} name="Kayıt Sayısı" />
+                  <Line yAxisId="right" type="monotone" dataKey="totalImpact" stroke="#10b981" strokeWidth={2} name="Toplam Etki (₺)" />
+                </AreaChart>
+              </ResponsiveContainer>
+            </CardContent>
+          </Card>
+        )}
+
+        <Card>
+          <CardHeader className="pb-2">
+            <CardTitle className="text-sm">Personelin İyileştirmeleri ({personnelDetail.items.length})</CardTitle>
+            <CardDescription>İyileştirmeye tıklayarak detay modalını açabilirsiniz</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="border rounded-lg overflow-x-auto max-h-72 overflow-y-auto">
+              <table className="w-full text-sm">
+                <thead className="bg-gray-50 sticky top-0">
+                  <tr>
+                    {['Tarih', 'Parça', 'Hat', 'Açıklama', 'Etki', 'Durum'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody className="divide-y">
+                  {personnelDetail.items.map(item => {
+                    const statusStyle = getStatusStyle(item.status);
+                    return (
+                      <tr key={item.id} className="hover:bg-gray-50 cursor-pointer" onClick={() => setViewingItem(item)}>
+                        <td className="px-3 py-2 whitespace-nowrap">{format(parseISO(item.improvement_date), 'dd.MM.yyyy')}</td>
+                        <td className="px-3 py-2 whitespace-nowrap font-medium">{item.part_code || '-'}</td>
+                        <td className="px-3 py-2 whitespace-nowrap">{getLineName(item.line_id)}</td>
+                        <td className="px-3 py-2 max-w-xs truncate" title={item.description}>{item.description}</td>
+                        <td className="px-3 py-2 whitespace-nowrap text-green-600 font-medium">{formatCurrency(item.impact)}</td>
+                        <td className="px-3 py-2"><span className={cn('px-2 py-0.5 rounded-full text-xs font-semibold', statusStyle.color)}>{statusStyle.label}</span></td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  };
 
   const COLORS = ['#3b82f6', '#10b981', '#f97316', '#ef4444', '#8b5cf6', '#ec4899', '#06b6d4', '#84cc16'];
 
@@ -1328,6 +1750,7 @@ const ContinuousImprovement = () => {
           </div>
         </CardHeader>
         <CardContent>
+          <ImprovementFilters filters={filters} setFilters={setFilters} lines={lines} employeeOptions={employeeOptions} />
           <Tabs defaultValue="data" className="w-full">
             <TabsList className="grid w-full grid-cols-2">
               <TabsTrigger value="data">Veri Takip</TabsTrigger>
@@ -1335,13 +1758,14 @@ const ContinuousImprovement = () => {
             </TabsList>
 
             <TabsContent value="data" className="space-y-4">
-              <ImprovementFilters filters={filters} setFilters={setFilters} lines={lines} />
               <KpiCards improvements={filteredImprovements} calculateImpact={calculateImpact} getLineName={getLineName} />
               <ImprovementTable
                 improvements={filteredImprovements}
                 calculateImpact={calculateImpact}
                 getLineName={getLineName}
+                getEmployeeName={getEmployeeName}
                 setViewingItem={setViewingItem}
+                openPersonnelDetailModal={openPersonnelDetailModal}
                 handlePrint={handlePrint}
                 openDialog={openDialog}
                 setDeleteConfirm={setDeleteConfirm}
@@ -1350,7 +1774,7 @@ const ContinuousImprovement = () => {
 
             <TabsContent value="analysis" className="space-y-6">
               {/* Özet KPI Kartları */}
-              <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
                 <Card className="bg-gradient-to-br from-blue-50 to-blue-100">
                   <CardHeader className="pb-2">
                     <CardTitle className="text-sm">Toplam İyileştirme</CardTitle>
@@ -1389,7 +1813,181 @@ const ContinuousImprovement = () => {
                     <p className="text-xs text-muted-foreground mt-1">Hat sayısı</p>
                   </CardContent>
                 </Card>
+                <Card className="bg-gradient-to-br from-indigo-50 to-indigo-100">
+                  <CardHeader className="pb-2">
+                    <CardTitle className="text-sm flex items-center gap-1"><Users className="h-4 w-4" />Aktif Personel</CardTitle>
+                  </CardHeader>
+                  <CardContent>
+                    <div className="text-3xl font-bold text-indigo-700">{analysisData.allPersonnel.length}</div>
+                    <p className="text-xs text-muted-foreground mt-1">Sorumlu personel</p>
+                  </CardContent>
+                </Card>
               </div>
+
+              {/* Personel Performans Analizi */}
+              {analysisData.top10Responsible.length > 0 && (
+                <div className="space-y-6">
+                  <Card className="border-indigo-200 bg-gradient-to-br from-indigo-50/80 to-white">
+                    <CardHeader>
+                      <CardTitle className="flex items-center gap-2"><Search className="h-5 w-5 text-indigo-600" />Personel Ara ve Durum İncele</CardTitle>
+                      <CardDescription>Personel adı veya sicil numarası ile arayıp performans durumunu görüntüleyin</CardDescription>
+                    </CardHeader>
+                    <CardContent className="space-y-4">
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Combobox
+                          options={employeeOptions}
+                          value={selectedPersonnelAnalysisId}
+                          onSelect={(v) => openPersonnelDetailModal(v || null)}
+                          placeholder="Personel seçin veya arayın..."
+                          searchPlaceholder="Ad, soyad veya sicil no ile ara..."
+                          emptyPlaceholder="Personel bulunamadı."
+                          triggerClassName="w-full max-w-md"
+                        />
+                      </div>
+                      <p className="text-sm text-muted-foreground">Personel adına tıklayın veya arayarak performans detay modalını açın.</p>
+                    </CardContent>
+                  </Card>
+
+                  <div>
+                    <h3 className="text-lg font-semibold flex items-center gap-2 mb-4"><Users className="h-5 w-5" />Personel Performans Grafikleri</h3>
+                    <div className="space-y-6">
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">İyileştirme Sayısı (TOP 10)</CardTitle>
+                          <CardDescription>Personel başına kayıt adedi</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pb-6">
+                          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+                            <BarChart data={personnelChartData} margin={{ top: 12, right: 24, left: 16, bottom: 64 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="personel" angle={-25} textAnchor="end" height={80} tick={{ fontSize: 12 }} interval={0} />
+                              <YAxis tick={{ fontSize: 12 }} width={48} />
+                              <Tooltip />
+                              <Legend />
+                              <Bar dataKey="sayi" fill="#6366f1" name="İyileştirme Sayısı" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Toplam Etki (TOP 10)</CardTitle>
+                          <CardDescription>Personel başına yıllık kazanç</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pb-6 overflow-hidden">
+                          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+                            <BarChart data={personnelChartData} margin={{ top: 12, right: 24, left: 20, bottom: 64 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis dataKey="personel" angle={-25} textAnchor="end" height={80} tick={{ fontSize: 12 }} interval={0} />
+                              <YAxis tick={{ fontSize: 11 }} tickFormatter={formatCompactCurrency} width={72} />
+                              <Tooltip formatter={(value) => formatCurrency(value)} />
+                              <Legend />
+                              <Bar dataKey="etki" fill="#10b981" name="Toplam Etki (₺)" radius={[4, 4, 0, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Tamamlanma Oranı (TOP 10)</CardTitle>
+                          <CardDescription>Personel bazlı tamamlanan iyileştirme oranı</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pb-6">
+                          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+                            <BarChart data={personnelChartData} layout="vertical" margin={{ top: 12, right: 32, left: 16, bottom: 12 }}>
+                              <CartesianGrid strokeDasharray="3 3" />
+                              <XAxis type="number" domain={[0, 100]} unit="%" tick={{ fontSize: 12 }} />
+                              <YAxis type="category" dataKey="personel" width={160} tick={{ fontSize: 12 }} />
+                              <Tooltip formatter={(value) => `%${value}`} />
+                              <Legend />
+                              <Bar dataKey="oran" fill="#8b5cf6" name="Tamamlanma (%)" radius={[0, 4, 4, 0]} />
+                            </BarChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+
+                      <Card>
+                        <CardHeader>
+                          <CardTitle className="text-base">Etki Dağılımı (TOP 10)</CardTitle>
+                          <CardDescription>Toplam etki içindeki paylar</CardDescription>
+                        </CardHeader>
+                        <CardContent className="pb-6">
+                          <ResponsiveContainer width="100%" height={CHART_HEIGHT}>
+                            <PieChart>
+                              <Pie
+                                data={analysisData.top10Responsible.map(p => ({
+                                  name: truncateChartLabel(p.name, 24),
+                                  value: p.totalImpact,
+                                }))}
+                                cx="50%"
+                                cy="50%"
+                                outerRadius={150}
+                                dataKey="value"
+                                label={({ name, percent }) => percent > 0.04 ? `${name} (${(percent * 100).toFixed(0)}%)` : ''}
+                                labelLine={{ strokeWidth: 1 }}
+                              >
+                                {analysisData.top10Responsible.map((_, index) => (
+                                  <Cell key={`cell-${index}`} fill={COLORS[index % COLORS.length]} />
+                                ))}
+                              </Pie>
+                              <Tooltip formatter={(value) => formatCurrency(value)} />
+                              <Legend wrapperStyle={{ fontSize: 12 }} />
+                            </PieChart>
+                          </ResponsiveContainer>
+                        </CardContent>
+                      </Card>
+                    </div>
+                  </div>
+
+                  <Card>
+                    <CardHeader>
+                      <CardTitle>Tüm Personel Performans Özeti</CardTitle>
+                      <CardDescription>Personel adına tıklayarak detay modalını açın</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                      <div className="border rounded-lg overflow-x-auto">
+                        <table className="w-full text-sm">
+                          <thead className="bg-gray-50">
+                            <tr>
+                              {['#', 'Personel', 'İyileştirme', 'Toplam Etki', 'Ort. Etki', 'Tamamlanan', 'Oran'].map(h => (
+                                <th key={h} className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase">{h}</th>
+                              ))}
+                            </tr>
+                          </thead>
+                          <tbody className="divide-y">
+                            {analysisData.allPersonnel.map((p, index) => (
+                              <tr
+                                key={p.employeeId}
+                                className="hover:bg-indigo-50 cursor-pointer transition-colors"
+                                onClick={() => openPersonnelDetailModal(p.employeeId)}
+                              >
+                                <td className="px-4 py-2 font-medium">{index + 1}</td>
+                                <td className="px-4 py-2 font-semibold text-indigo-700 hover:underline">{p.name}</td>
+                                <td className="px-4 py-2">{p.count}</td>
+                                <td className="px-4 py-2 font-medium text-green-600">{formatCurrency(p.totalImpact)}</td>
+                                <td className="px-4 py-2">{formatCurrency(p.avgImpact)}</td>
+                                <td className="px-4 py-2">{p.completed}</td>
+                                <td className="px-4 py-2">
+                                  <span className={cn(
+                                    'px-2 py-0.5 rounded-full text-xs font-semibold',
+                                    p.completionRate >= 80 ? 'bg-green-100 text-green-800' :
+                                    p.completionRate >= 50 ? 'bg-yellow-100 text-yellow-800' :
+                                    'bg-red-100 text-red-800'
+                                  )}>
+                                    %{Math.round(p.completionRate)}
+                                  </span>
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </CardContent>
+                  </Card>
+                </div>
+              )}
 
               {/* Tip Bazlı Analiz */}
               {Object.keys(analysisData.byType).length > 0 && (
@@ -1730,7 +2328,11 @@ const ContinuousImprovement = () => {
                   <CardContent>
                     <div className="space-y-2">
                       {analysisData.top10Improvements.map((item, index) => (
-                        <div key={item.id} className="p-3 bg-green-50 rounded border-l-4 border-green-500">
+                        <div
+                          key={item.id}
+                          className="p-3 bg-green-50 rounded border-l-4 border-green-500 cursor-pointer hover:bg-green-100 transition-colors"
+                          onClick={() => setViewingItem(item)}
+                        >
                           <div className="flex justify-between items-start">
                             <div className="flex items-center gap-3">
                               <span className="text-xl font-bold text-green-700">#{index + 1}</span>
@@ -1812,6 +2414,26 @@ const ContinuousImprovement = () => {
             <Button variant="secondary" onClick={() => openMetricsDialog(viewingItem)} className="rounded-lg px-6"><CalendarIcon className="mr-2 h-4 w-4" />Aylık Metrikler</Button>
             <Button onClick={() => { openDialog(viewingItem); setViewingItem(null); }} className="bg-blue-600 hover:bg-blue-700 text-white rounded-lg shadow-md shadow-blue-200 transition-all px-6">Düzenle</Button>
             <Button variant="destructive" onClick={() => setDeleteConfirm(viewingItem)} className="bg-red-600 hover:bg-red-700 text-white rounded-lg shadow-md shadow-red-200 px-6">Sil</Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      <Dialog open={!!selectedPersonnelAnalysisId && !!personnelDetail} onOpenChange={(isOpen) => !isOpen && setSelectedPersonnelAnalysisId(null)}>
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] bg-white rounded-xl shadow-2xl p-0 overflow-hidden border-0">
+          <DialogHeader className="bg-gradient-to-r from-indigo-600 to-indigo-500 p-6 text-white">
+            <DialogTitle className="text-2xl font-bold flex items-center gap-2">
+              <Users className="h-6 w-6 text-white/80" />
+              Personel Performans Detayı
+            </DialogTitle>
+            <DialogDescription className="text-indigo-100 opacity-90">
+              {personnelDetail?.name} — iyileştirme performans özeti
+            </DialogDescription>
+          </DialogHeader>
+          <div className="flex-1 overflow-y-auto p-6 modal-body-scroll max-h-[calc(90vh-180px)]">
+            {renderPersonnelDetailView()}
+          </div>
+          <DialogFooter className="p-6 bg-gray-50 border-t border-gray-100 flex items-center justify-end gap-3">
+            <Button variant="outline" onClick={() => setSelectedPersonnelAnalysisId(null)} className="rounded-lg px-6">Kapat</Button>
           </DialogFooter>
         </DialogContent>
       </Dialog>

@@ -20,6 +20,8 @@ const CHART_COLORS = {
     actual: '#4f46e5',
     ifs: '#9333ea',
     positive: '#059669',
+    success: '#059669',
+    failure: '#dc2626',
     warning: '#dc2626',
     neutral: '#64748b',
     accent: '#0ea5e9',
@@ -48,6 +50,65 @@ const formatPercent = (value, fractionDigits = 1) => {
         maximumFractionDigits: fractionDigits,
     })}`;
 };
+
+const getSuccessRate = (overIfsRate) => {
+    if (!Number.isFinite(overIfsRate)) return null;
+    return Math.max(0, Math.min(100, 100 - overIfsRate));
+};
+
+const getSuccessRateBadge = (successRate) => {
+    if (!Number.isFinite(successRate)) return { background: '#e2e8f0', color: '#334155' };
+    if (successRate >= 80) return { background: '#dcfce7', color: '#166534' };
+    if (successRate >= 60) return { background: '#ecfccb', color: '#3f6212' };
+    if (successRate >= 40) return { background: '#fef3c7', color: '#92400e' };
+    if (successRate >= 20) return { background: '#ffedd5', color: '#c2410c' };
+    return { background: '#fee2e2', color: '#991b1b' };
+};
+
+const getFailureRateBadge = (overIfsRate) => {
+    if (!Number.isFinite(overIfsRate)) return { background: '#e2e8f0', color: '#334155' };
+    if (overIfsRate >= 80) return { background: '#fee2e2', color: '#991b1b' };
+    if (overIfsRate >= 60) return { background: '#ffedd5', color: '#c2410c' };
+    if (overIfsRate >= 40) return { background: '#fef3c7', color: '#92400e' };
+    if (overIfsRate >= 20) return { background: '#ecfccb', color: '#3f6212' };
+    return { background: '#dcfce7', color: '#166534' };
+};
+
+const formatReportRateCell = (rate, mode = 'success') => ({
+    value: formatPercent(rate),
+    badge: mode === 'success' ? getSuccessRateBadge(rate) : getFailureRateBadge(rate),
+});
+
+const getSuccessRateClassName = (successRate) => {
+    if (!Number.isFinite(successRate)) return 'bg-slate-100 text-slate-700';
+    if (successRate >= 80) return 'bg-emerald-100 text-emerald-800';
+    if (successRate >= 60) return 'bg-lime-100 text-lime-800';
+    if (successRate >= 40) return 'bg-amber-100 text-amber-800';
+    if (successRate >= 20) return 'bg-orange-100 text-orange-800';
+    return 'bg-rose-100 text-rose-800';
+};
+
+const getFailureRateClassName = (overIfsRate) => {
+    if (!Number.isFinite(overIfsRate)) return 'bg-slate-100 text-slate-700';
+    if (overIfsRate >= 80) return 'bg-rose-100 text-rose-800';
+    if (overIfsRate >= 60) return 'bg-orange-100 text-orange-800';
+    if (overIfsRate >= 40) return 'bg-amber-100 text-amber-800';
+    if (overIfsRate >= 20) return 'bg-lime-100 text-lime-800';
+    return 'bg-emerald-100 text-emerald-800';
+};
+
+const getSuccessRateTextClassName = (successRate) => {
+    if (!Number.isFinite(successRate)) return 'text-slate-600';
+    if (successRate >= 60) return 'text-emerald-700 font-medium';
+    if (successRate >= 40) return 'text-amber-700 font-medium';
+    return 'text-rose-700 font-medium';
+};
+
+const PerformanceRateBadge = ({ rate, mode = 'success' }) => (
+    <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-semibold ${mode === 'success' ? getSuccessRateClassName(rate) : getFailureRateClassName(rate)}`}>
+        {formatPercent(rate)}
+    </span>
+);
 
 const formatSeconds = (value, fractionDigits = 2) => Number.isFinite(value) ? `${formatNumber(value, fractionDigits)} sn` : '-';
 
@@ -98,6 +159,13 @@ const getPerformanceStatus = (partDuration, ifsDuration) => {
     return 'IFS Eşit';
 };
 
+const getPerformanceStatusLabel = (status) => {
+    if (status === 'IFS Üstü') return 'Başarısız';
+    if (status === 'IFS Altı') return 'Hedef Altı';
+    if (status === 'IFS Eşit') return 'Hedefte';
+    return status;
+};
+
 const getRobotSortNum = (robotNo) => {
     if (!robotNo) return 9999;
     const match = String(robotNo).match(/RK0*(\d+)/i) || String(robotNo).match(/(\d+)/);
@@ -112,9 +180,10 @@ const hasDailyTimeEntryContent = (record) => {
         || numericValues.some((value) => value !== null && value !== undefined && String(value).trim() !== '');
 };
 
-const getDailyTimeRecordKey = (record) => (
-    record?.robot_id ? `${record.robot_id}-${record.station}` : `${record?.robot_no}-${record?.station}`
-);
+const getDailyTimeRecordKey = (record) => {
+    const stationKey = record?.robot_id ? `${record.robot_id}-${record.station}` : `${record?.robot_no}-${record.station}`;
+    return record?.record_date ? `${record.record_date}-${stationKey}` : stationKey;
+};
 
 const buildUniqueDailyTimeRecords = (records) => {
     const uniqueMap = new Map();
@@ -250,9 +319,9 @@ const buildTrendData = (records, mode) => {
         const variance = getVariance(partDuration, ifsDuration);
 
         entry.count += 1;
-        if (Number.isFinite(partDuration)) entry.partDurations.push(partDuration);
-        if (Number.isFinite(ifsDuration)) entry.ifsDurations.push(ifsDuration);
         if (Number.isFinite(variance)) {
+            entry.partDurations.push(partDuration);
+            entry.ifsDurations.push(ifsDuration);
             entry.variances.push(variance);
             if (variance > 0) entry.overIfsCount += 1;
         }
@@ -262,10 +331,12 @@ const buildTrendData = (records, mode) => {
         .sort((a, b) => a.sortValue - b.sortValue)
         .map((entry) => ({
             label: entry.label,
-            count: entry.count,
+            count: entry.variances.length,
+            comparableCount: entry.variances.length,
             avgPartDuration: average(entry.partDurations) || 0,
             avgIfsDuration: average(entry.ifsDurations) || 0,
             avgVariance: average(entry.variances) || 0,
+            overIfsCount: entry.overIfsCount,
             overIfsRate: entry.variances.length ? (entry.overIfsCount / entry.variances.length) * 100 : 0,
         }));
 };
@@ -285,17 +356,17 @@ const buildAnalytics = (records, searchTerm = '') => {
         };
     });
 
-    const validPartDurations = enrichedRecords.map((record) => record.partDuration).filter(Number.isFinite);
     const comparableRecords = enrichedRecords.filter((record) => Number.isFinite(record.variance));
     const overIfsRecords = comparableRecords.filter((record) => record.variance > 0);
     const underIfsRecords = comparableRecords.filter((record) => record.variance < 0);
+    const comparablePartDurations = comparableRecords.map((record) => record.partDuration);
 
     const totals = {
         recordCount: enrichedRecords.length,
         comparableCount: comparableRecords.length,
-        partDurationTotal: validPartDurations.reduce((sum, value) => sum + value, 0),
+        partDurationTotal: comparablePartDurations.reduce((sum, value) => sum + value, 0),
         ifsDurationTotal: comparableRecords.reduce((sum, record) => sum + record.ifsDuration, 0),
-        avgPartDuration: average(validPartDurations) || 0,
+        avgPartDuration: average(comparablePartDurations) || 0,
         avgIfsDuration: average(comparableRecords.map((record) => record.ifsDuration)) || 0,
         avgVariance: average(comparableRecords.map((record) => record.variance)) || 0,
         overIfsCount: overIfsRecords.length,
@@ -303,6 +374,7 @@ const buildAnalytics = (records, searchTerm = '') => {
         equalIfsCount: comparableRecords.length - overIfsRecords.length - underIfsRecords.length,
         overIfsRate: comparableRecords.length ? (overIfsRecords.length / comparableRecords.length) * 100 : 0,
         underIfsRate: comparableRecords.length ? (underIfsRecords.length / comparableRecords.length) * 100 : 0,
+        successRate: comparableRecords.length ? ((comparableRecords.length - overIfsRecords.length) / comparableRecords.length) * 100 : 0,
         uniquePartCount: new Set(enrichedRecords.map((record) => record.normalizedPartCode).filter(Boolean)).size,
         uniqueRobotCount: new Set(enrichedRecords.map((record) => record.robot_no).filter(Boolean)).size,
     };
@@ -314,10 +386,12 @@ const buildAnalytics = (records, searchTerm = '') => {
             lineAnalysisMap.set(key, {
                 lineName: key,
                 recordCount: 0,
+                comparableCount: 0,
                 partDurations: [],
                 ifsDurations: [],
                 variances: [],
                 overIfsCount: 0,
+                underIfsCount: 0,
                 robots: new Set(),
                 parts: new Set(),
             });
@@ -327,11 +401,13 @@ const buildAnalytics = (records, searchTerm = '') => {
         entry.recordCount += 1;
         if (record.robot_no) entry.robots.add(record.robot_no);
         if (record.normalizedPartCode) entry.parts.add(record.normalizedPartCode);
-        if (Number.isFinite(record.partDuration)) entry.partDurations.push(record.partDuration);
-        if (Number.isFinite(record.ifsDuration)) entry.ifsDurations.push(record.ifsDuration);
         if (Number.isFinite(record.variance)) {
+            entry.comparableCount += 1;
+            entry.partDurations.push(record.partDuration);
+            entry.ifsDurations.push(record.ifsDuration);
             entry.variances.push(record.variance);
             if (record.variance > 0) entry.overIfsCount += 1;
+            if (record.variance < 0) entry.underIfsCount += 1;
         }
     });
 
@@ -339,14 +415,19 @@ const buildAnalytics = (records, searchTerm = '') => {
         .map((entry) => ({
             lineName: entry.lineName,
             recordCount: entry.recordCount,
+            comparableCount: entry.comparableCount,
             robotCount: entry.robots.size,
             partCount: entry.parts.size,
             avgPartDuration: average(entry.partDurations) || 0,
             avgIfsDuration: average(entry.ifsDurations) || 0,
             avgVariance: average(entry.variances) || 0,
-            overIfsRate: entry.variances.length ? (entry.overIfsCount / entry.variances.length) * 100 : 0,
+            overIfsCount: entry.overIfsCount,
+            underIfsCount: entry.underIfsCount,
+            overIfsRate: entry.comparableCount ? (entry.overIfsCount / entry.comparableCount) * 100 : 0,
+            successRate: entry.comparableCount ? ((entry.comparableCount - entry.overIfsCount) / entry.comparableCount) * 100 : 0,
         }))
-        .sort((a, b) => (b.avgVariance - a.avgVariance) || (b.recordCount - a.recordCount));
+        .filter((entry) => entry.comparableCount > 0)
+        .sort((a, b) => (b.avgVariance - a.avgVariance) || (b.comparableCount - a.comparableCount));
 
     const overIfsPartMap = new Map();
     overIfsRecords.forEach((record) => {
@@ -381,6 +462,8 @@ const buildAnalytics = (records, searchTerm = '') => {
             avgIfsDuration: average(entry.ifsDurations) || 0,
             lineCount: entry.lines.size,
             robotCount: entry.robots.size,
+            lineNames: Array.from(entry.lines).sort().join(', ') || '-',
+            robotNames: Array.from(entry.robots).sort((a, b) => getRobotSortNum(a) - getRobotSortNum(b)).join(', ') || '-',
         }))
         .sort((a, b) => (b.avgVariance - a.avgVariance) || (b.overIfsCount - a.overIfsCount))
         .slice(0, 12);
@@ -408,13 +491,16 @@ const buildAnalytics = (records, searchTerm = '') => {
 
             const entry = robotAnalysisMap.get(key);
             entry.recordCount += 1;
-            if (Number.isFinite(record.partDuration)) {
+            if (Number.isFinite(record.variance)) {
                 entry.partDurations.push(record.partDuration);
+                entry.ifsDurations.push(record.ifsDuration);
+                entry.variances.push(record.variance);
+                entry.minDuration = Math.min(entry.minDuration, record.partDuration);
+                entry.maxDuration = Math.max(entry.maxDuration, record.partDuration);
+            } else if (Number.isFinite(record.partDuration)) {
                 entry.minDuration = Math.min(entry.minDuration, record.partDuration);
                 entry.maxDuration = Math.max(entry.maxDuration, record.partDuration);
             }
-            if (Number.isFinite(record.ifsDuration)) entry.ifsDurations.push(record.ifsDuration);
-            if (Number.isFinite(record.variance)) entry.variances.push(record.variance);
         });
 
         const robotBreakdown = Array.from(robotAnalysisMap.values())
@@ -478,7 +564,7 @@ const buildAnalytics = (records, searchTerm = '') => {
     };
 };
 
-const MetricCard = ({ title, value, subtitle, icon: Icon, accentClass }) => (
+const MetricCard = ({ title, value, subtitle, subtitleClassName, icon: Icon, accentClass }) => (
     <Card className="overflow-hidden border-0 shadow-sm">
         <CardContent className="p-0">
             <div className={`h-1 ${accentClass}`} />
@@ -487,7 +573,7 @@ const MetricCard = ({ title, value, subtitle, icon: Icon, accentClass }) => (
                     <div>
                         <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">{title}</p>
                         <p className="mt-2 text-2xl font-bold text-slate-900">{value}</p>
-                        {subtitle && <p className="mt-2 text-sm text-slate-500">{subtitle}</p>}
+                        {subtitle && <p className={`mt-2 text-sm ${subtitleClassName || 'text-slate-500'}`}>{subtitle}</p>}
                     </div>
                     <div className="rounded-xl bg-slate-50 p-3">
                         <Icon className="h-5 w-5 text-slate-600" />
@@ -613,18 +699,28 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                 accentClass="bg-gradient-to-r from-violet-600 to-fuchsia-500"
             />
             <MetricCard
-                title="IFS Altı Çalışma"
-                value={String(totals.underIfsCount)}
-                subtitle={formatPercent(totals.underIfsRate)}
+                title="Başarı Oranı"
+                value={formatPercent(totals.successRate)}
+                subtitle={`${totals.comparableCount - totals.overIfsCount} kayıt IFS altında veya eşit · Yüksek oran daha iyi`}
+                subtitleClassName={getSuccessRateTextClassName(totals.successRate)}
                 icon={TrendingUp}
                 accentClass="bg-gradient-to-r from-emerald-600 to-lime-500"
             />
             <MetricCard
-                title="IFS Üstü Çalışma"
+                title="IFS Üstü (Başarısız)"
                 value={String(totals.overIfsCount)}
-                subtitle={formatPercent(totals.overIfsRate)}
+                subtitle={`Başarısızlık oranı ${formatPercent(totals.overIfsRate)} · IFS üstü çalışma başarısız sayılır`}
+                subtitleClassName="text-rose-700 font-medium"
                 icon={AlertTriangle}
                 accentClass="bg-gradient-to-r from-rose-600 to-orange-500"
+            />
+            <MetricCard
+                title="IFS Altı (Hedefin Altında)"
+                value={String(totals.underIfsCount)}
+                subtitle={formatPercent(totals.underIfsRate)}
+                subtitleClassName="text-emerald-700"
+                icon={Gauge}
+                accentClass="bg-gradient-to-r from-teal-600 to-emerald-500"
             />
             <MetricCard
                 title="Ort. IFS Farkı"
@@ -699,14 +795,14 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
             <Card className="border-0 shadow-sm">
                 <CardHeader>
                     <CardTitle>Hat Bazlı Analiz</CardTitle>
-                    <CardDescription>Hatların ortalama süre, IFS farkı ve iyileştirme sırası</CardDescription>
+                    <CardDescription>IFS üstü çalışma başarısız sayılır — başarı oranı yüksek hatlar daha iyi performans gösterir</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <AnalyticsBarChart
                         data={analytics.lineAnalysis.slice(0, 12)}
                         barsConfig={[
-                            { key: 'avgVariance', name: 'Ort. IFS Farkı', color: CHART_COLORS.warning },
-                            { key: 'avgPartDuration', name: 'Ort. Parça Süresi', color: CHART_COLORS.actual },
+                            { key: 'successRate', name: 'Başarı Oranı', color: CHART_COLORS.success },
+                            { key: 'overIfsRate', name: 'Başarısızlık Oranı', color: CHART_COLORS.failure },
                         ]}
                         xAxisKey="lineName"
                         height={400}
@@ -715,7 +811,7 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                         <table className="w-full text-sm">
                             <thead className="border-b bg-slate-50 text-slate-500">
                                 <tr>
-                                    {['Hat', 'Kayıt', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'IFS Üstü'].map((header) => (
+                                    {['Hat', 'IFS Kayıt', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Başarısız (adet)', 'Başarı %', 'Başarısız %'].map((header) => (
                                         <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em]">{header}</th>
                                     ))}
                                 </tr>
@@ -724,11 +820,13 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                                 {analytics.lineAnalysis.slice(0, 8).map((line) => (
                                     <tr key={line.lineName}>
                                         <td className="px-3 py-2 font-semibold text-slate-900">{line.lineName}</td>
-                                        <td className="px-3 py-2">{line.recordCount}</td>
+                                        <td className="px-3 py-2">{line.comparableCount}</td>
                                         <td className="px-3 py-2">{formatSeconds(line.avgPartDuration)}</td>
                                         <td className="px-3 py-2">{formatSeconds(line.avgIfsDuration)}</td>
                                         <td className="px-3 py-2">{formatSeconds(line.avgVariance)}</td>
-                                        <td className="px-3 py-2">{formatPercent(line.overIfsRate)}</td>
+                                        <td className="px-3 py-2 text-rose-700 font-medium">{`${line.overIfsCount}/${line.comparableCount}`}</td>
+                                        <td className="px-3 py-2"><PerformanceRateBadge rate={line.successRate} mode="success" /></td>
+                                        <td className="px-3 py-2"><PerformanceRateBadge rate={line.overIfsRate} mode="failure" /></td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -740,8 +838,8 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
 
             <Card className="border-0 shadow-sm">
                 <CardHeader>
-                    <CardTitle>IFS Süresinin Üstünde Çalışılan Parçalar</CardTitle>
-                    <CardDescription>İyileştirme odağı gereken parçalar ve aşım yoğunluğu</CardDescription>
+                    <CardTitle>Başarısız (IFS Üstü) Parçalar</CardTitle>
+                    <CardDescription>IFS süresinin üstünde çalışılan parçalar başarısız sayılır — başarısızlık oranı yüksek parçalar önceliklendirilmeli</CardDescription>
                 </CardHeader>
                 <CardContent className="space-y-4">
                     <AnalyticsBarChart
@@ -757,7 +855,7 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                         <table className="w-full text-sm">
                             <thead className="border-b bg-slate-50 text-slate-500">
                                 <tr>
-                                    {['Parça', 'Aşım', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark'].map((header) => (
+                                    {['Parça', 'Aşım', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Hat', 'Robot'].map((header) => (
                                         <th key={header} className="px-3 py-2 text-left text-xs font-semibold uppercase tracking-[0.08em]">{header}</th>
                                     ))}
                                 </tr>
@@ -770,6 +868,8 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                                         <td className="px-3 py-2">{formatSeconds(part.avgPartDuration)}</td>
                                         <td className="px-3 py-2">{formatSeconds(part.avgIfsDuration)}</td>
                                         <td className="px-3 py-2 text-rose-600">{formatSeconds(part.avgVariance)}</td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">{part.lineNames}</td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">{part.robotNames}</td>
                                     </tr>
                                 ))}
                             </tbody>
@@ -917,7 +1017,7 @@ const ListAnalyticsDashboard = React.memo(({ analytics, totals, activePartSearch
                                             {Number.isFinite(variance) ? formatSeconds(variance) : '-'}
                                         </td>
                                         <td className="px-4 py-2 whitespace-nowrap text-sm">
-                                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{status}</span>
+                                            <span className={`rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{getPerformanceStatusLabel(status)}</span>
                                         </td>
                                         <td className="px-4 py-2 text-sm max-w-xs truncate" title={record.description}>{record.description || '-'}</td>
                                         <td className="px-4 py-2 text-right whitespace-nowrap">
@@ -1011,25 +1111,25 @@ const DailyTimeTracking = () => {
     }, [fetchData]);
 
     const filteredRecords = useMemo(() => {
-        return filterAndSortDailyTimeRecords(records, {
+        return buildUniqueDailyTimeRecords(filterAndSortDailyTimeRecords(records, {
             dateRange: filters.dateRange,
             line_id: filters.line_id,
             station: filters.station,
             robotSearch: deferredRobotFilter,
             partSearch: deferredPartCodeFilter,
-        });
+        }));
     }, [records, filters.dateRange, filters.line_id, filters.station, deferredRobotFilter, deferredPartCodeFilter]);
 
     const analytics = useMemo(() => buildAnalytics(filteredRecords, deferredPartCodeFilter), [filteredRecords, deferredPartCodeFilter]);
     const totals = analytics.totals;
     const activePartSearch = normalizeText(deferredPartCodeFilter);
-    const getCurrentListRecords = useCallback(() => filterAndSortDailyTimeRecords(records, {
+    const getCurrentListRecords = useCallback(() => buildUniqueDailyTimeRecords(filterAndSortDailyTimeRecords(records, {
         dateRange: filters.dateRange,
         line_id: filters.line_id,
         station: filters.station,
         robotSearch: searchInputs.robot_no,
         partSearch: searchInputs.part_code,
-    }), [records, filters.dateRange, filters.line_id, filters.station, searchInputs.robot_no, searchInputs.part_code]);
+    })), [records, filters.dateRange, filters.line_id, filters.station, searchInputs.robot_no, searchInputs.part_code]);
 
     // Taslak satırları: Her robot için 2 istasyon (robot.line_id ile hat bilgisi)
     const lineMap = useMemo(() => new Map(lines.map(l => [l.id, l.name])), [lines]);
@@ -1171,11 +1271,14 @@ const DailyTimeTracking = () => {
             return Number.isFinite(partDuration) && Number.isFinite(ifsDuration);
         });
 
+        const overIfsCount = comparableRecords.filter((record) => getPerformanceStatus(parseDuration(record.part_duration), parseDuration(record.ifs_duration)) === 'IFS Üstü').length;
+
         return {
             totalCount: templateSavedRecords.length,
             comparableCount: comparableRecords.length,
-            overIfsCount: comparableRecords.filter((record) => getPerformanceStatus(parseDuration(record.part_duration), parseDuration(record.ifs_duration)) === 'IFS Üstü').length,
+            overIfsCount,
             underIfsCount: comparableRecords.filter((record) => getPerformanceStatus(parseDuration(record.part_duration), parseDuration(record.ifs_duration)) === 'IFS Altı').length,
+            successRate: comparableRecords.length ? ((comparableRecords.length - overIfsCount) / comparableRecords.length) * 100 : 0,
         };
     }, [templateSavedRecords]);
 
@@ -1440,6 +1543,24 @@ const DailyTimeTracking = () => {
             if (reportAnalytics.lineAnalysis.length > 0) {
                 reportSections.push({
                     type: 'chart',
+                    title: 'Hat Bazlı Başarı Grafiği',
+                    chartType: 'bar',
+                    data: reportAnalytics.lineAnalysis.slice(0, 12),
+                    config: {
+                        xAxisKey: 'lineName',
+                        bars: [
+                            { key: 'successRate', name: 'Başarı Oranı', color: CHART_COLORS.success },
+                            { key: 'overIfsRate', name: 'Başarısızlık Oranı', color: CHART_COLORS.failure },
+                        ],
+                        height: 320,
+                        xAxisAngle: reportAnalytics.lineAnalysis.length > 6 ? -35 : 0,
+                        xAxisHeight: reportAnalytics.lineAnalysis.length > 6 ? 88 : 44,
+                        yAxisWidth: 72,
+                    },
+                });
+
+                reportSections.push({
+                    type: 'chart',
                     title: 'Hat Bazlı Performans Grafiği',
                     chartType: 'bar',
                     data: reportAnalytics.lineAnalysis.slice(0, 12),
@@ -1460,20 +1581,23 @@ const DailyTimeTracking = () => {
             if (reportAnalytics.lineAnalysis.length > 0) {
                 reportSections.push({
                     title: 'Hat Bazlı Performans Analizi',
-                    headers: ['Hat', 'Kayıt', 'Robot', 'Parça', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'IFS Üstü Oran'],
+                    headers: ['Hat', 'IFS Kay.', 'Robot', 'Parça', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Başarısız', 'Başarı %', 'Başarısız %'],
                     rows: reportAnalytics.lineAnalysis.map((line) => [
                         line.lineName,
-                        String(line.recordCount),
+                        String(line.comparableCount),
                         String(line.robotCount),
                         String(line.partCount),
                         formatNumber(line.avgPartDuration),
                         formatNumber(line.avgIfsDuration),
                         formatNumber(line.avgVariance),
-                        formatPercent(line.overIfsRate),
+                        `${line.overIfsCount}/${line.comparableCount}`,
+                        formatReportRateCell(line.successRate, 'success'),
+                        formatReportRateCell(line.overIfsRate, 'failure'),
                     ]),
                     options: {
-                        columnWidths: ['18%', '10%', '10%', '10%', '13%', '13%', '13%', '13%'],
+                        columnWidths: ['11%', '7%', '7%', '6%', '10%', '10%', '9%', '9%', '10%', '10%'],
                         rightAlignColumns: [1, 2, 3, 4, 5, 6, 7],
+                        compact: true,
                     },
                 });
             }
@@ -1481,7 +1605,7 @@ const DailyTimeTracking = () => {
             if (reportAnalytics.overIfsParts.length > 0) {
                 reportSections.push({
                     type: 'chart',
-                    title: 'IFS Üstü Parçalar Grafiği',
+                    title: 'Başarısız Parçalar Grafiği',
                     chartType: 'bar',
                     data: reportAnalytics.overIfsParts.slice(0, 12),
                     config: {
@@ -1498,7 +1622,7 @@ const DailyTimeTracking = () => {
                 });
 
                 reportSections.push({
-                    title: 'IFS Süresinin Üstünde Çalışılan Parçalar',
+                    title: 'Başarısız (IFS Üstü) Parçalar',
                     headers: ['Parça', 'Aşım Kaydı', 'Ort. Süre', 'Ort. IFS', 'Ort. Fark', 'Hat', 'Robot'],
                     rows: reportAnalytics.overIfsParts.map((part) => [
                         part.partCode,
@@ -1506,12 +1630,14 @@ const DailyTimeTracking = () => {
                         formatNumber(part.avgPartDuration),
                         formatNumber(part.avgIfsDuration),
                         formatNumber(part.avgVariance),
-                        String(part.lineCount),
-                        String(part.robotCount),
+                        part.lineNames,
+                        part.robotNames,
                     ]),
                     options: {
-                        columnWidths: ['22%', '12%', '14%', '14%', '14%', '12%', '12%'],
-                        rightAlignColumns: [1, 2, 3, 4, 5, 6],
+                        columnWidths: ['16%', '10%', '12%', '12%', '12%', '18%', '20%'],
+                        rightAlignColumns: [1, 2, 3, 4],
+                        compact: true,
+                        wrapColumns: [5, 6],
                     },
                 });
             }
@@ -1523,7 +1649,7 @@ const DailyTimeTracking = () => {
             ];
 
             trendSections.forEach((section) => {
-                if (section.data.length === 0) return;
+                if (section.data.length < 2) return;
                 reportSections.push({
                     type: 'chart',
                     title: section.title,
@@ -1613,10 +1739,11 @@ const DailyTimeTracking = () => {
                 landscape: true,
                 kpiCards: [
                     { title: 'Toplam Kayıt', value: String(reportAnalytics.totals.recordCount) },
+                    { title: 'Başarı Oranı', value: formatPercent(reportAnalytics.totals.successRate) },
                     { title: 'Ort. Parça Süresi', value: formatNumber(reportAnalytics.totals.avgPartDuration) },
                     { title: 'Ort. IFS', value: formatNumber(reportAnalytics.totals.avgIfsDuration) },
-                    { title: 'IFS Altı', value: String(reportAnalytics.totals.underIfsCount) },
-                    { title: 'IFS Üstü', value: String(reportAnalytics.totals.overIfsCount) },
+                    { title: 'IFS Üstü (Başarısız)', value: String(reportAnalytics.totals.overIfsCount) },
+                    { title: 'Başarısızlık Oranı', value: formatPercent(reportAnalytics.totals.overIfsRate) },
                     { title: 'Ort. Fark', value: formatNumber(reportAnalytics.totals.avgVariance) },
                 ],
                 sections: reportSections,
@@ -1649,7 +1776,7 @@ const DailyTimeTracking = () => {
                                         ? { background: '#fef3c7', color: '#92400e' }
                                         : { background: '#e2e8f0', color: '#334155' };
                             return {
-                                value: status,
+                                value: getPerformanceStatusLabel(status),
                                 badge: tone,
                             };
                         })(),
@@ -1956,22 +2083,26 @@ const DailyTimeTracking = () => {
                             </>
                         ) : (
                             <>
-                                <div className="grid gap-3 md:grid-cols-4">
+                                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-5">
                                     <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">Kaydedilen Kayıt</p>
                                         <p className="mt-1 text-2xl font-bold text-slate-900">{templatePreviewStats.totalCount}</p>
+                                    </div>
+                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-emerald-700">Başarı Oranı</p>
+                                        <p className="mt-1 text-2xl font-bold text-emerald-800">{formatPercent(templatePreviewStats.successRate)}</p>
                                     </div>
                                     <div className="rounded-xl border border-slate-200 bg-white px-4 py-3">
                                         <p className="text-xs font-semibold uppercase tracking-[0.08em] text-slate-500">IFS Kıyaslanan</p>
                                         <p className="mt-1 text-2xl font-bold text-slate-900">{templatePreviewStats.comparableCount}</p>
                                     </div>
                                     <div className="rounded-xl border border-rose-200 bg-rose-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-600">IFS Üstü</p>
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-rose-600">Başarısız (IFS Üstü)</p>
                                         <p className="mt-1 text-2xl font-bold text-rose-700">{templatePreviewStats.overIfsCount}</p>
                                     </div>
-                                    <div className="rounded-xl border border-emerald-200 bg-emerald-50 px-4 py-3">
-                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-emerald-600">IFS Altı</p>
-                                        <p className="mt-1 text-2xl font-bold text-emerald-700">{templatePreviewStats.underIfsCount}</p>
+                                    <div className="rounded-xl border border-teal-200 bg-teal-50 px-4 py-3">
+                                        <p className="text-xs font-semibold uppercase tracking-[0.08em] text-teal-700">Hedef Altı</p>
+                                        <p className="mt-1 text-2xl font-bold text-teal-800">{templatePreviewStats.underIfsCount}</p>
                                     </div>
                                 </div>
 
@@ -2020,7 +2151,7 @@ const DailyTimeTracking = () => {
                                                             {Number.isFinite(variance) ? formatSeconds(variance) : '-'}
                                                         </td>
                                                         <td className="px-4 py-2 whitespace-nowrap">
-                                                            <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{status}</span>
+                                                            <span className={`inline-flex items-center whitespace-nowrap rounded-full px-2.5 py-1 text-xs font-semibold ${statusClass}`}>{getPerformanceStatusLabel(status)}</span>
                                                         </td>
                                                         <td className="px-4 py-2 text-slate-600">{record.description || '-'}</td>
                                                     </tr>

@@ -628,7 +628,18 @@ const GeneralReportLayout = ({ reportData }) => {
               />
               <Tooltip contentStyle={{ fontSize: '10px', borderRadius: '4px' }} formatter={tooltipFormatter} />
               <Legend wrapperStyle={{ fontSize: '9px' }} />
-              {lines.length > 0 ? lines.map((line, idx) => <Line key={idx} type="monotone" dataKey={line.key} name={line.name} stroke={line.color || colors[idx % colors.length]} strokeWidth={2} dot={false} />) : <Line type="monotone" dataKey={dataKey} stroke={colors[0]} strokeWidth={2} dot={false} />}
+              {lines.length > 0 ? lines.map((line, idx) => (
+                <Line
+                  key={idx}
+                  type="monotone"
+                  dataKey={line.key}
+                  name={line.name}
+                  stroke={line.color || colors[idx % colors.length]}
+                  strokeWidth={2}
+                  dot={data.length <= 4 ? { r: 3 } : false}
+                  activeDot={data.length <= 4 ? { r: 4 } : false}
+                />
+              )) : <Line type="monotone" dataKey={dataKey} stroke={colors[0]} strokeWidth={2} dot={data.length <= 4 ? { r: 3 } : false} />}
             </LineChart>
           </ResponsiveContainer>
         </div>
@@ -662,6 +673,88 @@ const GeneralReportLayout = ({ reportData }) => {
     return null;
   };
 
+  const renderChartCard = (section, sectionIndex, accentColor = COLORS.primary) => (
+    <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '6px', overflow: 'hidden', breakInside: 'avoid-page', pageBreakInside: 'avoid', background: '#fff', minHeight: '280px' }}>
+      <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '10px 14px', background: '#f8fafc' }}>
+        <h3 style={{ fontSize: '8.5pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase', lineHeight: 1.3 }}>{section.title}</h3>
+      </div>
+      <div style={{ padding: '14px 12px 16px' }}>{renderChart(section.chartType, section.data, section.config)}</div>
+    </div>
+  );
+
+  const renderSectionBlocks = (sections) => {
+    const blocks = [];
+    let index = 0;
+
+    while (index < sections.length) {
+      const section = sections[index];
+
+      if (section.type === 'chart') {
+        const chartBatch = [];
+        while (index < sections.length && sections[index].type === 'chart') {
+          chartBatch.push({ section: sections[index], sectionIndex: index });
+          index += 1;
+        }
+
+        for (let i = 0; i < chartBatch.length; i += 1) {
+          const row = chartBatch.slice(i, i + 1);
+          blocks.push(
+            <div
+              key={`chart-row-${row[0].sectionIndex}`}
+              style={{
+                display: 'grid',
+                gridTemplateColumns: '1fr',
+                gap: '20px',
+                breakInside: 'avoid-page',
+                pageBreakInside: 'avoid',
+              }}
+            >
+              {row.map(({ section: chartSection, sectionIndex }) => renderChartCard(chartSection, sectionIndex))}
+            </div>
+          );
+        }
+        continue;
+      }
+
+      const isTopSection = section.title && (section.title.includes('TOP') || section.title.includes('EN YÜKSEK'));
+      const isBottomSection = section.title && section.title.includes('BOTTOM');
+      const accentColor = isTopSection ? COLORS.secondary : isBottomSection ? '#b91c1c' : COLORS.primary;
+      const headerBg = isTopSection ? COLORS.secondary : isBottomSection ? '#b91c1c' : COLORS.primary;
+      const headers = section.headers || (section.tableData && section.tableData.headers);
+      const rows = section.rows || (section.tableData && section.tableData.rows);
+      const sectionOptions = section.options || section.tableData?.options || {};
+
+      blocks.push(
+        <div key={index} style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'visible', breakInside: 'auto', pageBreakInside: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
+          <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 14px', background: isTopSection ? '#eff6ff' : '#f8fafc', borderBottom: `1px solid #e2e8f0` }}>
+            <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{section.title}</h3>
+          </div>
+          {headers && rows && rows.length > 0 ? (
+            <div style={{ padding: '0' }}>{renderTable(headers, rows, { headerBg, ...sectionOptions })}</div>
+          ) : section.type === 'list' && section.items ? (
+            <div style={{ padding: '10px 12px' }}>
+              {section.items.map((item, itemIdx) => (
+                <div key={itemIdx} style={{ marginBottom: '8px' }}>
+                  <p style={{ fontWeight: '600', fontSize: '9pt', color: '#1f2937', margin: '0 0 4px 0' }}>{item.header}</p>
+                  {item.details && (
+                    <ul style={{ margin: '0', paddingLeft: '16px' }}>
+                      {item.details.map((d, dIdx) => <li key={dIdx} style={{ fontSize: '8pt', color: '#475569', marginBottom: '2px' }}>{d}</li>)}
+                    </ul>
+                  )}
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ fontSize: '8pt', color: '#6b7280', fontStyle: 'italic', padding: '10px 12px', margin: '0' }}>Veri bulunamadı.</p>
+          )}
+        </div>
+      );
+      index += 1;
+    }
+
+    return blocks;
+  };
+
   // Tablo Render Helper
   const renderTable = (headers, rows, options = {}) => {
     const { headerBg = COLORS.primary, zebraStripe = true, columnWidths, wrapColumns = [], rightAlignColumns = [], noTruncateColumns = [], compact = false } = options;
@@ -681,15 +774,19 @@ const GeneralReportLayout = ({ reportData }) => {
           <tr>
             {headers.map((header, i) => (
               <th key={i} style={{
-                padding: compact ? '5px 6px' : '7px 10px',
+                padding: compact ? '5px 4px' : '7px 8px',
                 textAlign: rightAlignColumns.includes(i) ? 'right' : 'left',
                 fontWeight: '700',
                 color: '#fff',
                 background: headerBg,
-                fontSize: compact ? '6.5pt' : '7.5pt',
+                fontSize: compact ? '6pt' : '7pt',
                 textTransform: 'uppercase',
-                letterSpacing: '0.03em',
-                whiteSpace: 'nowrap',
+                letterSpacing: '0.02em',
+                whiteSpace: 'normal',
+                wordBreak: 'break-word',
+                overflowWrap: 'break-word',
+                lineHeight: 1.15,
+                verticalAlign: 'bottom',
                 borderBottom: '2px solid rgba(0,0,0,0.1)'
               }}>{header}</th>
             ))}
@@ -946,54 +1043,8 @@ const GeneralReportLayout = ({ reportData }) => {
       {reportData.sections && reportData.sections.length > 0 && (
         <section style={{ marginBottom: '20px' }}>
           <h2 style={{ fontSize: '10pt', fontWeight: '700', color: COLORS.primary, margin: '0 0 14px 0', paddingBottom: '8px', borderBottom: `3px solid ${COLORS.primary}`, textTransform: 'uppercase', letterSpacing: '0.05em' }}>Detaylı Analiz</h2>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '14px' }}>
-            {reportData.sections.map((section, sectionIndex) => {
-              const isTopSection = section.title && (section.title.includes('TOP') || section.title.includes('EN YÜKSEK'));
-              const isBottomSection = section.title && section.title.includes('BOTTOM');
-              const accentColor = isTopSection ? COLORS.secondary : isBottomSection ? '#b91c1c' : COLORS.primary;
-              const headerBg = isTopSection ? COLORS.secondary : isBottomSection ? '#b91c1c' : COLORS.primary;
-
-              if (section.type === 'chart') {
-                return (
-                  <div key={sectionIndex} style={{ border: '1px solid #e5e7eb', borderRadius: '4px', overflow: 'hidden', breakInside: 'avoid-page', pageBreakInside: 'avoid' }}>
-                    <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 12px', background: '#f8fafc' }}>
-                      <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase' }}>{section.title}</h3>
-                    </div>
-                    <div style={{ padding: '10px' }}>{renderChart(section.chartType, section.data, section.config)}</div>
-                  </div>
-                );
-              }
-
-              const headers = section.headers || (section.tableData && section.tableData.headers);
-              const rows = section.rows || (section.tableData && section.tableData.rows);
-              const sectionOptions = section.options || {};
-
-              return (
-                <div key={sectionIndex} style={{ border: '1px solid #d1d5db', borderRadius: '6px', overflow: 'visible', breakInside: 'auto', pageBreakInside: 'auto', boxShadow: '0 1px 3px rgba(0,0,0,0.06)' }}>
-                  <div style={{ borderLeft: `4px solid ${accentColor}`, padding: '8px 14px', background: isTopSection ? '#eff6ff' : '#f8fafc', borderBottom: `1px solid #e2e8f0` }}>
-                    <h3 style={{ fontSize: '9pt', fontWeight: '700', color: accentColor, margin: '0', textTransform: 'uppercase', letterSpacing: '0.04em' }}>{section.title}</h3>
-                    </div>
-                  {headers && rows && rows.length > 0 ? (
-                    <div style={{ padding: '0' }}>{renderTable(headers, rows, { headerBg, ...sectionOptions })}</div>
-                  ) : section.type === 'list' && section.items ? (
-                    <div style={{ padding: '10px 12px' }}>
-                      {section.items.map((item, itemIdx) => (
-                        <div key={itemIdx} style={{ marginBottom: '8px' }}>
-                          <p style={{ fontWeight: '600', fontSize: '9pt', color: '#1f2937', margin: '0 0 4px 0' }}>{item.header}</p>
-                          {item.details && (
-                            <ul style={{ margin: '0', paddingLeft: '16px' }}>
-                              {item.details.map((d, dIdx) => <li key={dIdx} style={{ fontSize: '8pt', color: '#475569', marginBottom: '2px' }}>{d}</li>)}
-                            </ul>
-                          )}
-                        </div>
-                      ))}
-                    </div>
-                  ) : (
-                    <p style={{ fontSize: '8pt', color: '#6b7280', fontStyle: 'italic', padding: '10px 12px', margin: '0' }}>Veri bulunamadı.</p>
-                  )}
-                </div>
-              );
-            })}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: '20px' }}>
+            {renderSectionBlocks(reportData.sections)}
           </div>
         </section>
       )}
@@ -1207,7 +1258,7 @@ const PrintPage = () => {
 
   return (
     <>
-      <div className="print-controls no-print fixed top-4 right-4 flex flex-col gap-2">
+      <div className="print-controls no-print fixed top-4 right-4 z-[9999] flex flex-col gap-2 rounded-lg border border-slate-200 bg-white/95 p-2 shadow-lg backdrop-blur-sm">
         <Button onClick={triggerPrint} disabled={loading || !reportContent || !isPrintReady || isPreparingPrint}>
           <Printer className="mr-2 h-4 w-4" />
           {isPreparingPrint ? 'Hazırlanıyor...' : 'Yazdır'}
